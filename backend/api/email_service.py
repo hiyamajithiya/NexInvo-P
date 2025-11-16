@@ -1,6 +1,7 @@
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, get_connection
 from django.conf import settings
 from .pdf_generator import generate_invoice_pdf
+from .models import EmailSettings, InvoiceFormatSettings
 from datetime import datetime
 
 
@@ -16,14 +17,39 @@ def send_invoice_email(invoice, company_settings):
         bool: True if email sent successfully, False otherwise
     """
     try:
+        # Get user's email settings
+        try:
+            email_settings = EmailSettings.objects.get(user=invoice.user)
+        except EmailSettings.DoesNotExist:
+            print("Email settings not configured for this user")
+            return False
+
+        # Validate email settings
+        if not email_settings.smtp_username or not email_settings.smtp_password:
+            print("SMTP username or password not configured")
+            return False
+
+        if not email_settings.from_email:
+            print("From email not configured")
+            return False
+
+        # Get invoice format settings
+        try:
+            format_settings = InvoiceFormatSettings.objects.get(user=invoice.user)
+        except InvoiceFormatSettings.DoesNotExist:
+            format_settings = None
+
         # Generate PDF
-        pdf_buffer = generate_invoice_pdf(invoice, company_settings)
+        pdf_buffer = generate_invoice_pdf(invoice, company_settings, format_settings)
 
         # Prepare email
         subject = f"{invoice.get_invoice_type_display()} - {invoice.invoice_number}"
 
         # Email body
         invoice_type_name = "Proforma Invoice" if invoice.invoice_type == 'proforma' else "Tax Invoice"
+
+        # Include email signature if available
+        signature = f"\n\n{email_settings.email_signature}" if email_settings.email_signature else ""
 
         body = f"""
 Dear {invoice.client.name},
@@ -42,18 +68,30 @@ Invoice Details:
 Thank you for your business!
 
 Best Regards,
-{company_settings.companyName}
+{email_settings.from_name if email_settings.from_name else company_settings.companyName}
 {company_settings.phone if company_settings.phone else ''}
-{company_settings.email if company_settings.email else ''}
+{email_settings.from_email}
+{signature}
         """.strip()
+
+        # Configure SMTP connection
+        connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
+            host=email_settings.smtp_host,
+            port=email_settings.smtp_port,
+            username=email_settings.smtp_username,
+            password=email_settings.smtp_password,
+            use_tls=email_settings.use_tls,
+        )
 
         # Create email
         email = EmailMessage(
             subject=subject,
             body=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=email_settings.from_email,
             to=[invoice.client.email] if invoice.client.email else [],
-            reply_to=[company_settings.email] if company_settings.email else []
+            reply_to=[company_settings.email] if company_settings.email else [],
+            connection=connection
         )
 
         # Attach PDF
@@ -74,10 +112,13 @@ Best Regards,
 
             return True
         else:
+            print("Client email not configured")
             return False
 
     except Exception as e:
         print(f"Error sending email: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
