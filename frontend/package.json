@@ -1,6 +1,7 @@
 {
   "name": "nexinvo-frontend",
   "version": "1.0.0",
+  "description": "NexInvo - Invoice Management System Frontend",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",

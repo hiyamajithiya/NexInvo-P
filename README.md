@@ -9,18 +9,15 @@ Built for: HIMANSHU MAJITHIYA & CO. (PROP)
 ### Backend
 - **Django 4.2** - Python web framework
 - **Django REST Framework** - API development
-- **PostgreSQL** - Robust database
-- **WeasyPrint** - PDF generation
-- **Celery** - Background tasks (email sending)
-- **Redis** - Task queue
+- **SQLite** - Database (can be upgraded to PostgreSQL)
+- **ReportLab** - Professional PDF generation
+- **Django CORS Headers** - Cross-origin resource sharing
 
 ### Frontend
 - **React 18** - Modern UI library
-- **TypeScript** - Type-safe JavaScript
-- **Tailwind CSS** - Utility-first styling
-- **React Query** - Data fetching
-- **React Router** - Navigation
+- **React Router v6** - Navigation
 - **Axios** - HTTP client
+- **CSS3** - Custom styling
 
 ## ✨ Features
 
@@ -92,8 +89,8 @@ NexInvo/
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL 14+
-- Redis (optional, for background tasks)
+- pip (Python package manager)
+- npm (Node package manager)
 
 ### Backend Setup
 
@@ -103,32 +100,28 @@ cd backend
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Setup database
-createdb nexinvo
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
 # Run migrations
 python manage.py migrate
 
-# Create superuser
-python manage.py createsuperuser
+# Create admin user
+python create_user.py
 
-# Load sample data (optional)
-python manage.py loaddata sample_data.json
-
-# Run server
+# Run development server
 python manage.py runserver
 ```
 
 Backend runs at: http://localhost:8000
+Admin panel: http://localhost:8000/admin
 
 ### Frontend Setup
 
@@ -139,10 +132,6 @@ cd frontend
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env
-# Edit .env with backend URL
-
 # Run development server
 npm start
 ```
@@ -151,28 +140,22 @@ Frontend runs at: http://localhost:3000
 
 ## 🔧 Configuration
 
-### Database (.env)
-```
-DB_NAME=nexinvo
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
+### Email Settings (Backend settings.py)
+The application uses console email backend by default (emails printed to console).
+
+For production, update [backend/nexinvo/settings.py](backend/nexinvo/settings.py):
+```python
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'your-email@gmail.com'
+EMAIL_HOST_PASSWORD = 'your-app-password'
 ```
 
-### Email Settings (.env)
-```
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password
-EMAIL_USE_TLS=True
-```
-
-### Frontend (.env)
-```
-REACT_APP_API_URL=http://localhost:8000/api
-```
+### Database
+- Development: SQLite (default, no configuration needed)
+- Production: Can be upgraded to PostgreSQL by updating [backend/nexinvo/settings.py](backend/nexinvo/settings.py)
 
 ## 📖 API Documentation
 
