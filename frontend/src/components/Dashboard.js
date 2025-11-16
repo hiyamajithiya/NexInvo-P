@@ -3,6 +3,7 @@ import { dashboardAPI, settingsAPI } from '../services/api';
 import './Dashboard.css';
 import Invoices from './Invoices';
 import Clients from './Clients';
+import ServiceMaster from './ServiceMaster';
 import Payments from './Payments';
 import Reports from './Reports';
 import Settings from './Settings';
@@ -52,6 +53,8 @@ function Dashboard({ user, onLogout }) {
         return <Invoices />;
       case 'clients':
         return <Clients />;
+      case 'services':
+        return <ServiceMaster />;
       case 'payments':
         return <Payments />;
       case 'reports':
@@ -123,6 +126,7 @@ function Dashboard({ user, onLogout }) {
     switch (activeMenu) {
       case 'invoices': return 'Invoices Management';
       case 'clients': return 'Client Management';
+      case 'services': return 'Service Master';
       case 'payments': return 'Payment Records';
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
@@ -182,6 +186,14 @@ function Dashboard({ user, onLogout }) {
           >
             <span className="nav-icon">👥</span>
             <span className="nav-text">Clients</span>
+          </a>
+          <a
+            href="#services"
+            className={`nav-item ${activeMenu === 'services' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('services'); }}
+          >
+            <span className="nav-icon">📋</span>
+            <span className="nav-text">Service Master</span>
           </a>
           <a
             href="#payments"

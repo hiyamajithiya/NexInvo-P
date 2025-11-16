@@ -107,6 +107,24 @@ export const clientAPI = {
   delete: (id) => api.delete(`/clients/${id}/`),
 };
 
+// Service Item APIs
+export const serviceItemAPI = {
+  getAll: (params) => api.get('/service-items/', { params }),
+  getById: (id) => api.get(`/service-items/${id}/`),
+  create: (data) => api.post('/service-items/', data),
+  update: (id, data) => api.put(`/service-items/${id}/`, data),
+  delete: (id) => api.delete(`/service-items/${id}/`),
+};
+
+// Payment Term APIs
+export const paymentTermAPI = {
+  getAll: (params) => api.get('/payment-terms/', { params }),
+  getById: (id) => api.get(`/payment-terms/${id}/`),
+  create: (data) => api.post('/payment-terms/', data),
+  update: (id, data) => api.put(`/payment-terms/${id}/`, data),
+  delete: (id) => api.delete(`/payment-terms/${id}/`),
+};
+
 // Payment APIs
 export const paymentAPI = {
   getAll: (params) => api.get('/payments/', { params }),

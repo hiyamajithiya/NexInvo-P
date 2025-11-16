@@ -31,7 +31,7 @@ function Payments() {
     try {
       const [paymentsResponse, invoicesResponse, clientsResponse] = await Promise.all([
         paymentAPI.getAll(),
-        invoiceAPI.getAll(),
+        invoiceAPI.getAll({ unpaid_only: 'true' }),  // Only fetch unpaid invoices for dropdown
         clientAPI.getAll()
       ]);
       setPayments(paymentsResponse.data.results || paymentsResponse.data || []);

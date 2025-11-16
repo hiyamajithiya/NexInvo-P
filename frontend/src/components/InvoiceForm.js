@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI, settingsAPI } from '../services/api';
+import { invoiceAPI, clientAPI, settingsAPI, serviceItemAPI, paymentTermAPI } from '../services/api';
 import './Pages.css';
 
-function InvoiceForm({ onBack }) {
+function InvoiceForm({ onBack, invoice }) {
   const [invoiceSettings, setInvoiceSettings] = useState({
     defaultGstRate: 18,
     paymentDueDays: 30,
@@ -29,15 +29,41 @@ function InvoiceForm({ onBack }) {
   });
 
   const [clients, setClients] = useState([]);
+  const [services, setServices] = useState([]);
+  const [paymentTerms, setPaymentTerms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // Load clients and settings on component mount
+  // Load clients, services, payment terms and settings on component mount
   useEffect(() => {
     loadClients();
+    loadServices();
+    loadPaymentTerms();
     loadInvoiceSettings();
   }, []);
+
+  // Load invoice data if editing
+  useEffect(() => {
+    if (invoice) {
+      setInvoiceData({
+        id: invoice.id,
+        invoiceType: invoice.invoice_type,
+        invoiceDate: invoice.invoice_date,
+        client: invoice.client,
+        paymentTerms: invoice.payment_terms || '',
+        notes: invoice.notes || '',
+        items: invoice.items.map((item, index) => ({
+          slNo: index + 1,
+          description: item.description,
+          hsnSac: item.hsn_sac,
+          gstRate: parseFloat(item.gst_rate),
+          taxableAmount: parseFloat(item.taxable_amount),
+          totalAmount: parseFloat(item.total_amount)
+        }))
+      });
+    }
+  }, [invoice]);
 
   const loadClients = async () => {
     try {
@@ -45,6 +71,24 @@ function InvoiceForm({ onBack }) {
       setClients(response.data.results || response.data || []);
     } catch (err) {
       console.error('Error loading clients:', err);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const response = await serviceItemAPI.getAll();
+      setServices(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error loading services:', err);
+    }
+  };
+
+  const loadPaymentTerms = async () => {
+    try {
+      const response = await paymentTermAPI.getAll();
+      setPaymentTerms(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error loading payment terms:', err);
     }
   };
 
@@ -98,10 +142,21 @@ function InvoiceForm({ onBack }) {
 
   const updateItem = (index, field, value) => {
     const newItems = [...invoiceData.items];
-    newItems[index][field] = value;
+
+    // If service is selected, populate its details
+    if (field === 'serviceId') {
+      const selectedService = services.find(s => s.id === parseInt(value));
+      if (selectedService) {
+        newItems[index].description = selectedService.name;
+        newItems[index].hsnSac = selectedService.sac_code;
+        newItems[index].gstRate = selectedService.gst_rate;
+      }
+    } else {
+      newItems[index][field] = value;
+    }
 
     // Calculate total amount if taxableAmount or gstRate changes
-    if (field === 'taxableAmount' || field === 'gstRate') {
+    if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId') {
       const item = newItems[index];
       item.totalAmount = item.taxableAmount + (item.taxableAmount * item.gstRate / 100);
     }
@@ -144,7 +199,7 @@ function InvoiceForm({ onBack }) {
         invoice_type: invoiceData.invoiceType,
         invoice_date: invoiceData.invoiceDate,
         client: invoiceData.client,
-        payment_terms: invoiceData.paymentTerms,
+        payment_term: invoiceData.paymentTerms || null,
         notes: invoiceData.notes,
         subtotal: totals.subtotal,
         tax_amount: totals.taxAmount,
@@ -158,7 +213,14 @@ function InvoiceForm({ onBack }) {
         }))
       };
 
-      await invoiceAPI.create(payload);
+      if (invoiceData.id) {
+        // Update existing invoice
+        await invoiceAPI.update(invoiceData.id, payload);
+      } else {
+        // Create new invoice
+        await invoiceAPI.create(payload);
+      }
+
       setSaveSuccess(true);
       setTimeout(() => {
         onBack();
@@ -189,7 +251,7 @@ function InvoiceForm({ onBack }) {
         invoice_type: invoiceData.invoiceType,
         invoice_date: invoiceData.invoiceDate,
         client: invoiceData.client,
-        payment_terms: invoiceData.paymentTerms,
+        payment_term: invoiceData.paymentTerms || null,
         notes: invoiceData.notes,
         subtotal: totals.subtotal,
         tax_amount: totals.taxAmount,
@@ -236,7 +298,7 @@ function InvoiceForm({ onBack }) {
     <div className="page-content">
       <div className="page-header">
         <div className="page-header-left">
-          <h1 className="page-main-title">Create New Invoice</h1>
+          <h1 className="page-main-title">{invoiceData.id ? 'Edit Invoice' : 'Create New Invoice'}</h1>
           <p className="page-description">Fill in the invoice details</p>
         </div>
         <div className="page-header-right">
@@ -318,10 +380,10 @@ function InvoiceForm({ onBack }) {
                 <thead>
                   <tr>
                     <th style={{width: '50px'}}>Sl No</th>
-                    <th style={{width: '40%'}}>Description</th>
-                    <th style={{width: '120px'}}>HSN/SAC</th>
+                    <th style={{width: '35%'}}>Service</th>
+                    <th style={{width: '120px'}}>SAC Code</th>
                     <th style={{width: '100px'}}>GST %</th>
-                    <th style={{width: '150px'}}>Taxable Amt (₹)</th>
+                    <th style={{width: '150px'}}>Amount (₹)</th>
                     <th style={{width: '150px'}}>Total (₹)</th>
                     <th style={{width: '60px'}}>Action</th>
                   </tr>
@@ -331,35 +393,28 @@ function InvoiceForm({ onBack }) {
                     <tr key={index}>
                       <td className="text-center">{item.slNo}</td>
                       <td>
-                        <input
-                          type="text"
-                          className="table-input"
-                          value={item.description}
-                          onChange={(e) => updateItem(index, 'description', e.target.value)}
-                          placeholder="Item description"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          className="table-input"
-                          value={item.hsnSac}
-                          onChange={(e) => updateItem(index, 'hsnSac', e.target.value)}
-                          placeholder="HSN/SAC"
-                        />
-                      </td>
-                      <td>
                         <select
                           className="table-input"
-                          value={item.gstRate}
-                          onChange={(e) => updateItem(index, 'gstRate', parseFloat(e.target.value))}
+                          onChange={(e) => updateItem(index, 'serviceId', e.target.value)}
                         >
-                          <option value="0">0%</option>
-                          <option value="5">5%</option>
-                          <option value="12">12%</option>
-                          <option value="18">18%</option>
-                          <option value="28">28%</option>
+                          <option value="">-- Select Service --</option>
+                          {services.map(service => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
                         </select>
+                        {item.description && (
+                          <small style={{display: 'block', marginTop: '4px', color: '#666'}}>
+                            {item.description}
+                          </small>
+                        )}
+                      </td>
+                      <td className="text-center">
+                        {item.hsnSac || '-'}
+                      </td>
+                      <td className="text-center">
+                        {item.gstRate}%
                       </td>
                       <td>
                         <input
@@ -369,7 +424,7 @@ function InvoiceForm({ onBack }) {
                           onChange={(e) => updateItem(index, 'taxableAmount', parseFloat(e.target.value) || 0)}
                           min="0"
                           step="0.01"
-                          placeholder="Taxable Amount"
+                          placeholder="0.00"
                         />
                       </td>
                       <td className="text-right">₹{item.totalAmount.toFixed(2)}</td>
@@ -414,13 +469,18 @@ function InvoiceForm({ onBack }) {
             <div className="form-grid">
               <div className="form-field">
                 <label>Payment Terms</label>
-                <input
-                  type="text"
+                <select
                   className="form-input"
                   value={invoiceData.paymentTerms}
                   onChange={(e) => setInvoiceData({...invoiceData, paymentTerms: e.target.value})}
-                  placeholder="e.g., Net 30 days"
-                />
+                >
+                  <option value="">-- Select Payment Term --</option>
+                  {paymentTerms.map(term => (
+                    <option key={term.id} value={term.id}>
+                      {term.term_name} ({term.days} days)
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-field full-width">
                 <label>Notes</label>

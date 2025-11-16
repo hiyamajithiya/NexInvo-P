@@ -6,6 +6,7 @@ import InvoiceForm from './InvoiceForm';
 function Invoices() {
   const [invoices, setInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -88,6 +89,17 @@ function Invoices() {
     }
   };
 
+  const handleEdit = async (id) => {
+    try {
+      const response = await invoiceAPI.getById(id);
+      setEditingInvoice(response.data);
+      setShowForm(true);
+    } catch (err) {
+      console.error('Error loading invoice:', err);
+      alert('Failed to load invoice for editing');
+    }
+  };
+
   const handleDownloadTemplate = async () => {
     try {
       const response = await invoiceAPI.downloadImportTemplate();
@@ -154,7 +166,14 @@ function Invoices() {
   };
 
   if (showForm) {
-    return <InvoiceForm onBack={() => { setShowForm(false); loadInvoices(); }} />;
+    return <InvoiceForm
+      invoice={editingInvoice}
+      onBack={() => {
+        setShowForm(false);
+        setEditingInvoice(null);
+        loadInvoices();
+      }}
+    />;
   }
 
   return (
@@ -335,6 +354,13 @@ function Invoices() {
                     <td>₹{parseFloat(invoice.total_amount).toFixed(2)}</td>
                     <td><span className={`status-badge ${invoice.status}`}>{invoice.status}</span></td>
                     <td>
+                      <button
+                        className="btn-icon-small"
+                        onClick={() => handleEdit(invoice.id)}
+                        title="Edit"
+                      >
+                        ✏️
+                      </button>
                       <button
                         className="btn-icon-small"
                         onClick={() => handleDownloadPDF(invoice.id)}

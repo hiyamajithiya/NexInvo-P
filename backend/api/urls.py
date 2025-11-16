@@ -4,6 +4,8 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'clients', views.ClientViewSet, basename='client')
+router.register(r'service-items', views.ServiceItemViewSet, basename='service-item')
+router.register(r'payment-terms', views.PaymentTermViewSet, basename='payment-term')
 router.register(r'invoices', views.InvoiceViewSet, basename='invoice')
 router.register(r'payments', views.PaymentViewSet, basename='payment')
 

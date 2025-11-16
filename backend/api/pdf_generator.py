@@ -152,9 +152,12 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         leading=16
     )
 
+    # Invoice type display
+    invoice_type_label = "TAX INVOICE" if invoice.invoice_type == 'tax' else "PROFORMA INVOICE"
+
     right_header = [
         Paragraph("CHARTERED ACCOUNTANT", right_header_style),
-        Paragraph("INVOICE" if invoice.invoice_type == 'tax' else "PROFORMA INVOICE", invoice_label_style)
+        Paragraph(invoice_type_label, invoice_label_style)
     ]
 
     header_table = Table(
@@ -435,7 +438,13 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
 
     # Payment Terms
     if format_settings and format_settings.show_payment_terms:
-        payment_terms_text = invoice.payment_terms if invoice.payment_terms else ""
+        payment_terms_text = ""
+        # Use payment_term foreign key if available, otherwise fall back to payment_terms text field
+        if invoice.payment_term:
+            payment_terms_text = invoice.payment_term.description
+        elif invoice.payment_terms:
+            payment_terms_text = invoice.payment_terms
+
         if payment_terms_text:
             elements.append(Paragraph("<b>Payment Terms:</b>", terms_notes_title_style))
             elements.append(Paragraph(payment_terms_text, terms_notes_style))

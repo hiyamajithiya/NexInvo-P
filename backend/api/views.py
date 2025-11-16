@@ -5,16 +5,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.http import HttpResponse
 from django.db.models import Sum, Q
+from django.db import transaction
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from datetime import date
 import os
 import tempfile
-from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings
+from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm
 from .serializers import (
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
-    InvoiceSerializer, PaymentSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer
+    InvoiceSerializer, PaymentSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer
 )
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email
@@ -238,6 +239,28 @@ class ClientViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+class ServiceItemViewSet(viewsets.ModelViewSet):
+    serializer_class = ServiceItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ServiceItem.objects.filter(user=self.request.user, is_active=True)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class PaymentTermViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentTermSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return PaymentTerm.objects.filter(user=self.request.user, is_active=True)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
 class InvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = InvoiceSerializer
     permission_classes = [IsAuthenticated]
@@ -262,6 +285,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice_type = self.request.query_params.get('invoice_type', None)
         if invoice_type:
             queryset = queryset.filter(invoice_type=invoice_type)
+
+        # Filter for unpaid invoices (for payment dropdown)
+        unpaid_only = self.request.query_params.get('unpaid_only', None)
+        if unpaid_only == 'true':
+            # Exclude invoices that are already fully paid
+            queryset = queryset.exclude(status='paid')
 
         return queryset
 
@@ -441,15 +470,65 @@ class PaymentViewSet(viewsets.ModelViewSet):
             total=Sum('amount')
         )['total'] or 0
 
-        # Update invoice status
-        if total_paid >= invoice.total_amount:
-            # Fully paid
-            invoice.status = 'paid'
-        elif total_paid > 0 and invoice.status == 'draft':
-            # Partially paid, update to sent if still draft
-            invoice.status = 'sent'
+        # Auto-convert Proforma Invoice to Tax Invoice when payment is received
+        if invoice.invoice_type == 'proforma' and total_paid >= invoice.total_amount:
+            # Check if already converted
+            if not hasattr(invoice, 'converted_tax_invoice') or not invoice.converted_tax_invoice.exists():
+                # Use atomic transaction to prevent race conditions
+                with transaction.atomic():
+                    # Create tax invoice with payment date (invoice_number will be auto-generated)
+                    tax_invoice = Invoice.objects.create(
+                        user=invoice.user,
+                        client=invoice.client,
+                        invoice_type='tax',
+                        invoice_date=payment.payment_date,  # Use payment date as invoice date
+                        status='paid',
+                        subtotal=invoice.subtotal,
+                        tax_amount=invoice.tax_amount,
+                        total_amount=invoice.total_amount,
+                        payment_term=invoice.payment_term,
+                        payment_terms=invoice.payment_terms,
+                        notes=invoice.notes,
+                        parent_proforma=invoice
+                    )
 
-        invoice.save()
+                    # Copy invoice items
+                    for item in invoice.items.all():
+                        InvoiceItem.objects.create(
+                            invoice=tax_invoice,
+                            description=item.description,
+                            hsn_sac=item.hsn_sac,
+                            gst_rate=item.gst_rate,
+                            taxable_amount=item.taxable_amount,
+                            total_amount=item.total_amount
+                        )
+
+                    # Transfer payment to tax invoice
+                    payment.invoice = tax_invoice
+                    payment.save()
+
+                    # Mark proforma as paid
+                    invoice.status = 'paid'
+                    invoice.save()
+
+                # Auto-send tax invoice email if client has email (outside transaction)
+                try:
+                    company_settings = CompanySettings.objects.get(user=self.request.user)
+                    if tax_invoice.client.email:
+                        send_invoice_email(tax_invoice, company_settings)
+                except Exception as e:
+                    print(f"Error sending tax invoice email: {str(e)}")
+            else:
+                # Already converted, just update status
+                invoice.status = 'paid'
+                invoice.save()
+        else:
+            # Update invoice status for non-proforma or partially paid invoices
+            if total_paid >= invoice.total_amount:
+                invoice.status = 'paid'
+            elif total_paid > 0 and invoice.status == 'draft':
+                invoice.status = 'sent'
+            invoice.save()
 
     def perform_update(self, serializer):
         payment = serializer.save()

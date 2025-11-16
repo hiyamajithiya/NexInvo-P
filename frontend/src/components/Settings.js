@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { settingsAPI } from '../services/api';
+import { settingsAPI, paymentTermAPI } from '../services/api';
 import InvoiceFormatEditor from './InvoiceFormatEditor';
 import './Pages.css';
 
@@ -38,26 +38,10 @@ function Settings() {
     notes: ''
   });
 
-  // Item Master State
-  const [items, setItems] = useState([]);
-  const [showItemForm, setShowItemForm] = useState(false);
-  const [currentItem, setCurrentItem] = useState({
-    name: '',
-    description: '',
-    hsnSac: '',
-    unit: 'nos',
-    rate: 0,
-    gstRate: 18
-  });
-
   // Payment Terms State
-  const [paymentTerms, setPaymentTerms] = useState([
-    { id: 1, name: 'Net 15', days: 15, description: 'Payment due within 15 days' },
-    { id: 2, name: 'Net 30', days: 30, description: 'Payment due within 30 days' },
-    { id: 3, name: 'Net 45', days: 45, description: 'Payment due within 45 days' }
-  ]);
+  const [paymentTerms, setPaymentTerms] = useState([]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [currentPayment, setCurrentPayment] = useState({ name: '', days: 0, description: '' });
+  const [currentPayment, setCurrentPayment] = useState({ term_name: '', days: 0, description: '' });
 
   // Email Settings State
   const [emailSettings, setEmailSettings] = useState({
@@ -81,6 +65,7 @@ function Settings() {
   // Load settings on component mount
   useEffect(() => {
     loadSettings();
+    loadPaymentTerms();
   }, []);
 
   const loadSettings = async () => {
@@ -215,112 +200,79 @@ function Settings() {
     setSaveSuccess(false);
   };
 
-  const handleItemChange = (field, value) => {
-    setCurrentItem({
-      ...currentItem,
-      [field]: value
-    });
-  };
-
-  const handleAddItem = () => {
-    setShowItemForm(true);
-    setCurrentItem({
-      name: '',
-      description: '',
-      hsnSac: '',
-      unit: 'nos',
-      rate: 0,
-      gstRate: 18
-    });
-  };
-
-  const handleSaveItem = () => {
-    if (!currentItem.name || !currentItem.rate) {
-      setError('Item name and rate are required');
-      return;
+  // Load Payment Terms
+  const loadPaymentTerms = async () => {
+    try {
+      const response = await paymentTermAPI.getAll();
+      setPaymentTerms(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error loading payment terms:', err);
     }
-
-    if (currentItem.id) {
-      // Update existing item
-      setItems(items.map(item => item.id === currentItem.id ? currentItem : item));
-    } else {
-      // Add new item
-      setItems([...items, { ...currentItem, id: Date.now() }]);
-    }
-
-    setShowItemForm(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-  };
-
-  const handleEditItem = (item) => {
-    setCurrentItem(item);
-    setShowItemForm(true);
-  };
-
-  const handleDeleteItem = (id) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      setItems(items.filter(item => item.id !== id));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    }
-  };
-
-  const handleCancelItem = () => {
-    setShowItemForm(false);
-    setCurrentItem({
-      name: '',
-      description: '',
-      hsnSac: '',
-      unit: 'nos',
-      rate: 0,
-      gstRate: 18
-    });
   };
 
   // Payment Terms Handlers
   const handleAddPayment = () => {
     setShowPaymentForm(true);
-    setCurrentPayment({ name: '', days: 0, description: '' });
+    setCurrentPayment({ term_name: '', days: 0, description: '' });
   };
 
   const handlePaymentChange = (field, value) => {
     setCurrentPayment({ ...currentPayment, [field]: value });
   };
 
-  const handleSavePayment = () => {
-    if (!currentPayment.name || !currentPayment.days) {
+  const handleSavePayment = async () => {
+    if (!currentPayment.term_name || !currentPayment.days) {
       setError('Payment term name and days are required');
       return;
     }
 
-    if (currentPayment.id) {
-      setPaymentTerms(paymentTerms.map(p => p.id === currentPayment.id ? currentPayment : p));
-    } else {
-      setPaymentTerms([...paymentTerms, { ...currentPayment, id: Date.now() }]);
+    if (!currentPayment.description) {
+      setError('Description is required');
+      return;
     }
 
-    setShowPaymentForm(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setLoading(true);
+    setError('');
+
+    try {
+      if (currentPayment.id) {
+        await paymentTermAPI.update(currentPayment.id, currentPayment);
+      } else {
+        await paymentTermAPI.create(currentPayment);
+      }
+
+      setShowPaymentForm(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      loadPaymentTerms();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save payment term');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEditPayment = (payment) => {
-    setCurrentPayment(payment);
+  const handleEditPayment = (term) => {
+    setCurrentPayment(term);
     setShowPaymentForm(true);
   };
 
-  const handleDeletePayment = (id) => {
+  const handleDeletePayment = async (id) => {
     if (window.confirm('Are you sure you want to delete this payment term?')) {
-      setPaymentTerms(paymentTerms.filter(p => p.id !== id));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      try {
+        await paymentTermAPI.delete(id);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+        loadPaymentTerms();
+      } catch (err) {
+        setError('Failed to delete payment term');
+      }
     }
   };
 
   const handleCancelPayment = () => {
     setShowPaymentForm(false);
-    setCurrentPayment({ name: '', days: 0, description: '' });
+    setCurrentPayment({ term_name: '', days: 0, description: '' });
   };
 
   // Email Settings Handlers
@@ -473,13 +425,6 @@ function Settings() {
           >
             <span className="tab-icon">📄</span>
             Invoice Settings
-          </button>
-          <button
-            className={`settings-tab ${activeTab === 'items' ? 'active' : ''}`}
-            onClick={() => setActiveTab('items')}
-          >
-            <span className="tab-icon">📦</span>
-            Item Master
           </button>
           <button
             className={`settings-tab ${activeTab === 'payment' ? 'active' : ''}`}
@@ -841,158 +786,6 @@ function Settings() {
               </div>
             )}
 
-            {activeTab === 'items' && (
-              <div className="settings-section">
-                <div className="form-section-header">
-                  <h2 className="section-title">Item Master</h2>
-                  <button className="btn-add-item" onClick={handleAddItem}>
-                    <span className="btn-icon">➕</span>
-                    Add Item
-                  </button>
-                </div>
-
-                {showItemForm && (
-                  <div className="form-grid" style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
-                    <div className="form-field">
-                      <label>Item Name *</label>
-                      <input
-                        type="text"
-                        value={currentItem.name}
-                        onChange={(e) => handleItemChange('name', e.target.value)}
-                        className="form-input"
-                        placeholder="Enter item name"
-                      />
-                    </div>
-                    <div className="form-field">
-                      <label>HSN/SAC Code</label>
-                      <input
-                        type="text"
-                        value={currentItem.hsnSac}
-                        onChange={(e) => handleItemChange('hsnSac', e.target.value)}
-                        className="form-input"
-                        placeholder="e.g., 9983"
-                      />
-                    </div>
-                    <div className="form-field full-width">
-                      <label>Description</label>
-                      <textarea
-                        rows="2"
-                        value={currentItem.description}
-                        onChange={(e) => handleItemChange('description', e.target.value)}
-                        className="form-input"
-                        placeholder="Enter item description"
-                      ></textarea>
-                    </div>
-                    <div className="form-field">
-                      <label>Unit</label>
-                      <select
-                        value={currentItem.unit}
-                        onChange={(e) => handleItemChange('unit', e.target.value)}
-                        className="form-input"
-                      >
-                        <option value="nos">Nos</option>
-                        <option value="pcs">Pcs</option>
-                        <option value="kg">Kg</option>
-                        <option value="ltr">Ltr</option>
-                        <option value="box">Box</option>
-                        <option value="hrs">Hrs</option>
-                        <option value="days">Days</option>
-                        <option value="months">Months</option>
-                      </select>
-                    </div>
-                    <div className="form-field">
-                      <label>Rate (₹) *</label>
-                      <input
-                        type="number"
-                        value={currentItem.rate}
-                        onChange={(e) => handleItemChange('rate', parseFloat(e.target.value) || 0)}
-                        className="form-input"
-                        min="0"
-                        step="0.01"
-                      />
-                    </div>
-                    <div className="form-field">
-                      <label>GST Rate (%)</label>
-                      <select
-                        value={currentItem.gstRate}
-                        onChange={(e) => handleItemChange('gstRate', parseInt(e.target.value))}
-                        className="form-input"
-                      >
-                        <option value="0">0%</option>
-                        <option value="5">5%</option>
-                        <option value="12">12%</option>
-                        <option value="18">18%</option>
-                        <option value="28">28%</option>
-                      </select>
-                    </div>
-                    <div className="form-field full-width">
-                      <div className="form-actions" style={{borderTop: 'none', paddingTop: '0'}}>
-                        <button className="btn-create" onClick={handleSaveItem}>
-                          <span className="btn-icon">💾</span>
-                          Save Item
-                        </button>
-                        <button className="btn-secondary" onClick={handleCancelItem}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {items.length === 0 && !showItemForm ? (
-                  <div className="empty-state-large">
-                    <div className="empty-icon-large">📦</div>
-                    <h3 className="empty-title">No Items Yet</h3>
-                    <p className="empty-description">Click "Add Item" to create your first item</p>
-                  </div>
-                ) : !showItemForm && (
-                  <div className="data-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Item Name</th>
-                          <th>HSN/SAC</th>
-                          <th>Description</th>
-                          <th>Unit</th>
-                          <th>Rate (₹)</th>
-                          <th>GST %</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item) => (
-                          <tr key={item.id}>
-                            <td>{item.name}</td>
-                            <td>{item.hsnSac}</td>
-                            <td>{item.description}</td>
-                            <td>{item.unit}</td>
-                            <td>₹{parseFloat(item.rate).toFixed(2)}</td>
-                            <td>{item.gstRate}%</td>
-                            <td>
-                              <button
-                                className="btn-icon-small"
-                                onClick={() => handleEditItem(item)}
-                                title="Edit"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                className="btn-icon-small"
-                                onClick={() => handleDeleteItem(item.id)}
-                                title="Delete"
-                              >
-                                🗑️
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
             {activeTab === 'payment' && (
               <div className="settings-section">
                 <div className="form-section-header">
@@ -1009,8 +802,8 @@ function Settings() {
                       <label>Term Name *</label>
                       <input
                         type="text"
-                        value={currentPayment.name}
-                        onChange={(e) => handlePaymentChange('name', e.target.value)}
+                        value={currentPayment.term_name}
+                        onChange={(e) => handlePaymentChange('term_name', e.target.value)}
                         className="form-input"
                         placeholder="e.g., Net 30"
                       />
@@ -1026,13 +819,13 @@ function Settings() {
                       />
                     </div>
                     <div className="form-field full-width">
-                      <label>Description</label>
+                      <label>Description *</label>
                       <textarea
                         rows="2"
                         value={currentPayment.description}
                         onChange={(e) => handlePaymentChange('description', e.target.value)}
                         className="form-input"
-                        placeholder="Enter payment term description"
+                        placeholder="e.g., Payment due within 30 days"
                       ></textarea>
                     </div>
                     <div className="form-field full-width">
@@ -1069,7 +862,7 @@ function Settings() {
                       <tbody>
                         {paymentTerms.map((term) => (
                           <tr key={term.id}>
-                            <td><strong>{term.name}</strong></td>
+                            <td><strong>{term.term_name}</strong></td>
                             <td>{term.days} days</td>
                             <td>{term.description}</td>
                             <td>

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings
+from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm
 
 
 class CompanySettingsSerializer(serializers.ModelSerializer):
@@ -28,6 +28,22 @@ class ClientSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class ServiceItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceItem
+        fields = ['id', 'name', 'description', 'sac_code', 'gst_rate', 'is_active',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PaymentTermSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentTerm
+        fields = ['id', 'term_name', 'days', 'description', 'is_active',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class InvoiceItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceItem
@@ -39,14 +55,18 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
 class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
     client_name = serializers.CharField(source='client.name', read_only=True)
+    payment_term_name = serializers.CharField(source='payment_term.term_name', read_only=True)
+    payment_term_description = serializers.CharField(source='payment_term.description', read_only=True)
 
     class Meta:
         model = Invoice
         fields = ['id', 'client', 'client_name', 'invoice_number', 'invoice_type',
                   'invoice_date', 'status', 'subtotal', 'tax_amount', 'total_amount',
+                  'payment_term', 'payment_term_name', 'payment_term_description',
                   'payment_terms', 'notes', 'parent_proforma', 'is_emailed', 'emailed_at',
                   'items', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'invoice_number', 'client_name', 'is_emailed', 'emailed_at',
+        read_only_fields = ['id', 'invoice_number', 'client_name', 'payment_term_name',
+                           'payment_term_description', 'is_emailed', 'emailed_at',
                            'created_at', 'updated_at']
 
     def create(self, validated_data):

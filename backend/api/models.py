@@ -92,7 +92,8 @@ class Invoice(models.Model):
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    payment_terms = models.TextField(blank=True)
+    payment_term = models.ForeignKey('PaymentTerm', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
+    payment_terms = models.TextField(blank=True)  # Kept for backwards compatibility
     notes = models.TextField(blank=True)
     parent_proforma = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='converted_tax_invoice')
     is_emailed = models.BooleanField(default=False)
@@ -107,6 +108,7 @@ class Invoice(models.Model):
         return f"{self.invoice_number} - {self.client.name}"
 
     def save(self, *args, **kwargs):
+        # Auto-generate unique invoice number if not provided
         if not self.invoice_number:
             # Auto-generate invoice number with separate series for proforma and tax invoices
             try:
@@ -120,7 +122,7 @@ class Invoice(models.Model):
                     prefix = settings.invoicePrefix  # Tax Invoice prefix (e.g., 'INV-')
                     starting_num = settings.startingNumber
 
-                # Get last invoice of same type
+                # Get last invoice of same type with locking to prevent race conditions
                 last_invoice = Invoice.objects.filter(
                     user=self.user,
                     invoice_type=self.invoice_type,
@@ -133,7 +135,19 @@ class Invoice(models.Model):
                 else:
                     new_num = starting_num
 
-                self.invoice_number = f"{prefix}{new_num:04d}"
+                # Ensure uniqueness by checking if the generated number already exists
+                max_attempts = 100
+                for attempt in range(max_attempts):
+                    potential_number = f"{prefix}{new_num:04d}"
+                    if not Invoice.objects.filter(invoice_number=potential_number).exists():
+                        self.invoice_number = potential_number
+                        break
+                    new_num += 1
+                else:
+                    # Fallback if all attempts fail
+                    import uuid
+                    self.invoice_number = f"{prefix}{uuid.uuid4().hex[:8].upper()}"
+
             except InvoiceSettings.DoesNotExist:
                 prefix = 'PI-' if self.invoice_type == 'proforma' else 'INV-'
                 self.invoice_number = f"{prefix}{self.id or 1:04d}"
@@ -201,6 +215,43 @@ class EmailSettings(models.Model):
 
     def __str__(self):
         return f"Email Settings for {self.user.username}"
+
+
+class ServiceItem(models.Model):
+    """Service/Item master for professional services"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='service_items')
+    name = models.CharField(max_length=255, help_text="Service/Item name")
+    description = models.TextField(blank=True, help_text="Detailed description")
+    sac_code = models.CharField(max_length=50, blank=True, help_text="SAC (Service Accounting Code)")
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00, help_text="GST Rate %")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = ['user', 'name']
+
+    def __str__(self):
+        return f"{self.name} ({self.sac_code})"
+
+
+class PaymentTerm(models.Model):
+    """Payment Terms master"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_terms')
+    term_name = models.CharField(max_length=100, help_text="Payment term name (e.g., Net 15, Net 30)")
+    days = models.IntegerField(help_text="Number of days for payment")
+    description = models.TextField(help_text="Payment term description")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['days']
+        unique_together = ['user', 'term_name']
+
+    def __str__(self):
+        return f"{self.term_name} - {self.days} days"
 
 
 class InvoiceFormatSettings(models.Model):
