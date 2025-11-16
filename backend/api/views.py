@@ -120,10 +120,24 @@ def test_email_view(request):
 
         email_settings = EmailSettings.objects.get(user=request.user)
 
+        # Validate email settings
+        if not email_settings.smtp_username or not email_settings.smtp_password:
+            return Response(
+                {'error': 'Please configure SMTP username and password in Email Settings'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not email_settings.from_email:
+            return Response(
+                {'error': 'Please configure From Email address in Email Settings'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Configure email backend temporarily
         from django.core.mail import get_connection
 
         connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
             host=email_settings.smtp_host,
             port=email_settings.smtp_port,
             username=email_settings.smtp_username,
