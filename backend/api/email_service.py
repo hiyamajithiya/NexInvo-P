@@ -84,7 +84,7 @@ Best Regards,
             use_tls=email_settings.use_tls,
         )
 
-        # Create email
+        # Create email with UTF-8 encoding
         email = EmailMessage(
             subject=subject,
             body=body,
@@ -93,6 +93,8 @@ Best Regards,
             reply_to=[company_settings.email] if company_settings.email else [],
             connection=connection
         )
+        email.content_subtype = "plain"
+        email.encoding = 'utf-8'
 
         # Attach PDF
         email.attach(
