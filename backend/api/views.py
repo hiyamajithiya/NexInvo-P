@@ -76,19 +76,33 @@ def invoice_settings_view(request):
 def email_settings_view(request):
     """Get or update email settings for the authenticated user"""
     if request.method == 'GET':
-        try:
-            settings = EmailSettings.objects.get(user=request.user)
-            serializer = EmailSettingsSerializer(settings)
-            return Response(serializer.data)
-        except EmailSettings.DoesNotExist:
-            return Response({'message': 'No settings found'}, status=status.HTTP_404_NOT_FOUND)
+        # Get or create email settings with defaults
+        settings, created = EmailSettings.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'smtp_host': 'smtp.gmail.com',
+                'smtp_port': 587,
+                'smtp_username': '',
+                'smtp_password': '',
+                'from_email': '',
+                'from_name': '',
+                'use_tls': True,
+                'email_signature': ''
+            }
+        )
+        serializer = EmailSettingsSerializer(settings)
+        return Response(serializer.data)
 
     elif request.method == 'PUT':
-        try:
-            settings = EmailSettings.objects.get(user=request.user)
-            serializer = EmailSettingsSerializer(settings, data=request.data, partial=True)
-        except EmailSettings.DoesNotExist:
-            serializer = EmailSettingsSerializer(data=request.data)
+        settings, created = EmailSettings.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'smtp_host': 'smtp.gmail.com',
+                'smtp_port': 587,
+                'use_tls': True
+            }
+        )
+        serializer = EmailSettingsSerializer(settings, data=request.data, partial=True)
 
         if serializer.is_valid():
             serializer.save(user=request.user)
@@ -140,20 +154,58 @@ def test_email_view(request):
 def invoice_format_settings_view(request):
     """Get or update invoice format settings for the authenticated user"""
     if request.method == 'GET':
-        try:
-            settings = InvoiceFormatSettings.objects.get(user=request.user)
-            serializer = InvoiceFormatSettingsSerializer(settings)
-            return Response(serializer.data)
-        except InvoiceFormatSettings.DoesNotExist:
-            # Return default settings if none exist
-            return Response({'message': 'No settings found'}, status=status.HTTP_404_NOT_FOUND)
+        # Get or create invoice format settings with defaults
+        settings, created = InvoiceFormatSettings.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'show_logo': True,
+                'logo_position': 'left',
+                'show_company_designation': True,
+                'company_designation_text': 'CHARTERED ACCOUNTANT',
+                'header_color': '#1e3a8a',
+                'show_company_name': True,
+                'show_trading_name': True,
+                'show_address': True,
+                'show_gstin': True,
+                'show_pan': True,
+                'show_phone': True,
+                'show_email': True,
+                'show_invoice_number': True,
+                'show_invoice_date': True,
+                'show_due_date': False,
+                'show_client_gstin': True,
+                'show_client_pan': False,
+                'show_client_phone': False,
+                'show_client_email': False,
+                'table_header_bg_color': '#1e3a8a',
+                'table_header_text_color': '#ffffff',
+                'show_hsn_sac_column': False,
+                'show_serial_number': True,
+                'show_taxable_value': True,
+                'show_cgst_sgst_separate': True,
+                'show_igst': True,
+                'show_gst_percentage': False,
+                'show_subtotal': True,
+                'show_tax_breakup': True,
+                'show_grand_total_in_words': False,
+                'show_bank_details': True,
+                'show_signature': True,
+                'signature_label': 'Authorized Signatory',
+                'show_company_seal': False,
+                'show_payment_terms': True,
+                'show_notes': True,
+                'show_terms_conditions': True,
+                'show_computer_generated_note': True,
+                'show_page_numbers': True,
+                'font_size': 'medium'
+            }
+        )
+        serializer = InvoiceFormatSettingsSerializer(settings)
+        return Response(serializer.data)
 
     elif request.method == 'PUT':
-        try:
-            settings = InvoiceFormatSettings.objects.get(user=request.user)
-            serializer = InvoiceFormatSettingsSerializer(settings, data=request.data, partial=True)
-        except InvoiceFormatSettings.DoesNotExist:
-            serializer = InvoiceFormatSettingsSerializer(data=request.data)
+        settings, created = InvoiceFormatSettings.objects.get_or_create(user=request.user)
+        serializer = InvoiceFormatSettingsSerializer(settings, data=request.data, partial=True)
 
         if serializer.is_valid():
             serializer.save(user=request.user)
