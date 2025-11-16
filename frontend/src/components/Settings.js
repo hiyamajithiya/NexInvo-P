@@ -1,0 +1,1450 @@
+import React, { useState, useEffect } from 'react';
+import { settingsAPI } from '../services/api';
+import InvoiceFormatEditor from './InvoiceFormatEditor';
+import './Pages.css';
+
+function Settings() {
+  const [activeTab, setActiveTab] = useState('company');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Company Info State
+  const [companyInfo, setCompanyInfo] = useState({
+    companyName: '',
+    tradingName: '',
+    address: '',
+    city: '',
+    state: '',
+    pinCode: '',
+    stateCode: '',
+    gstin: '',
+    pan: '',
+    phone: '',
+    email: '',
+    logo: null
+  });
+  const [logoPreview, setLogoPreview] = useState(null);
+
+  // Invoice Settings State
+  const [invoiceSettings, setInvoiceSettings] = useState({
+    invoicePrefix: '',
+    startingNumber: 1,
+    proformaPrefix: 'PI-',
+    proformaStartingNumber: 1,
+    defaultGstRate: 18,
+    paymentDueDays: 30,
+    termsAndConditions: '',
+    notes: ''
+  });
+
+  // Item Master State
+  const [items, setItems] = useState([]);
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [currentItem, setCurrentItem] = useState({
+    name: '',
+    description: '',
+    hsnSac: '',
+    unit: 'nos',
+    rate: 0,
+    gstRate: 18
+  });
+
+  // Payment Terms State
+  const [paymentTerms, setPaymentTerms] = useState([
+    { id: 1, name: 'Net 15', days: 15, description: 'Payment due within 15 days' },
+    { id: 2, name: 'Net 30', days: 30, description: 'Payment due within 30 days' },
+    { id: 3, name: 'Net 45', days: 45, description: 'Payment due within 45 days' }
+  ]);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [currentPayment, setCurrentPayment] = useState({ name: '', days: 0, description: '' });
+
+  // Email Settings State
+  const [emailSettings, setEmailSettings] = useState({
+    smtpHost: '',
+    smtpPort: 587,
+    smtpUsername: '',
+    smtpPassword: '',
+    fromEmail: '',
+    fromName: '',
+    useTLS: true,
+    emailSignature: ''
+  });
+
+  // Users & Roles State
+  const [users, setUsers] = useState([
+    { id: 1, name: 'Admin User', email: 'admin@example.com', role: 'admin', status: 'active' }
+  ]);
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [currentUser, setCurrentUser] = useState({ name: '', email: '', role: 'user', password: '' });
+
+  // Load settings on component mount
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    setLoading(true);
+    try {
+      const [companyResponse, invoiceResponse, emailResponse] = await Promise.all([
+        settingsAPI.getCompanySettings(),
+        settingsAPI.getInvoiceSettings(),
+        settingsAPI.getEmailSettings().catch(() => ({ data: null })) // Don't fail if email settings don't exist
+      ]);
+
+      if (companyResponse.data) {
+        setCompanyInfo(companyResponse.data);
+        // Set logo preview if logo exists
+        if (companyResponse.data.logo) {
+          setLogoPreview(companyResponse.data.logo);
+        }
+      }
+      if (invoiceResponse.data) {
+        setInvoiceSettings(invoiceResponse.data);
+      }
+      if (emailResponse.data) {
+        setEmailSettings({
+          smtpHost: emailResponse.data.smtp_host || '',
+          smtpPort: emailResponse.data.smtp_port || 587,
+          smtpUsername: emailResponse.data.smtp_username || '',
+          smtpPassword: '', // Don't populate password from server
+          fromEmail: emailResponse.data.from_email || '',
+          fromName: emailResponse.data.from_name || '',
+          useTLS: emailResponse.data.use_tls !== undefined ? emailResponse.data.use_tls : true,
+          emailSignature: emailResponse.data.email_signature || ''
+        });
+      }
+    } catch (err) {
+      console.error('Error loading settings:', err);
+      // Don't show error if settings don't exist yet (404)
+      if (err.response?.status !== 404) {
+        setError('Failed to load settings');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompanyChange = (field, value) => {
+    setCompanyInfo({
+      ...companyInfo,
+      [field]: value
+    });
+  };
+
+  const handleInvoiceChange = (field, value) => {
+    setInvoiceSettings({
+      ...invoiceSettings,
+      [field]: value
+    });
+  };
+
+  const handleLogoUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select a valid image file');
+        return;
+      }
+
+      // Validate file size (max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        setError('Logo file size should be less than 2MB');
+        return;
+      }
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result);
+        setCompanyInfo({
+          ...companyInfo,
+          logo: reader.result
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoPreview(null);
+    setCompanyInfo({
+      ...companyInfo,
+      logo: null
+    });
+    // Reset file input
+    const fileInput = document.getElementById('logo-upload');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  };
+
+  const handleSaveCompany = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await settingsAPI.updateCompanySettings(companyInfo);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error saving company info:', err);
+      setError(err.response?.data?.message || 'Failed to save company information');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await settingsAPI.updateInvoiceSettings(invoiceSettings);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error saving invoice settings:', err);
+      setError(err.response?.data?.message || 'Failed to save invoice settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    // Reset to initial values or reload from backend
+    setSaveSuccess(false);
+  };
+
+  const handleItemChange = (field, value) => {
+    setCurrentItem({
+      ...currentItem,
+      [field]: value
+    });
+  };
+
+  const handleAddItem = () => {
+    setShowItemForm(true);
+    setCurrentItem({
+      name: '',
+      description: '',
+      hsnSac: '',
+      unit: 'nos',
+      rate: 0,
+      gstRate: 18
+    });
+  };
+
+  const handleSaveItem = () => {
+    if (!currentItem.name || !currentItem.rate) {
+      setError('Item name and rate are required');
+      return;
+    }
+
+    if (currentItem.id) {
+      // Update existing item
+      setItems(items.map(item => item.id === currentItem.id ? currentItem : item));
+    } else {
+      // Add new item
+      setItems([...items, { ...currentItem, id: Date.now() }]);
+    }
+
+    setShowItemForm(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleEditItem = (item) => {
+    setCurrentItem(item);
+    setShowItemForm(true);
+  };
+
+  const handleDeleteItem = (id) => {
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      setItems(items.filter(item => item.id !== id));
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
+  };
+
+  const handleCancelItem = () => {
+    setShowItemForm(false);
+    setCurrentItem({
+      name: '',
+      description: '',
+      hsnSac: '',
+      unit: 'nos',
+      rate: 0,
+      gstRate: 18
+    });
+  };
+
+  // Payment Terms Handlers
+  const handleAddPayment = () => {
+    setShowPaymentForm(true);
+    setCurrentPayment({ name: '', days: 0, description: '' });
+  };
+
+  const handlePaymentChange = (field, value) => {
+    setCurrentPayment({ ...currentPayment, [field]: value });
+  };
+
+  const handleSavePayment = () => {
+    if (!currentPayment.name || !currentPayment.days) {
+      setError('Payment term name and days are required');
+      return;
+    }
+
+    if (currentPayment.id) {
+      setPaymentTerms(paymentTerms.map(p => p.id === currentPayment.id ? currentPayment : p));
+    } else {
+      setPaymentTerms([...paymentTerms, { ...currentPayment, id: Date.now() }]);
+    }
+
+    setShowPaymentForm(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleEditPayment = (payment) => {
+    setCurrentPayment(payment);
+    setShowPaymentForm(true);
+  };
+
+  const handleDeletePayment = (id) => {
+    if (window.confirm('Are you sure you want to delete this payment term?')) {
+      setPaymentTerms(paymentTerms.filter(p => p.id !== id));
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
+  };
+
+  const handleCancelPayment = () => {
+    setShowPaymentForm(false);
+    setCurrentPayment({ name: '', days: 0, description: '' });
+  };
+
+  // Email Settings Handlers
+  const handleEmailChange = (field, value) => {
+    setEmailSettings({ ...emailSettings, [field]: value });
+  };
+
+  const handleSaveEmail = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      // Convert camelCase to snake_case for API
+      const payload = {
+        smtp_host: emailSettings.smtpHost,
+        smtp_port: emailSettings.smtpPort,
+        smtp_username: emailSettings.smtpUsername,
+        smtp_password: emailSettings.smtpPassword,
+        from_email: emailSettings.fromEmail,
+        from_name: emailSettings.fromName,
+        use_tls: emailSettings.useTLS,
+        email_signature: emailSettings.emailSignature
+      };
+
+      // Only include password if it's been changed
+      if (!emailSettings.smtpPassword) {
+        delete payload.smtp_password;
+      }
+
+      await settingsAPI.updateEmailSettings(payload);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error saving email settings:', err);
+      setError(err.response?.data?.error || 'Failed to save email settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await settingsAPI.testEmail();
+      alert(response.data.message || 'Test email sent successfully!');
+    } catch (err) {
+      console.error('Error sending test email:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to send test email. Please check your email settings.';
+      setError(errorMsg);
+      alert(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Users Handlers
+  const handleAddUser = () => {
+    setShowUserForm(true);
+    setCurrentUser({ name: '', email: '', role: 'user', password: '' });
+  };
+
+  const handleUserChange = (field, value) => {
+    setCurrentUser({ ...currentUser, [field]: value });
+  };
+
+  const handleSaveUser = () => {
+    if (!currentUser.name || !currentUser.email) {
+      setError('User name and email are required');
+      return;
+    }
+
+    if (currentUser.id) {
+      setUsers(users.map(u => u.id === currentUser.id ? currentUser : u));
+    } else {
+      setUsers([...users, { ...currentUser, id: Date.now(), status: 'active' }]);
+    }
+
+    setShowUserForm(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleEditUser = (user) => {
+    setCurrentUser(user);
+    setShowUserForm(true);
+  };
+
+  const handleDeleteUser = (id) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      setUsers(users.filter(u => u.id !== id));
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
+  };
+
+  const handleToggleUserStatus = (id) => {
+    setUsers(users.map(u =>
+      u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
+    ));
+  };
+
+  const handleCancelUser = () => {
+    setShowUserForm(false);
+    setCurrentUser({ name: '', email: '', role: 'user', password: '' });
+  };
+
+  // Backup & Data Handlers
+  const handleExportData = (format) => {
+    alert(`Exporting data in ${format} format...`);
+  };
+
+  const handleBackupNow = () => {
+    if (window.confirm('Create a backup of all data now?')) {
+      alert('Backup created successfully!');
+    }
+  };
+
+  const handleRestoreBackup = () => {
+    if (window.confirm('This will restore data from a backup. Continue?')) {
+      alert('Restore functionality will be implemented');
+    }
+  };
+
+  return (
+    <div className="page-content">
+      {saveSuccess && (
+        <div className="success-message">
+          ✅ Settings saved successfully!
+        </div>
+      )}
+
+      {error && (
+        <div className="error-message">
+          ❌ {error}
+        </div>
+      )}
+
+      <div className="settings-layout">
+        <div className="settings-sidebar">
+          <button
+            className={`settings-tab ${activeTab === 'company' ? 'active' : ''}`}
+            onClick={() => setActiveTab('company')}
+          >
+            <span className="tab-icon">🏢</span>
+            Company Info
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'invoice' ? 'active' : ''}`}
+            onClick={() => setActiveTab('invoice')}
+          >
+            <span className="tab-icon">📄</span>
+            Invoice Settings
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'items' ? 'active' : ''}`}
+            onClick={() => setActiveTab('items')}
+          >
+            <span className="tab-icon">📦</span>
+            Item Master
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'payment' ? 'active' : ''}`}
+            onClick={() => setActiveTab('payment')}
+          >
+            <span className="tab-icon">💳</span>
+            Payment Terms
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'email' ? 'active' : ''}`}
+            onClick={() => setActiveTab('email')}
+          >
+            <span className="tab-icon">✉️</span>
+            Email Settings
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'format' ? 'active' : ''}`}
+            onClick={() => setActiveTab('format')}
+          >
+            <span className="tab-icon">📄</span>
+            Invoice Format
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            <span className="tab-icon">👤</span>
+            Users & Roles
+          </button>
+          <button
+            className={`settings-tab ${activeTab === 'backup' ? 'active' : ''}`}
+            onClick={() => setActiveTab('backup')}
+          >
+            <span className="tab-icon">💾</span>
+            Backup & Data
+          </button>
+        </div>
+
+        <div className="settings-content">
+          <div className="content-card">
+            {activeTab === 'company' && (
+              <div className="settings-section">
+                <h2 className="section-title">Company Information</h2>
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label>Company Name *</label>
+                    <input
+                      type="text"
+                      value={companyInfo.companyName}
+                      onChange={(e) => handleCompanyChange('companyName', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Trading Name</label>
+                    <input
+                      type="text"
+                      value={companyInfo.tradingName}
+                      onChange={(e) => handleCompanyChange('tradingName', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Address</label>
+                    <textarea
+                      rows="3"
+                      value={companyInfo.address}
+                      onChange={(e) => handleCompanyChange('address', e.target.value)}
+                      className="form-input"
+                    ></textarea>
+                  </div>
+                  <div className="form-field">
+                    <label>City</label>
+                    <input
+                      type="text"
+                      value={companyInfo.city}
+                      onChange={(e) => handleCompanyChange('city', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>State</label>
+                    <input
+                      type="text"
+                      value={companyInfo.state}
+                      onChange={(e) => handleCompanyChange('state', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>PIN Code</label>
+                    <input
+                      type="text"
+                      value={companyInfo.pinCode}
+                      onChange={(e) => handleCompanyChange('pinCode', e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>State Code</label>
+                    <input
+                      type="text"
+                      value={companyInfo.stateCode}
+                      onChange={(e) => handleCompanyChange('stateCode', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g., 24"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>GSTIN</label>
+                    <input
+                      type="text"
+                      value={companyInfo.gstin}
+                      onChange={(e) => handleCompanyChange('gstin', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g., 24XXXXX0000X1Z5"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>PAN</label>
+                    <input
+                      type="text"
+                      value={companyInfo.pan}
+                      onChange={(e) => handleCompanyChange('pan', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g., XXXXX0000X"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Phone</label>
+                    <input
+                      type="text"
+                      value={companyInfo.phone}
+                      onChange={(e) => handleCompanyChange('phone', e.target.value)}
+                      className="form-input"
+                      placeholder="+91 XXXXXXXXXX"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      value={companyInfo.email}
+                      onChange={(e) => handleCompanyChange('email', e.target.value)}
+                      className="form-input"
+                      placeholder="info@company.com"
+                    />
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Company Logo</label>
+                    <div style={{
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '24px',
+                      textAlign: 'center',
+                      background: '#f8f9fa',
+                      marginTop: '8px'
+                    }}>
+                      {logoPreview || companyInfo.logo ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                          <img
+                            src={logoPreview || companyInfo.logo}
+                            alt="Company Logo"
+                            style={{
+                              maxWidth: '200px',
+                              maxHeight: '100px',
+                              objectFit: 'contain',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '4px',
+                              padding: '8px',
+                              background: 'white'
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <label htmlFor="logo-upload" style={{
+                              cursor: 'pointer',
+                              padding: '8px 16px',
+                              background: '#6366f1',
+                              color: 'white',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              fontWeight: '500'
+                            }}>
+                              Change Logo
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleRemoveLogo}
+                              style={{
+                                padding: '8px 16px',
+                                background: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Remove Logo
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label htmlFor="logo-upload" style={{ cursor: 'pointer', display: 'block' }}>
+                          <div style={{ fontSize: '48px', marginBottom: '8px' }}>🖼️</div>
+                          <div style={{ color: '#6366f1', fontWeight: '600', marginBottom: '4px' }}>
+                            Click to upload company logo
+                          </div>
+                          <div style={{ color: '#6b7280', fontSize: '14px' }}>
+                            PNG, JPG or JPEG (Max 2MB)
+                          </div>
+                        </label>
+                      )}
+                      <input
+                        type="file"
+                        id="logo-upload"
+                        accept="image/png,image/jpeg,image/jpg"
+                        onChange={handleLogoUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+                    <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>
+                      Recommended size: 200x100 pixels. Your logo will appear on invoices and in the dashboard.
+                    </p>
+                  </div>
+                </div>
+                <div className="form-actions">
+                  <button className="btn-create" onClick={handleSaveCompany} disabled={loading}>
+                    <span className="btn-icon">💾</span>
+                    {loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button className="btn-secondary" onClick={handleCancel} disabled={loading}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'invoice' && (
+              <div className="settings-section">
+                <h2 className="section-title">Invoice Numbering Settings</h2>
+
+                {/* Tax Invoice Settings */}
+                <div style={{marginBottom: '32px', padding: '20px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                  <h3 style={{margin: '0 0 16px 0', color: '#1e293b', fontSize: '16px', fontWeight: '600'}}>
+                    📄 Tax Invoice Settings
+                  </h3>
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label>Tax Invoice Prefix</label>
+                      <input
+                        type="text"
+                        value={invoiceSettings.invoicePrefix}
+                        onChange={(e) => handleInvoiceChange('invoicePrefix', e.target.value)}
+                        placeholder="INV-"
+                        className="form-input"
+                      />
+                      <small style={{color: '#64748b', fontSize: '12px'}}>e.g., INV- will generate INV-0001, INV-0002...</small>
+                    </div>
+                    <div className="form-field">
+                      <label>Starting Number</label>
+                      <input
+                        type="number"
+                        value={invoiceSettings.startingNumber}
+                        onChange={(e) => handleInvoiceChange('startingNumber', parseInt(e.target.value) || 1)}
+                        className="form-input"
+                        min="1"
+                      />
+                      <small style={{color: '#64748b', fontSize: '12px'}}>Next invoice will start from this number</small>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Proforma Invoice Settings */}
+                <div style={{marginBottom: '32px', padding: '20px', background: '#fefce8', borderRadius: '8px', border: '1px solid #fde047'}}>
+                  <h3 style={{margin: '0 0 16px 0', color: '#854d0e', fontSize: '16px', fontWeight: '600'}}>
+                    📋 Proforma Invoice Settings
+                  </h3>
+                  <div className="form-grid">
+                    <div className="form-field">
+                      <label>Proforma Invoice Prefix</label>
+                      <input
+                        type="text"
+                        value={invoiceSettings.proformaPrefix || 'PI-'}
+                        onChange={(e) => handleInvoiceChange('proformaPrefix', e.target.value)}
+                        placeholder="PI-"
+                        className="form-input"
+                      />
+                      <small style={{color: '#78716c', fontSize: '12px'}}>e.g., PI- will generate PI-0001, PI-0002...</small>
+                    </div>
+                    <div className="form-field">
+                      <label>Starting Number</label>
+                      <input
+                        type="number"
+                        value={invoiceSettings.proformaStartingNumber || 1}
+                        onChange={(e) => handleInvoiceChange('proformaStartingNumber', parseInt(e.target.value) || 1)}
+                        className="form-input"
+                        min="1"
+                      />
+                      <small style={{color: '#78716c', fontSize: '12px'}}>Next proforma will start from this number</small>
+                    </div>
+                  </div>
+                </div>
+
+                {/* General Settings */}
+                <h3 style={{margin: '0 0 16px 0', color: '#1e293b', fontSize: '16px', fontWeight: '600'}}>
+                  ⚙️ General Invoice Settings
+                </h3>
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label>Default GST Rate (%)</label>
+                    <input
+                      type="number"
+                      value={invoiceSettings.defaultGstRate}
+                      onChange={(e) => handleInvoiceChange('defaultGstRate', parseInt(e.target.value) || 18)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>Payment Due Days</label>
+                    <input
+                      type="number"
+                      value={invoiceSettings.paymentDueDays}
+                      onChange={(e) => handleInvoiceChange('paymentDueDays', parseInt(e.target.value) || 30)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Default Terms & Conditions</label>
+                    <textarea
+                      rows="4"
+                      value={invoiceSettings.termsAndConditions}
+                      onChange={(e) => handleInvoiceChange('termsAndConditions', e.target.value)}
+                      className="form-input"
+                      placeholder="Enter default terms and conditions..."
+                    ></textarea>
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Default Notes</label>
+                    <textarea
+                      rows="3"
+                      value={invoiceSettings.notes}
+                      onChange={(e) => handleInvoiceChange('notes', e.target.value)}
+                      className="form-input"
+                      placeholder="Enter default notes..."
+                    ></textarea>
+                  </div>
+                </div>
+                <div className="form-actions">
+                  <button className="btn-create" onClick={handleSaveInvoice} disabled={loading}>
+                    <span className="btn-icon">💾</span>
+                    {loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button className="btn-secondary" onClick={handleCancel} disabled={loading}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'items' && (
+              <div className="settings-section">
+                <div className="form-section-header">
+                  <h2 className="section-title">Item Master</h2>
+                  <button className="btn-add-item" onClick={handleAddItem}>
+                    <span className="btn-icon">➕</span>
+                    Add Item
+                  </button>
+                </div>
+
+                {showItemForm && (
+                  <div className="form-grid" style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                    <div className="form-field">
+                      <label>Item Name *</label>
+                      <input
+                        type="text"
+                        value={currentItem.name}
+                        onChange={(e) => handleItemChange('name', e.target.value)}
+                        className="form-input"
+                        placeholder="Enter item name"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>HSN/SAC Code</label>
+                      <input
+                        type="text"
+                        value={currentItem.hsnSac}
+                        onChange={(e) => handleItemChange('hsnSac', e.target.value)}
+                        className="form-input"
+                        placeholder="e.g., 9983"
+                      />
+                    </div>
+                    <div className="form-field full-width">
+                      <label>Description</label>
+                      <textarea
+                        rows="2"
+                        value={currentItem.description}
+                        onChange={(e) => handleItemChange('description', e.target.value)}
+                        className="form-input"
+                        placeholder="Enter item description"
+                      ></textarea>
+                    </div>
+                    <div className="form-field">
+                      <label>Unit</label>
+                      <select
+                        value={currentItem.unit}
+                        onChange={(e) => handleItemChange('unit', e.target.value)}
+                        className="form-input"
+                      >
+                        <option value="nos">Nos</option>
+                        <option value="pcs">Pcs</option>
+                        <option value="kg">Kg</option>
+                        <option value="ltr">Ltr</option>
+                        <option value="box">Box</option>
+                        <option value="hrs">Hrs</option>
+                        <option value="days">Days</option>
+                        <option value="months">Months</option>
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label>Rate (₹) *</label>
+                      <input
+                        type="number"
+                        value={currentItem.rate}
+                        onChange={(e) => handleItemChange('rate', parseFloat(e.target.value) || 0)}
+                        className="form-input"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>GST Rate (%)</label>
+                      <select
+                        value={currentItem.gstRate}
+                        onChange={(e) => handleItemChange('gstRate', parseInt(e.target.value))}
+                        className="form-input"
+                      >
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
+                    </div>
+                    <div className="form-field full-width">
+                      <div className="form-actions" style={{borderTop: 'none', paddingTop: '0'}}>
+                        <button className="btn-create" onClick={handleSaveItem}>
+                          <span className="btn-icon">💾</span>
+                          Save Item
+                        </button>
+                        <button className="btn-secondary" onClick={handleCancelItem}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {items.length === 0 && !showItemForm ? (
+                  <div className="empty-state-large">
+                    <div className="empty-icon-large">📦</div>
+                    <h3 className="empty-title">No Items Yet</h3>
+                    <p className="empty-description">Click "Add Item" to create your first item</p>
+                  </div>
+                ) : !showItemForm && (
+                  <div className="data-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Item Name</th>
+                          <th>HSN/SAC</th>
+                          <th>Description</th>
+                          <th>Unit</th>
+                          <th>Rate (₹)</th>
+                          <th>GST %</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.name}</td>
+                            <td>{item.hsnSac}</td>
+                            <td>{item.description}</td>
+                            <td>{item.unit}</td>
+                            <td>₹{parseFloat(item.rate).toFixed(2)}</td>
+                            <td>{item.gstRate}%</td>
+                            <td>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleEditItem(item)}
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleDeleteItem(item.id)}
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'payment' && (
+              <div className="settings-section">
+                <div className="form-section-header">
+                  <h2 className="section-title">Payment Terms</h2>
+                  <button className="btn-add-item" onClick={handleAddPayment}>
+                    <span className="btn-icon">➕</span>
+                    Add Payment Term
+                  </button>
+                </div>
+
+                {showPaymentForm && (
+                  <div className="form-grid" style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                    <div className="form-field">
+                      <label>Term Name *</label>
+                      <input
+                        type="text"
+                        value={currentPayment.name}
+                        onChange={(e) => handlePaymentChange('name', e.target.value)}
+                        className="form-input"
+                        placeholder="e.g., Net 30"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Days *</label>
+                      <input
+                        type="number"
+                        value={currentPayment.days}
+                        onChange={(e) => handlePaymentChange('days', parseInt(e.target.value) || 0)}
+                        className="form-input"
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-field full-width">
+                      <label>Description</label>
+                      <textarea
+                        rows="2"
+                        value={currentPayment.description}
+                        onChange={(e) => handlePaymentChange('description', e.target.value)}
+                        className="form-input"
+                        placeholder="Enter payment term description"
+                      ></textarea>
+                    </div>
+                    <div className="form-field full-width">
+                      <div className="form-actions" style={{borderTop: 'none', paddingTop: '0'}}>
+                        <button className="btn-create" onClick={handleSavePayment}>
+                          <span className="btn-icon">💾</span>
+                          Save Payment Term
+                        </button>
+                        <button className="btn-secondary" onClick={handleCancelPayment}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {paymentTerms.length === 0 && !showPaymentForm ? (
+                  <div className="empty-state-large">
+                    <div className="empty-icon-large">💳</div>
+                    <h3 className="empty-title">No Payment Terms Yet</h3>
+                    <p className="empty-description">Click "Add Payment Term" to create your first term</p>
+                  </div>
+                ) : !showPaymentForm && (
+                  <div className="data-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Term Name</th>
+                          <th>Days</th>
+                          <th>Description</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paymentTerms.map((term) => (
+                          <tr key={term.id}>
+                            <td><strong>{term.name}</strong></td>
+                            <td>{term.days} days</td>
+                            <td>{term.description}</td>
+                            <td>
+                              <button className="btn-icon-small" onClick={() => handleEditPayment(term)} title="Edit">
+                                ✏️
+                              </button>
+                              <button className="btn-icon-small" onClick={() => handleDeletePayment(term.id)} title="Delete">
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'email' && (
+              <div className="settings-section">
+                <h2 className="section-title">Email Settings</h2>
+
+                {/* Configuration Instructions */}
+                <div style={{
+                  background: '#eff6ff',
+                  border: '1px solid #3b82f6',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  marginBottom: '24px'
+                }}>
+                  <h3 style={{color: '#1e40af', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                    📋 Email Configuration Instructions
+                  </h3>
+                  <div style={{fontSize: '13px', color: '#1e3a8a', lineHeight: '1.6'}}>
+                    <p style={{marginBottom: '8px'}}><strong>For Gmail Users:</strong></p>
+                    <ul style={{marginLeft: '20px', marginBottom: '12px'}}>
+                      <li>SMTP Host: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>smtp.gmail.com</code></li>
+                      <li>SMTP Port: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>587</code> (for TLS) or <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>465</code> (for SSL)</li>
+                      <li>Enable "App Password" in your Google Account settings (Security → 2-Step Verification → App Passwords)</li>
+                      <li>Use the generated App Password instead of your regular Gmail password</li>
+                    </ul>
+                    <p style={{marginBottom: '8px'}}><strong>For Other Email Providers:</strong></p>
+                    <ul style={{marginLeft: '20px'}}>
+                      <li>Outlook/Office 365: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>smtp.office365.com</code>, Port: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>587</code></li>
+                      <li>Yahoo: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>smtp.mail.yahoo.com</code>, Port: <code style={{background: '#dbeafe', padding: '2px 6px', borderRadius: '3px'}}>587</code></li>
+                      <li>Contact your email provider for SMTP settings</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label>SMTP Host *</label>
+                    <input
+                      type="text"
+                      value={emailSettings.smtpHost}
+                      onChange={(e) => handleEmailChange('smtpHost', e.target.value)}
+                      className="form-input"
+                      placeholder="smtp.gmail.com"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>SMTP Port *</label>
+                    <input
+                      type="number"
+                      value={emailSettings.smtpPort}
+                      onChange={(e) => handleEmailChange('smtpPort', parseInt(e.target.value) || 587)}
+                      className="form-input"
+                      placeholder="587"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>SMTP Username *</label>
+                    <input
+                      type="text"
+                      value={emailSettings.smtpUsername}
+                      onChange={(e) => handleEmailChange('smtpUsername', e.target.value)}
+                      className="form-input"
+                      placeholder="your-email@example.com"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>SMTP Password *</label>
+                    <input
+                      type="password"
+                      value={emailSettings.smtpPassword}
+                      onChange={(e) => handleEmailChange('smtpPassword', e.target.value)}
+                      className="form-input"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>From Email *</label>
+                    <input
+                      type="email"
+                      value={emailSettings.fromEmail}
+                      onChange={(e) => handleEmailChange('fromEmail', e.target.value)}
+                      className="form-input"
+                      placeholder="noreply@company.com"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label>From Name</label>
+                    <input
+                      type="text"
+                      value={emailSettings.fromName}
+                      onChange={(e) => handleEmailChange('fromName', e.target.value)}
+                      className="form-input"
+                      placeholder="Your Company Name"
+                    />
+                  </div>
+                  <div className="form-field full-width">
+                    <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                      <input
+                        type="checkbox"
+                        checked={emailSettings.useTLS}
+                        onChange={(e) => handleEmailChange('useTLS', e.target.checked)}
+                        style={{width: 'auto'}}
+                      />
+                      Use TLS/SSL
+                    </label>
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Email Signature</label>
+                    <textarea
+                      rows="4"
+                      value={emailSettings.emailSignature}
+                      onChange={(e) => handleEmailChange('emailSignature', e.target.value)}
+                      className="form-input"
+                      placeholder="Enter your default email signature..."
+                    ></textarea>
+                  </div>
+                </div>
+                <div className="form-actions">
+                  <button className="btn-create" onClick={handleSaveEmail} disabled={loading}>
+                    <span className="btn-icon">💾</span>
+                    {loading ? 'Saving...' : 'Save Email Settings'}
+                  </button>
+                  <button className="btn-secondary" onClick={handleTestEmail}>
+                    <span className="btn-icon">📧</span>
+                    Send Test Email
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'users' && (
+              <div className="settings-section">
+                <div className="form-section-header">
+                  <h2 className="section-title">Users & Roles</h2>
+                  <button className="btn-add-item" onClick={handleAddUser}>
+                    <span className="btn-icon">➕</span>
+                    Add User
+                  </button>
+                </div>
+
+                {showUserForm && (
+                  <div className="form-grid" style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                    <div className="form-field">
+                      <label>Full Name *</label>
+                      <input
+                        type="text"
+                        value={currentUser.name}
+                        onChange={(e) => handleUserChange('name', e.target.value)}
+                        className="form-input"
+                        placeholder="Enter full name"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Email *</label>
+                      <input
+                        type="email"
+                        value={currentUser.email}
+                        onChange={(e) => handleUserChange('email', e.target.value)}
+                        className="form-input"
+                        placeholder="user@example.com"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Role *</label>
+                      <select
+                        value={currentUser.role}
+                        onChange={(e) => handleUserChange('role', e.target.value)}
+                        className="form-input"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="user">User</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    </div>
+                    <div className="form-field">
+                      <label>Password {!currentUser.id && '*'}</label>
+                      <input
+                        type="password"
+                        value={currentUser.password}
+                        onChange={(e) => handleUserChange('password', e.target.value)}
+                        className="form-input"
+                        placeholder={currentUser.id ? 'Leave blank to keep current' : 'Enter password'}
+                      />
+                    </div>
+                    <div className="form-field full-width">
+                      <div className="form-actions" style={{borderTop: 'none', paddingTop: '0'}}>
+                        <button className="btn-create" onClick={handleSaveUser}>
+                          <span className="btn-icon">💾</span>
+                          Save User
+                        </button>
+                        <button className="btn-secondary" onClick={handleCancelUser}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {users.length === 0 && !showUserForm ? (
+                  <div className="empty-state-large">
+                    <div className="empty-icon-large">👤</div>
+                    <h3 className="empty-title">No Users Yet</h3>
+                    <p className="empty-description">Click "Add User" to create your first user</p>
+                  </div>
+                ) : !showUserForm && (
+                  <div className="data-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Role</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr key={user.id}>
+                            <td><strong>{user.name}</strong></td>
+                            <td>{user.email}</td>
+                            <td>
+                              <span className={`status-badge status-${user.role}`}>
+                                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`status-badge status-${user.status}`}>
+                                {user.status === 'active' ? '✓ Active' : '✗ Inactive'}
+                              </span>
+                            </td>
+                            <td>
+                              <button className="btn-icon-small" onClick={() => handleEditUser(user)} title="Edit">
+                                ✏️
+                              </button>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleToggleUserStatus(user.id)}
+                                title={user.status === 'active' ? 'Deactivate' : 'Activate'}
+                              >
+                                {user.status === 'active' ? '🔒' : '🔓'}
+                              </button>
+                              <button className="btn-icon-small" onClick={() => handleDeleteUser(user.id)} title="Delete">
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'format' && (
+              <InvoiceFormatEditor />
+            )}
+
+            {activeTab === 'backup' && (
+              <div className="settings-section">
+                <h2 className="section-title">Backup & Data Management</h2>
+
+                <div style={{marginBottom: '32px'}}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#1f2937'}}>
+                    Export Data
+                  </h3>
+                  <p style={{color: '#6b7280', marginBottom: '16px'}}>
+                    Export your data in various formats for backup or analysis
+                  </p>
+                  <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                    <button className="btn-create" onClick={() => handleExportData('Excel')}>
+                      <span className="btn-icon">📊</span>
+                      Export to Excel
+                    </button>
+                    <button className="btn-secondary" onClick={() => handleExportData('CSV')}>
+                      <span className="btn-icon">📄</span>
+                      Export to CSV
+                    </button>
+                    <button className="btn-secondary" onClick={() => handleExportData('PDF')}>
+                      <span className="btn-icon">📕</span>
+                      Export to PDF
+                    </button>
+                    <button className="btn-secondary" onClick={() => handleExportData('JSON')}>
+                      <span className="btn-icon">💾</span>
+                      Export to JSON
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{marginBottom: '32px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#1f2937'}}>
+                    Database Backup
+                  </h3>
+                  <p style={{color: '#6b7280', marginBottom: '16px'}}>
+                    Create a complete backup of your database including all invoices, clients, and settings
+                  </p>
+                  <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
+                    <button className="btn-create" onClick={handleBackupNow}>
+                      <span className="btn-icon">💾</span>
+                      Create Backup Now
+                    </button>
+                    <span style={{color: '#6b7280', fontSize: '14px'}}>
+                      Last backup: Never
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{marginBottom: '32px', padding: '24px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <span>⚠️</span>
+                    Restore from Backup
+                  </h3>
+                  <p style={{color: '#78350f', marginBottom: '16px'}}>
+                    Restore your database from a previous backup. Warning: This will replace all current data!
+                  </p>
+                  <button className="btn-secondary" onClick={handleRestoreBackup} style={{background: '#fbbf24', color: '#92400e'}}>
+                    <span className="btn-icon">🔄</span>
+                    Restore Backup
+                  </button>
+                </div>
+
+                <div style={{padding: '24px', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <span>🗑️</span>
+                    Danger Zone
+                  </h3>
+                  <p style={{color: '#7f1d1d', marginBottom: '16px'}}>
+                    These actions are irreversible. Please proceed with caution.
+                  </p>
+                  <div style={{display: 'flex', gap: '12px', flexDirection: 'column'}}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => alert('Clear cache functionality')}
+                      style={{width: 'fit-content', background: '#fee2e2', color: '#991b1b', border: '1px solid #ef4444'}}
+                    >
+                      Clear Cache
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to delete all data? This cannot be undone!')) {
+                          alert('Delete all data functionality');
+                        }
+                      }}
+                      style={{width: 'fit-content', background: '#ef4444', color: 'white', border: 'none'}}
+                    >
+                      Delete All Data
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Settings;
