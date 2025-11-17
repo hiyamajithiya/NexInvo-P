@@ -58,6 +58,9 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Django settings - environment specific
+backend/nexinvo/settings.py
+
 # Temporary files
 *.tmp
 *.temp
