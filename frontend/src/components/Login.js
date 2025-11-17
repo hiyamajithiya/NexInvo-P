@@ -85,11 +85,6 @@ const Login = ({ onLogin }) => {
         </form>
 
         <div className="login-footer">
-          <p className="demo-credentials">
-            <strong>Demo Credentials:</strong><br />
-            Username: <code>admin</code><br />
-            Password: <code>admin123</code>
-          </p>
           <p className="company-name">
             HIMANSHU MAJITHIYA & CO. (PROP)
           </p>
