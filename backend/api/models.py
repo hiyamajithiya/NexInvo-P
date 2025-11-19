@@ -39,6 +39,11 @@ class InvoiceSettings(models.Model):
     paymentDueDays = models.IntegerField(default=30)
     termsAndConditions = models.TextField(blank=True)
     notes = models.TextField(blank=True)
+    # Payment Reminder Settings
+    enablePaymentReminders = models.BooleanField(default=True)
+    reminderFrequencyDays = models.IntegerField(default=3, help_text='Send reminders every X days for unpaid proforma invoices')
+    reminderEmailSubject = models.CharField(max_length=255, default='Payment Reminder for Invoice {invoice_number}')
+    reminderEmailBody = models.TextField(default='Dear {client_name},\n\nThis is a friendly reminder that payment for {invoice_number} dated {invoice_date} is pending.\n\nAmount Due: ₹{total_amount}\n\nPlease make the payment at your earliest convenience.\n\nThank you!')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -99,6 +104,8 @@ class Invoice(models.Model):
     parent_proforma = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='converted_tax_invoice')
     is_emailed = models.BooleanField(default=False)
     emailed_at = models.DateTimeField(null=True, blank=True)
+    last_reminder_sent = models.DateTimeField(null=True, blank=True, help_text='Last payment reminder sent date')
+    reminder_count = models.IntegerField(default=0, help_text='Number of reminders sent')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
