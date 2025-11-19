@@ -66,7 +66,7 @@ function Dashboard({ user, onLogout }) {
       default:
         return (
           <div className="stats-container">
-            <div className="stat-card blue">
+            <div className="stat-card blue" onClick={() => setActiveMenu('invoices')} style={{ cursor: 'pointer' }}>
               <div className="stat-header">
                 <div className="stat-icon-wrapper blue-bg">
                   <span className="stat-icon-lg">📄</span>
@@ -79,7 +79,7 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
 
-            <div className="stat-card green">
+            <div className="stat-card green" onClick={() => setActiveMenu('payments')} style={{ cursor: 'pointer' }}>
               <div className="stat-header">
                 <div className="stat-icon-wrapper green-bg">
                   <span className="stat-icon-lg">💰</span>
@@ -92,7 +92,7 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
 
-            <div className="stat-card orange">
+            <div className="stat-card orange" onClick={() => setActiveMenu('invoices')} style={{ cursor: 'pointer' }}>
               <div className="stat-header">
                 <div className="stat-icon-wrapper orange-bg">
                   <span className="stat-icon-lg">⏳</span>
@@ -105,7 +105,7 @@ function Dashboard({ user, onLogout }) {
               </div>
             </div>
 
-            <div className="stat-card purple">
+            <div className="stat-card purple" onClick={() => setActiveMenu('clients')} style={{ cursor: 'pointer' }}>
               <div className="stat-header">
                 <div className="stat-icon-wrapper purple-bg">
                   <span className="stat-icon-lg">👥</span>
