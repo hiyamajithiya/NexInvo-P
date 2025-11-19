@@ -10,13 +10,20 @@ const api = axios.create({
   },
 });
 
-// Add token to requests if available
+// Add token and organization context to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Add organization context header
+    const orgId = localStorage.getItem('current_org_id');
+    if (orgId) {
+      config.headers['X-Organization-ID'] = orgId;
+    }
+
     return config;
   },
   (error) => {
@@ -61,6 +68,21 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => api.post('/token/', credentials),
   refresh: (refresh) => api.post('/token/refresh/', { refresh }),
+  register: (data) => api.post('/register/', data),
+};
+
+// Organization APIs
+export const organizationAPI = {
+  getAll: () => api.get('/organizations/'),
+  getById: (id) => api.get(`/organizations/${id}/`),
+  create: (data) => api.post('/organizations/', data),
+  update: (id, data) => api.put(`/organizations/${id}/`, data),
+  delete: (id) => api.delete(`/organizations/${id}/`),
+  switch: (id) => api.post(`/organizations/${id}/switch/`),
+  getMembers: (id) => api.get(`/organizations/${id}/members/`),
+  inviteMember: (id, data) => api.post(`/organizations/${id}/invite/`, data),
+  updateMember: (orgId, userId, data) => api.put(`/organizations/${orgId}/members/${userId}/`, data),
+  removeMember: (orgId, userId) => api.delete(`/organizations/${orgId}/members/${userId}/`),
 };
 
 // Settings APIs
@@ -144,6 +166,15 @@ export const profileAPI = {
   getProfile: () => api.get('/profile/'),
   updateProfile: (data) => api.put('/profile/', data),
   changePassword: (data) => api.post('/profile/change-password/', data),
+};
+
+// User Management APIs
+export const userAPI = {
+  getAll: (params) => api.get('/users/', { params }),
+  getById: (id) => api.get(`/users/${id}/`),
+  create: (data) => api.post('/users/', data),
+  update: (id, data) => api.put(`/users/${id}/`, data),
+  delete: (id) => api.delete(`/users/${id}/`),
 };
 
 export default api;

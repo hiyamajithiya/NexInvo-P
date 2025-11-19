@@ -8,6 +8,8 @@ import Payments from './Payments';
 import Reports from './Reports';
 import Settings from './Settings';
 import Profile from './Profile';
+import OrganizationSwitcher from './OrganizationSwitcher';
+import OrganizationSettings from '../pages/OrganizationSettings';
 
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -61,6 +63,8 @@ function Dashboard({ user, onLogout }) {
         return <Reports />;
       case 'settings':
         return <Settings />;
+      case 'organization':
+        return <OrganizationSettings />;
       case 'profile':
         return <Profile onLogout={onLogout} />;
       default:
@@ -130,6 +134,7 @@ function Dashboard({ user, onLogout }) {
       case 'payments': return 'Payment Records';
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
+      case 'organization': return 'Organization Settings';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
     }
@@ -159,7 +164,7 @@ function Dashboard({ user, onLogout }) {
               </>
             )}
           </div>
-          <p className="company-subtitle">HIMANSHU MAJITHIYA & CO.</p>
+          <p className="company-subtitle">Chinmay Technosoft Private Limited</p>
         </div>
 
         <nav className="sidebar-nav">
@@ -219,6 +224,14 @@ function Dashboard({ user, onLogout }) {
             <span className="nav-icon">⚙️</span>
             <span className="nav-text">Settings</span>
           </a>
+          <a
+            href="#organization"
+            className={`nav-item ${activeMenu === 'organization' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('organization'); }}
+          >
+            <span className="nav-icon">🏢</span>
+            <span className="nav-text">Organization</span>
+          </a>
         </nav>
 
         <div className="sidebar-footer">
@@ -241,6 +254,9 @@ function Dashboard({ user, onLogout }) {
             <div className="search-box">
               <input type="text" placeholder="Search..." />
               <span className="search-icon">🔍</span>
+            </div>
+            <div style={{ marginRight: '20px' }}>
+              <OrganizationSwitcher />
             </div>
             <div className="user-menu">
               <div

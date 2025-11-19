@@ -3,11 +3,13 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
+router.register(r'organizations', views.OrganizationViewSet, basename='organization')
 router.register(r'clients', views.ClientViewSet, basename='client')
 router.register(r'service-items', views.ServiceItemViewSet, basename='service-item')
 router.register(r'payment-terms', views.PaymentTermViewSet, basename='payment-term')
 router.register(r'invoices', views.InvoiceViewSet, basename='invoice')
 router.register(r'payments', views.PaymentViewSet, basename='payment')
+router.register(r'users', views.UserViewSet, basename='user')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -17,6 +19,7 @@ urlpatterns = [
     path('settings/email/test/', views.test_email_view, name='test-email'),
     path('settings/invoice-format/', views.invoice_format_settings_view, name='invoice-format-settings'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
+    path('superadmin/stats/', views.superadmin_stats, name='superadmin-stats'),
     path('invoices/import/', views.import_invoices, name='import-invoices'),
     path('invoices/import-template/', views.download_import_template, name='download-import-template'),
     path('profile/', views.user_profile_view, name='user-profile'),

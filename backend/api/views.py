@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -15,10 +15,11 @@ from django.core.exceptions import ValidationError
 from datetime import date
 import os
 import tempfile
-from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm)
 from .serializers import (
+    OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
-    InvoiceSerializer, PaymentSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer
+    InvoiceSerializer, PaymentSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer, UserSerializer
 )
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email
@@ -27,24 +28,34 @@ from .invoice_importer import InvoiceImporter, generate_excel_template
 
 # Custom JWT Token Serializer to accept email as username
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    username_field = 'email'
+    email = serializers.EmailField(required=False, write_only=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make username optional
+        self.fields['username'].required = False
 
     def validate(self, attrs):
-        # Get email from request
+        # Check if email is provided instead of username
         email = attrs.get('email')
-        password = attrs.get('password')
+        username = attrs.get('username')
 
-        # Try to find user by email
-        try:
-            user = User.objects.get(email=email)
-            # Replace email with username for parent validation
-            attrs['username'] = user.username
-            attrs.pop('email', None)
-        except User.DoesNotExist:
-            # If email not found, pass as is (will fail in parent validation)
-            pass
+        # If email is provided, find the user and convert to username
+        if email and not username:
+            try:
+                user = User.objects.get(email=email)
+                attrs['username'] = user.username
+            except User.DoesNotExist:
+                raise serializers.ValidationError('No user found with this email address')
 
-        # Call parent validation
+        # Ensure username is now present
+        if not attrs.get('username'):
+            raise serializers.ValidationError('Either email or username must be provided')
+
+        # Remove email from attrs as parent class doesn't expect it
+        attrs.pop('email', None)
+
+        # Call parent validation with username
         return super().validate(attrs)
 
 
@@ -97,13 +108,38 @@ def register_view(request):
             is_active=True  # Make sure user is active
         )
 
-        # Create default settings for the user
-        CompanySettings.objects.create(
-            user=user,
-            companyName=company_name if company_name else f"{first_name} {last_name}".strip() or email
+        # Create organization for the new user
+        from django.utils.text import slugify
+        import uuid
+        org_name = company_name if company_name else f"{first_name} {last_name}".strip() or email
+        base_slug = slugify(org_name)
+        slug = base_slug
+        counter = 1
+        while Organization.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        organization = Organization.objects.create(
+            id=uuid.uuid4(),
+            name=org_name,
+            slug=slug,
+            plan='free',
+            is_active=True
         )
-        InvoiceSettings.objects.create(user=user)
-        EmailSettings.objects.create(user=user)
+
+        # Create organization membership with owner role
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=user,
+            role='owner',
+            is_active=True
+        )
+
+        # Create default settings for the organization
+        CompanySettings.objects.create(organization=organization, companyName=org_name)
+        InvoiceSettings.objects.create(organization=organization)
+        EmailSettings.objects.create(organization=organization)
+        InvoiceFormatSettings.objects.create(organization=organization)
 
         return Response({
             'message': 'User registered successfully',
@@ -124,7 +160,7 @@ def company_settings_view(request):
     """Get or update company settings for the authenticated user"""
     if request.method == 'GET':
         try:
-            settings = CompanySettings.objects.get(user=request.user)
+            settings = CompanySettings.objects.get(organization=request.organization)
             serializer = CompanySettingsSerializer(settings)
             return Response(serializer.data)
         except CompanySettings.DoesNotExist:
@@ -132,13 +168,13 @@ def company_settings_view(request):
 
     elif request.method == 'PUT':
         try:
-            settings = CompanySettings.objects.get(user=request.user)
+            settings = CompanySettings.objects.get(organization=request.organization)
             serializer = CompanySettingsSerializer(settings, data=request.data, partial=True)
         except CompanySettings.DoesNotExist:
             serializer = CompanySettingsSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save(organization=request.organization)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -149,7 +185,7 @@ def invoice_settings_view(request):
     """Get or update invoice settings for the authenticated user"""
     if request.method == 'GET':
         try:
-            settings = InvoiceSettings.objects.get(user=request.user)
+            settings = InvoiceSettings.objects.get(organization=request.organization)
             serializer = InvoiceSettingsSerializer(settings)
             return Response(serializer.data)
         except InvoiceSettings.DoesNotExist:
@@ -157,13 +193,13 @@ def invoice_settings_view(request):
 
     elif request.method == 'PUT':
         try:
-            settings = InvoiceSettings.objects.get(user=request.user)
+            settings = InvoiceSettings.objects.get(organization=request.organization)
             serializer = InvoiceSettingsSerializer(settings, data=request.data, partial=True)
         except InvoiceSettings.DoesNotExist:
             serializer = InvoiceSettingsSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save(organization=request.organization)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -175,7 +211,7 @@ def email_settings_view(request):
     if request.method == 'GET':
         # Get or create email settings with defaults
         settings, created = EmailSettings.objects.get_or_create(
-            user=request.user,
+            organization=request.organization,
             defaults={
                 'smtp_host': 'smtp.gmail.com',
                 'smtp_port': 587,
@@ -192,7 +228,7 @@ def email_settings_view(request):
 
     elif request.method == 'PUT':
         settings, created = EmailSettings.objects.get_or_create(
-            user=request.user,
+            organization=request.organization,
             defaults={
                 'smtp_host': 'smtp.gmail.com',
                 'smtp_port': 587,
@@ -202,7 +238,7 @@ def email_settings_view(request):
         serializer = EmailSettingsSerializer(settings, data=request.data, partial=True)
 
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save(organization=request.organization)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -215,7 +251,7 @@ def test_email_view(request):
         from django.core.mail import send_mail
         from django.conf import settings as django_settings
 
-        email_settings = EmailSettings.objects.get(user=request.user)
+        email_settings = EmailSettings.objects.get(organization=request.organization)
 
         # Validate email settings
         if not email_settings.smtp_username or not email_settings.smtp_password:
@@ -315,13 +351,248 @@ def invoice_format_settings_view(request):
         return Response(serializer.data)
 
     elif request.method == 'PUT':
-        settings, created = InvoiceFormatSettings.objects.get_or_create(user=request.user)
+        settings, created = InvoiceFormatSettings.objects.get_or_create(organization=request.organization)
         serializer = InvoiceFormatSettingsSerializer(settings, data=request.data, partial=True)
 
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save(organization=request.organization)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# ========== Organization Management ViewSets ==========
+
+class OrganizationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing organizations.
+    Users can only see organizations they belong to.
+    """
+    serializer_class = OrganizationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return organizations the user is a member of
+        return Organization.objects.filter(
+            memberships__user=self.request.user,
+            memberships__is_active=True,
+            is_active=True
+        ).distinct()
+
+    def create(self, request, *args, **kwargs):
+        """Only superadmin can create organizations"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can create organizations'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        # Create organization and make the creator an owner
+        organization = serializer.save()
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=self.request.user,
+            role='owner',
+            is_active=True
+        )
+
+    @action(detail=True, methods=['post'])
+    def switch(self, request, pk=None):
+        """Switch to this organization (sets it as current in response)"""
+        organization = self.get_object()
+        # Verify user has access
+        try:
+            membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user=request.user,
+                is_active=True
+            )
+            return Response({
+                'organization_id': str(organization.id),
+                'organization_name': organization.name,
+                'role': membership.role,
+                'message': f'Switched to {organization.name}'
+            })
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You do not have access to this organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    @action(detail=True, methods=['get'])
+    def members(self, request, pk=None):
+        """List all members of the organization"""
+        organization = self.get_object()
+        memberships = OrganizationMembership.objects.filter(
+            organization=organization,
+            is_active=True
+        ).select_related('user')
+        serializer = OrganizationMembershipSerializer(memberships, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def invite(self, request, pk=None):
+        """Invite a user to the organization"""
+        organization = self.get_object()
+
+        # Check if requester is owner or admin
+        try:
+            requester_membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user=request.user,
+                is_active=True
+            )
+            if requester_membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'Only owners and admins can invite users'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You do not have access to this organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get user email from request
+        email = request.data.get('email')
+        role = request.data.get('role', 'user')
+
+        if not email:
+            return Response(
+                {'error': 'Email is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Find user by email
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User with this email not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if user is already a member
+        if OrganizationMembership.objects.filter(
+            organization=organization,
+            user=user
+        ).exists():
+            return Response(
+                {'error': 'User is already a member of this organization'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create membership
+        membership = OrganizationMembership.objects.create(
+            organization=organization,
+            user=user,
+            role=role,
+            is_active=True
+        )
+
+        serializer = OrganizationMembershipSerializer(membership)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['put'], url_path='members/(?P<user_id>[^/.]+)')
+    def update_member(self, request, pk=None, user_id=None):
+        """Update a member's role or status"""
+        organization = self.get_object()
+
+        # Check if requester is owner or admin
+        try:
+            requester_membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user=request.user,
+                is_active=True
+            )
+            if requester_membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'Only owners and admins can update members'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You do not have access to this organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get the membership to update
+        try:
+            membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user_id=user_id
+            )
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'Member not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Update role and/or status
+        role = request.data.get('role')
+        is_active = request.data.get('is_active')
+
+        if role:
+            membership.role = role
+        if is_active is not None:
+            membership.is_active = is_active
+
+        membership.save()
+        serializer = OrganizationMembershipSerializer(membership)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['delete'], url_path='members/(?P<user_id>[^/.]+)')
+    def remove_member(self, request, pk=None, user_id=None):
+        """Remove a member from the organization"""
+        organization = self.get_object()
+
+        # Check if requester is owner or admin
+        try:
+            requester_membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user=request.user,
+                is_active=True
+            )
+            if requester_membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'Only owners and admins can remove members'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You do not have access to this organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get the membership to remove
+        try:
+            membership = OrganizationMembership.objects.get(
+                organization=organization,
+                user_id=user_id
+            )
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'Member not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Don't allow removing the last owner
+        if membership.role == 'owner':
+            owner_count = OrganizationMembership.objects.filter(
+                organization=organization,
+                role='owner',
+                is_active=True
+            ).count()
+            if owner_count <= 1:
+                return Response(
+                    {'error': 'Cannot remove the last owner'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -329,10 +600,10 @@ class ClientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Client.objects.filter(user=self.request.user)
+        return Client.objects.filter(organization=self.request.organization)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(organization=self.request.organization)
 
 
 class ServiceItemViewSet(viewsets.ModelViewSet):
@@ -340,10 +611,10 @@ class ServiceItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return ServiceItem.objects.filter(user=self.request.user, is_active=True)
+        return ServiceItem.objects.filter(organization=self.request.organization, is_active=True)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(organization=self.request.organization)
 
 
 class PaymentTermViewSet(viewsets.ModelViewSet):
@@ -351,10 +622,10 @@ class PaymentTermViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return PaymentTerm.objects.filter(user=self.request.user, is_active=True)
+        return PaymentTerm.objects.filter(organization=self.request.organization, is_active=True)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(organization=self.request.organization)
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
@@ -362,7 +633,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Invoice.objects.filter(user=self.request.user)
+        queryset = Invoice.objects.filter(organization=self.request.organization)
 
         # Filter by search term
         search = self.request.query_params.get('search', None)
@@ -391,7 +662,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(organization=self.request.organization, created_by=self.request.user)
 
     @action(detail=True, methods=['get'])
     def pdf(self, request, pk=None):
@@ -401,7 +672,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
             # Get company settings for the user
             try:
-                company_settings = CompanySettings.objects.get(user=request.user)
+                company_settings = CompanySettings.objects.get(organization=request.organization)
             except CompanySettings.DoesNotExist:
                 # Create default company settings if not exists
                 company_settings = CompanySettings.objects.create(
@@ -411,7 +682,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
             # Get format settings for the user
             try:
-                format_settings = InvoiceFormatSettings.objects.get(user=request.user)
+                format_settings = InvoiceFormatSettings.objects.get(organization=request.organization)
             except InvoiceFormatSettings.DoesNotExist:
                 format_settings = None
 
@@ -444,7 +715,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
             # Get company settings
             try:
-                company_settings = CompanySettings.objects.get(user=request.user)
+                company_settings = CompanySettings.objects.get(organization=request.organization)
             except CompanySettings.DoesNotExist:
                 company_settings = CompanySettings.objects.create(
                     user=request.user,
@@ -527,7 +798,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
             # Get company settings
             try:
-                company_settings = CompanySettings.objects.get(user=request.user)
+                company_settings = CompanySettings.objects.get(organization=request.organization)
             except CompanySettings.DoesNotExist:
                 company_settings = CompanySettings.objects.create(
                     user=request.user,
@@ -553,10 +824,10 @@ class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Payment.objects.filter(user=self.request.user)
+        return Payment.objects.filter(organization=self.request.organization)
 
     def perform_create(self, serializer):
-        payment = serializer.save(user=self.request.user)
+        payment = serializer.save(organization=self.request.organization, created_by=self.request.user)
 
         # Update invoice status based on payment
         invoice = payment.invoice
@@ -702,6 +973,60 @@ def dashboard_stats(request):
         'revenue': float(revenue),
         'pending': float(pending),
         'clients': clients
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def superadmin_stats(request):
+    """Get system-wide statistics for superadmin"""
+    # Check if user is superadmin
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Total organizations
+    total_organizations = Organization.objects.filter(is_active=True).count()
+
+    # Total users across all organizations
+    total_users = User.objects.filter(is_active=True).count()
+
+    # Total invoices system-wide
+    total_invoices = Invoice.objects.count()
+
+    # Total revenue system-wide
+    total_revenue = Payment.objects.aggregate(total=Sum('amount'))['total'] or 0
+
+    # Active organizations (with at least one invoice in last 30 days)
+    from datetime import datetime, timedelta
+    thirty_days_ago = datetime.now().date() - timedelta(days=30)
+    active_orgs = Invoice.objects.filter(
+        invoice_date__gte=thirty_days_ago
+    ).values('organization').distinct().count()
+
+    # Organizations by plan
+    plan_breakdown = {}
+    for plan_choice in Organization._meta.get_field('plan').choices:
+        plan_code = plan_choice[0]
+        count = Organization.objects.filter(plan=plan_code, is_active=True).count()
+        plan_breakdown[plan_code] = count
+
+    # Recent organizations (last 7 days)
+    seven_days_ago = datetime.now().date() - timedelta(days=7)
+    recent_orgs = Organization.objects.filter(
+        created_at__gte=seven_days_ago
+    ).count()
+
+    return Response({
+        'totalOrganizations': total_organizations,
+        'totalUsers': total_users,
+        'totalInvoices': total_invoices,
+        'totalRevenue': float(total_revenue),
+        'activeOrganizations': active_orgs,
+        'planBreakdown': plan_breakdown,
+        'recentOrganizations': recent_orgs
     })
 
 
@@ -858,3 +1183,179 @@ def change_password_view(request):
     update_session_auth_hash(request, user)
 
     return Response({'message': 'Password changed successfully'})
+
+
+# User Management ViewSet
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing users.
+    Only admin users can access this.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Superadmin can see all users
+        if self.request.user.is_superuser:
+            return User.objects.all().order_by('-date_joined')
+
+        # Check if user is admin/owner of their organization
+        try:
+            membership = OrganizationMembership.objects.get(
+                user=self.request.user,
+                organization=self.request.organization,
+                is_active=True
+            )
+
+            if membership.role in ['owner', 'admin']:
+                # Tenant admins can see users in their organization
+                org_user_ids = OrganizationMembership.objects.filter(
+                    organization=self.request.organization,
+                    is_active=True
+                ).values_list('user_id', flat=True)
+                return User.objects.filter(id__in=org_user_ids).order_by('-date_joined')
+        except OrganizationMembership.DoesNotExist:
+            pass
+
+        # Regular users can only see themselves
+        return User.objects.filter(id=self.request.user.id)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Prevent users from deleting themselves"""
+        user = self.get_object()
+        if user == request.user:
+            return Response(
+                {'error': 'You cannot delete your own account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Superadmin can delete any user
+        if request.user.is_superuser:
+            return super().destroy(request, *args, **kwargs)
+
+        # Tenant admins can only delete users in their organization
+        try:
+            membership = OrganizationMembership.objects.get(
+                user=request.user,
+                organization=request.organization,
+                is_active=True
+            )
+
+            if membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'Only organization owners and admins can delete users'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Check if the user being deleted is in the same organization
+            user_membership = OrganizationMembership.objects.filter(
+                user=user,
+                organization=request.organization,
+                is_active=True
+            ).first()
+
+            if not user_membership:
+                return Response(
+                    {'error': 'You can only delete users within your organization'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'Only organization owners and admins can delete users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return super().destroy(request, *args, **kwargs)
+    
+    def create(self, request, *args, **kwargs):
+        """Tenant admins can create users within their organization"""
+        # Check if user is superadmin
+        if request.user.is_superuser:
+            # Superadmin can create users for any organization
+            return super().create(request, *args, **kwargs)
+
+        # Check if user is admin/owner of their organization
+        try:
+            membership = OrganizationMembership.objects.get(
+                user=request.user,
+                organization=request.organization,
+                is_active=True
+            )
+
+            if membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'Only organization owners and admins can create users'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Proceed with user creation - the new user will be added to the same organization
+            response = super().create(request, *args, **kwargs)
+
+            # If user creation was successful, add them to the organization
+            if response.status_code == 201:
+                new_user = User.objects.get(id=response.data['id'])
+                role = request.data.get('role', 'user')
+
+                # Create organization membership for the new user
+                OrganizationMembership.objects.create(
+                    organization=request.organization,
+                    user=new_user,
+                    role=role,
+                    is_active=True
+                )
+
+            return response
+
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You must be a member of an organization to create users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+    
+    def update(self, request, *args, **kwargs):
+        """Users can update themselves, tenant admins can update users in their organization"""
+        user = self.get_object()
+
+        # Users can always update themselves
+        if user == request.user:
+            return super().update(request, *args, **kwargs)
+
+        # Superadmin can update any user
+        if request.user.is_superuser:
+            return super().update(request, *args, **kwargs)
+
+        # Tenant admins can update users in their organization
+        try:
+            membership = OrganizationMembership.objects.get(
+                user=request.user,
+                organization=request.organization,
+                is_active=True
+            )
+
+            if membership.role not in ['owner', 'admin']:
+                return Response(
+                    {'error': 'You can only update your own profile'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Check if the user being updated is in the same organization
+            user_membership = OrganizationMembership.objects.filter(
+                user=user,
+                organization=request.organization,
+                is_active=True
+            ).first()
+
+            if not user_membership:
+                return Response(
+                    {'error': 'You can only update users within your organization'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        except OrganizationMembership.DoesNotExist:
+            return Response(
+                {'error': 'You can only update your own profile'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return super().update(request, *args, **kwargs)

@@ -1,9 +1,71 @@
 from django.db import models
 from django.contrib.auth.models import User
+import uuid
+
+
+class Organization(models.Model):
+    """
+    Tenant/Organization model for multi-tenancy.
+    Each organization has its own isolated data.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+
+    # Subscription fields (for future SaaS billing)
+    plan = models.CharField(max_length=50, default='free', choices=[
+        ('free', 'Free'),
+        ('basic', 'Basic'),
+        ('professional', 'Professional'),
+        ('enterprise', 'Enterprise')
+    ])
+    is_active = models.BooleanField(default=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Organization"
+        verbose_name_plural = "Organizations"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationMembership(models.Model):
+    """
+    Links users to organizations with roles.
+    A user can belong to multiple organizations.
+    """
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('admin', 'Admin'),
+        ('user', 'User'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='memberships')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organization_memberships')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
+    is_active = models.BooleanField(default=True)
+
+    # Timestamps
+    joined_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Organization Membership"
+        verbose_name_plural = "Organization Memberships"
+        unique_together = ['organization', 'user']
+        ordering = ['-joined_at']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.organization.name} ({self.role})"
 
 
 class CompanySettings(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company_settings')
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name='company_settings')
     companyName = models.CharField(max_length=255)
     tradingName = models.CharField(max_length=255, blank=True)
     address = models.TextField(blank=True)
@@ -27,7 +89,7 @@ class CompanySettings(models.Model):
 
 
 class InvoiceSettings(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='invoice_settings')
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name='invoice_settings')
     # Tax Invoice Settings
     invoicePrefix = models.CharField(max_length=20, default='INV-')
     startingNumber = models.IntegerField(default=1)
@@ -51,11 +113,11 @@ class InvoiceSettings(models.Model):
         verbose_name_plural = "Invoice Settings"
 
     def __str__(self):
-        return f"{self.user.username} Invoice Settings"
+        return f"{self.organization.name} Invoice Settings"
 
 
 class Client(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='clients')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='clients')
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
@@ -89,7 +151,8 @@ class Invoice(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invoices')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='invoices')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_invoices')
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='invoices')
     invoice_number = models.CharField(max_length=50, unique=True)
     invoice_type = models.CharField(max_length=20, choices=INVOICE_TYPE_CHOICES, default='tax')
@@ -120,7 +183,7 @@ class Invoice(models.Model):
         if not self.invoice_number:
             # Auto-generate invoice number with separate series for proforma and tax invoices
             try:
-                settings = InvoiceSettings.objects.get(user=self.user)
+                settings = InvoiceSettings.objects.get(organization=self.organization)
 
                 # Use different prefixes and starting numbers for proforma and tax invoices
                 if self.invoice_type == 'proforma':
@@ -132,7 +195,7 @@ class Invoice(models.Model):
 
                 # Get last invoice of same type with locking to prevent race conditions
                 last_invoice = Invoice.objects.filter(
-                    user=self.user,
+                    organization=self.organization,
                     invoice_type=self.invoice_type,
                     invoice_number__startswith=prefix
                 ).order_by('-created_at').first()
@@ -186,7 +249,8 @@ class Payment(models.Model):
         ('other', 'Other'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='payments')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_payments')
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_date = models.DateField()
@@ -205,7 +269,7 @@ class Payment(models.Model):
 
 class EmailSettings(models.Model):
     """Email configuration settings for sending invoices"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_settings')
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name='email_settings')
     smtp_host = models.CharField(max_length=255, default='smtp.gmail.com')
     smtp_port = models.IntegerField(default=587)
     smtp_username = models.CharField(max_length=255)
@@ -222,12 +286,12 @@ class EmailSettings(models.Model):
         verbose_name_plural = "Email Settings"
 
     def __str__(self):
-        return f"Email Settings for {self.user.username}"
+        return f"Email Settings for {self.organization.name}"
 
 
 class ServiceItem(models.Model):
     """Service/Item master for professional services"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='service_items')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='service_items')
     name = models.CharField(max_length=255, help_text="Service/Item name")
     description = models.TextField(blank=True, help_text="Detailed description")
     sac_code = models.CharField(max_length=50, blank=True, help_text="SAC (Service Accounting Code)")
@@ -238,7 +302,7 @@ class ServiceItem(models.Model):
 
     class Meta:
         ordering = ['name']
-        unique_together = ['user', 'name']
+        unique_together = ['organization', 'name']
 
     def __str__(self):
         return f"{self.name} ({self.sac_code})"
@@ -246,7 +310,7 @@ class ServiceItem(models.Model):
 
 class PaymentTerm(models.Model):
     """Payment Terms master"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_terms')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='payment_terms')
     term_name = models.CharField(max_length=100, help_text="Payment term name (e.g., Net 15, Net 30)")
     days = models.IntegerField(help_text="Number of days for payment")
     description = models.TextField(help_text="Payment term description")
@@ -256,7 +320,7 @@ class PaymentTerm(models.Model):
 
     class Meta:
         ordering = ['days']
-        unique_together = ['user', 'term_name']
+        unique_together = ['organization', 'term_name']
 
     def __str__(self):
         return f"{self.term_name} - {self.days} days"
@@ -264,7 +328,7 @@ class PaymentTerm(models.Model):
 
 class InvoiceFormatSettings(models.Model):
     """Invoice format and layout customization settings"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='invoice_format_settings')
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name='invoice_format_settings')
 
     # Header Settings
     show_logo = models.BooleanField(default=True)
@@ -339,4 +403,4 @@ class InvoiceFormatSettings(models.Model):
         verbose_name_plural = "Invoice Format Settings"
 
     def __str__(self):
-        return f"Invoice Format Settings for {self.user.username}"
+        return f"Invoice Format Settings for {self.organization.name}"

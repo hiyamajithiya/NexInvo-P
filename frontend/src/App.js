@@ -1,30 +1,93 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
+import { OrganizationProvider } from './contexts/OrganizationContext';
 import './App.css';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (userData) => {
+  // Check for existing authentication on mount
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      checkUserStatus(token);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const checkUserStatus = async (token) => {
+    try {
+      // Check if user is superadmin by trying to access superadmin stats
+      const response = await axios.get(`${API_BASE_URL}/superadmin/stats/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // If the request succeeds, user is superadmin
+      setIsSuperAdmin(true);
+      setIsAuthenticated(true);
+    } catch (error) {
+      // If forbidden, user is regular user
+      if (error.response?.status === 403) {
+        setIsSuperAdmin(false);
+        setIsAuthenticated(true);
+      } else {
+        // Token invalid or other error
+        setIsAuthenticated(false);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (userData) => {
+    localStorage.setItem('access_token', userData.access);
+    localStorage.setItem('refresh_token', userData.refresh);
+
+    // Check if logged in user is superadmin
+    await checkUserStatus(userData.access);
+
     setIsAuthenticated(true);
     setUser(userData);
-    localStorage.setItem('token', userData.access);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setIsSuperAdmin(false);
     setUser(null);
-    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('current_org_id');
   };
+
+  if (loading) {
+    return (
+      <div className="App" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
       {!isAuthenticated ? (
         <Login onLogin={handleLogin} />
+      ) : isSuperAdmin ? (
+        <SuperAdminDashboard onLogout={handleLogout} />
       ) : (
-        <Dashboard user={user} onLogout={handleLogout} />
+        <OrganizationProvider>
+          <Dashboard user={user} onLogout={handleLogout} />
+        </OrganizationProvider>
       )}
     </div>
   );

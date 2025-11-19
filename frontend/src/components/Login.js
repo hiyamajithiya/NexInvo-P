@@ -3,8 +3,12 @@ import { authAPI } from '../services/api';
 import './Login.css';
 
 const Login = ({ onLogin }) => {
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -15,105 +19,229 @@ const Login = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      const response = await authAPI.login({ username, password });
+      if (isRegisterMode) {
+        // Register new user with company
+        const registerData = {
+          email: username,
+          password: password,
+          first_name: firstName,
+          last_name: lastName,
+          company_name: companyName || `${firstName}'s Company`
+        };
 
-      // Store tokens in localStorage
-      localStorage.setItem('access_token', response.data.access);
-      localStorage.setItem('refresh_token', response.data.refresh);
+        await authAPI.register(registerData);
 
-      onLogin(response.data);
+        // After successful registration, auto-login
+        const response = await authAPI.login({ email: username, password });
+        localStorage.setItem('access_token', response.data.access);
+        localStorage.setItem('refresh_token', response.data.refresh);
+        onLogin(response.data);
+      } else {
+        // Login existing user
+        const response = await authAPI.login({ email: username, password });
+        localStorage.setItem('access_token', response.data.access);
+        localStorage.setItem('refresh_token', response.data.refresh);
+        onLogin(response.data);
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid username or password');
+      setError(err.response?.data?.error || err.response?.data?.detail ||
+        (isRegisterMode ? 'Registration failed' : 'Invalid username or password'));
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleMode = () => {
+    setIsRegisterMode(!isRegisterMode);
+    setError('');
+    setUsername('');
+    setPassword('');
+    setFirstName('');
+    setLastName('');
+    setCompanyName('');
+  };
+
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <div className="logo-container">
-            <svg className="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M9 12h6m-6 4h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h1 className="login-title">NexInvo</h1>
-          <p className="login-subtitle">Invoice Management System</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="login-form">
-          {error && (
-            <div className="error-message">
-              {error}
+    <div className="login-split-container">
+      {/* Left Panel - Features */}
+      <div className="login-features-panel">
+        <div className="features-content">
+          <div className="features-header">
+            <div className="brand-logo">
+              <div className="brand-icon">📊</div>
+              <h1 className="brand-name">NexInvo</h1>
             </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              required
-              autoComplete="username"
-            />
+            <p className="brand-tagline">Modern Invoice Management for Growing Businesses</p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <div style={{ position: 'relative' }}>
+          <div className="features-list">
+            <div className="feature-item">
+              <div className="feature-icon">✨</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Smart Invoice Generation</h3>
+                <p className="feature-description">Create professional invoices in seconds with customizable templates</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <div className="feature-icon">🏢</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Multi-Tenant SaaS</h3>
+                <p className="feature-description">Manage multiple organizations with isolated data and permissions</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <div className="feature-icon">📈</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Real-Time Analytics</h3>
+                <p className="feature-description">Track revenue, pending payments, and business insights instantly</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <div className="feature-icon">🔒</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Secure & Reliable</h3>
+                <p className="feature-description">Enterprise-grade security with encrypted data and regular backups</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <div className="feature-icon">💳</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Payment Tracking</h3>
+                <p className="feature-description">Monitor payments, send reminders, and manage cash flow effortlessly</p>
+              </div>
+            </div>
+
+            <div className="feature-item">
+              <div className="feature-icon">🌐</div>
+              <div className="feature-content">
+                <h3 className="feature-title">Cloud-Based Access</h3>
+                <p className="feature-description">Access your invoices anywhere, anytime from any device</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="features-footer">
+            <p className="company-credit">Powered by Chinmay Technosoft Private Limited</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Panel - Login Form */}
+      <div className="login-form-panel">
+        <div className="login-card">
+          <div className="login-header">
+            <h2 className="login-title">{isRegisterMode ? 'Create Account' : 'Welcome Back'}</h2>
+            <p className="login-subtitle">
+              {isRegisterMode ? 'Start managing invoices today' : 'Sign in to your account'}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="login-form">
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
+
+            {isRegisterMode && (
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="firstName">First Name</label>
+                    <input
+                      id="firstName"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="lastName">Last Name</label>
+                    <input
+                      id="lastName"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Doe"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="companyName">Company Name</label>
+                  <input
+                    id="companyName"
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Your Company Ltd."
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="username">Email Address</label>
               <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                id="username"
+                type="email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="you@example.com"
                 required
-                autoComplete="current-password"
-                style={{ paddingRight: '45px' }}
+                autoComplete="username"
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex="-1"
+                >
+                  {showPassword ? '👁️' : '👁️‍🗨️'}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="login-button"
+              disabled={loading}
+            >
+              {loading ? (isRegisterMode ? 'Creating Account...' : 'Signing in...') : (isRegisterMode ? 'Create Account' : 'Sign In')}
+            </button>
+
+            <div className="form-footer">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#6b7280',
-                  fontSize: '18px'
-                }}
-                tabIndex="-1"
+                onClick={toggleMode}
+                className="toggle-mode-btn"
               >
-                {showPassword ? '👁️' : '👁️‍🗨️'}
+                {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register"}
               </button>
             </div>
-          </div>
-
-          <button
-            type="submit"
-            className="login-button"
-            disabled={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="login-footer">
-          <p className="company-name">
-            HIMANSHU MAJITHIYA & CO. (PROP)
-          </p>
+          </form>
         </div>
       </div>
     </div>

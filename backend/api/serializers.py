@@ -1,5 +1,38 @@
 from rest_framework import serializers
-from .models import CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from .models import (
+    Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
+    Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings,
+    ServiceItem, PaymentTerm
+)
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    member_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = ['id', 'name', 'slug', 'plan', 'is_active', 'member_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count']
+
+    def get_member_count(self, obj):
+        return obj.memberships.filter(is_active=True).count()
+
+
+class OrganizationMembershipSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+
+    class Meta:
+        model = OrganizationMembership
+        fields = ['id', 'organization', 'organization_name', 'user', 'user_email',
+                  'user_name', 'role', 'is_active', 'joined_at', 'updated_at']
+        read_only_fields = ['id', 'joined_at', 'updated_at']
+
+    def get_user_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
 
 
 class CompanySettingsSerializer(serializers.ModelSerializer):
@@ -141,3 +174,67 @@ class InvoiceFormatSettingsSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'password', 'date_joined']
+        read_only_fields = ['id', 'username', 'date_joined']
+    
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        email = validated_data.get('email')
+
+        if not email:
+            raise serializers.ValidationError({'email': 'Email is required'})
+
+        if not password:
+            raise serializers.ValidationError({'password': 'Password is required'})
+
+        # Validate password
+        validate_password(password)
+
+        # Create user with email as username
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', ''),
+            is_active=validated_data.get('is_active', True),
+            is_staff=validated_data.get('is_staff', False)
+        )
+
+        # Get organization from context (should be set by ViewSet)
+        organization = self.context.get('organization')
+
+        if organization:
+            # Add user to the organization as a user (regular member)
+            OrganizationMembership.objects.create(
+                organization=organization,
+                user=user,
+                role='user',
+                is_active=True
+            )
+
+        return user
+    
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        
+        # Update user fields
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.is_active = validated_data.get('is_active', instance.is_active)
+        instance.is_staff = validated_data.get('is_staff', instance.is_staff)
+        
+        # Update password if provided
+        if password:
+            validate_password(password)
+            instance.set_password(password)
+        
+        instance.save()
+        return instance
