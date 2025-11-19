@@ -2,6 +2,46 @@ import React, { useState, useEffect } from 'react';
 import { clientAPI } from '../services/api';
 import './Pages.css';
 
+// Indian States with GST State Codes
+const INDIAN_STATES = [
+  { name: 'Andaman and Nicobar Islands', code: '35' },
+  { name: 'Andhra Pradesh', code: '37' },
+  { name: 'Arunachal Pradesh', code: '12' },
+  { name: 'Assam', code: '18' },
+  { name: 'Bihar', code: '10' },
+  { name: 'Chandigarh', code: '04' },
+  { name: 'Chhattisgarh', code: '22' },
+  { name: 'Dadra and Nagar Haveli and Daman and Diu', code: '26' },
+  { name: 'Delhi', code: '07' },
+  { name: 'Goa', code: '30' },
+  { name: 'Gujarat', code: '24' },
+  { name: 'Haryana', code: '06' },
+  { name: 'Himachal Pradesh', code: '02' },
+  { name: 'Jammu and Kashmir', code: '01' },
+  { name: 'Jharkhand', code: '20' },
+  { name: 'Karnataka', code: '29' },
+  { name: 'Kerala', code: '32' },
+  { name: 'Ladakh', code: '38' },
+  { name: 'Lakshadweep', code: '31' },
+  { name: 'Madhya Pradesh', code: '23' },
+  { name: 'Maharashtra', code: '27' },
+  { name: 'Manipur', code: '14' },
+  { name: 'Meghalaya', code: '17' },
+  { name: 'Mizoram', code: '15' },
+  { name: 'Nagaland', code: '13' },
+  { name: 'Odisha', code: '21' },
+  { name: 'Puducherry', code: '34' },
+  { name: 'Punjab', code: '03' },
+  { name: 'Rajasthan', code: '08' },
+  { name: 'Sikkim', code: '11' },
+  { name: 'Tamil Nadu', code: '33' },
+  { name: 'Telangana', code: '36' },
+  { name: 'Tripura', code: '16' },
+  { name: 'Uttar Pradesh', code: '09' },
+  { name: 'Uttarakhand', code: '05' },
+  { name: 'West Bengal', code: '19' }
+];
+
 function Clients() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -77,7 +117,34 @@ function Clients() {
   };
 
   const handleClientChange = (field, value) => {
-    setCurrentClient({ ...currentClient, [field]: value });
+    let updatedClient = { ...currentClient, [field]: value };
+
+    // Auto-fill state code when state is selected
+    if (field === 'state') {
+      const selectedState = INDIAN_STATES.find(s => s.name === value);
+      if (selectedState) {
+        updatedClient.stateCode = selectedState.code;
+      }
+      // Clear error if state is selected
+      setError('');
+    }
+
+    // Validate GSTIN against state code
+    if (field === 'gstin') {
+      const gstin = value.toUpperCase();
+      updatedClient.gstin = gstin;
+
+      if (gstin.length >= 2 && updatedClient.stateCode) {
+        const gstinStateCode = gstin.substring(0, 2);
+        if (gstinStateCode !== updatedClient.stateCode) {
+          setError(`GSTIN state code (${gstinStateCode}) does not match selected state code (${updatedClient.stateCode})`);
+        } else {
+          setError('');
+        }
+      }
+    }
+
+    setCurrentClient(updatedClient);
   };
 
   const handleSaveClient = async () => {
@@ -89,6 +156,30 @@ function Clients() {
       setError('Client name and email are required');
       setLoading(false);
       return;
+    }
+
+    // Validate state is required
+    if (!currentClient.state) {
+      setError('State is required');
+      setLoading(false);
+      return;
+    }
+
+    // Validate GSTIN if provided
+    if (currentClient.gstin) {
+      const gstinStateCode = currentClient.gstin.substring(0, 2);
+      if (gstinStateCode !== currentClient.stateCode) {
+        setError(`GSTIN state code (${gstinStateCode}) does not match selected state code (${currentClient.stateCode}). Please correct the GSTIN or select the correct state.`);
+        setLoading(false);
+        return;
+      }
+
+      // Basic GSTIN format validation (15 characters)
+      if (currentClient.gstin.length !== 15) {
+        setError('GSTIN must be 15 characters long');
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -317,13 +408,30 @@ function Clients() {
                 />
               </div>
               <div className="form-field">
-                <label>State</label>
-                <input
-                  type="text"
+                <label>State *</label>
+                <select
                   className="form-input"
                   value={currentClient.state}
                   onChange={(e) => handleClientChange('state', e.target.value)}
-                  placeholder="State"
+                  required
+                >
+                  <option value="">-- Select State --</option>
+                  {INDIAN_STATES.map(state => (
+                    <option key={state.code} value={state.name}>
+                      {state.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>State Code</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentClient.stateCode}
+                  readOnly
+                  placeholder="Auto-filled"
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
                 />
               </div>
               <div className="form-field">
@@ -337,16 +445,6 @@ function Clients() {
                 />
               </div>
               <div className="form-field">
-                <label>State Code</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={currentClient.stateCode}
-                  onChange={(e) => handleClientChange('stateCode', e.target.value)}
-                  placeholder="e.g., 27"
-                />
-              </div>
-              <div className="form-field">
                 <label>GSTIN</label>
                 <input
                   type="text"
@@ -354,7 +452,19 @@ function Clients() {
                   value={currentClient.gstin}
                   onChange={(e) => handleClientChange('gstin', e.target.value)}
                   placeholder="27XXXXX0000X1Z5"
+                  maxLength="15"
                 />
+                {currentClient.gstin && currentClient.gstin.length === 15 && currentClient.stateCode && (
+                  currentClient.gstin.substring(0, 2) === currentClient.stateCode ? (
+                    <small style={{ color: '#10b981', display: 'block', marginTop: '4px' }}>
+                      ✓ GSTIN matches selected state
+                    </small>
+                  ) : (
+                    <small style={{ color: '#ef4444', display: 'block', marginTop: '4px' }}>
+                      ✗ GSTIN state code does not match selected state
+                    </small>
+                  )
+                )}
               </div>
               <div className="form-field">
                 <label>PAN</label>

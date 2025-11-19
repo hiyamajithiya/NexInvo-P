@@ -58,6 +58,7 @@ class Client(models.Model):
     city = models.CharField(max_length=100, blank=True)
     state = models.CharField(max_length=100, blank=True)
     pinCode = models.CharField(max_length=20, blank=True)
+    stateCode = models.CharField(max_length=10, blank=True)
     gstin = models.CharField(max_length=50, blank=True)
     pan = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
