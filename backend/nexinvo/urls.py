@@ -16,16 +16,18 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse
+from api.views import EmailTokenObtainPairView, register_view
 
 def api_root(request):
     return JsonResponse({
         'message': 'NexInvo API',
         'version': '1.0.0',
         'endpoints': {
-            'login': '/api/auth/login/',
-            'refresh': '/api/auth/refresh/',
+            'register': '/api/register/',
+            'login': '/api/token/',
+            'refresh': '/api/token/refresh/',
             'admin': '/admin/',
         }
     })
@@ -33,7 +35,8 @@ def api_root(request):
 urlpatterns = [
     path("", api_root),
     path("admin/", admin.site.urls),
-    path("api/token/", TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path("api/register/", register_view, name='register'),
+    path("api/token/", EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("api/token/refresh/", TokenRefreshView.as_view(), name='token_refresh'),
     path("api/", include('api.urls')),
 ]

@@ -1,13 +1,16 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.http import HttpResponse
 from django.db.models import Sum, Q
 from django.db import transaction
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from datetime import date
 import os
@@ -20,6 +23,99 @@ from .serializers import (
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email
 from .invoice_importer import InvoiceImporter, generate_excel_template
+
+
+# Custom JWT Token Serializer to accept email as username
+class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    username_field = 'email'
+
+    def validate(self, attrs):
+        # Get email from request
+        email = attrs.get('email')
+        password = attrs.get('password')
+
+        # Try to find user by email
+        try:
+            user = User.objects.get(email=email)
+            # Replace email with username for parent validation
+            attrs['username'] = user.username
+            attrs.pop('email', None)
+        except User.DoesNotExist:
+            # If email not found, pass as is (will fail in parent validation)
+            pass
+
+        # Call parent validation
+        return super().validate(attrs)
+
+
+class EmailTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailTokenObtainPairSerializer
+
+
+# User Registration View
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_view(request):
+    """Register a new user with email as username"""
+    email = request.data.get('email')
+    password = request.data.get('password')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    company_name = request.data.get('company_name', '')
+
+    # Validation
+    if not email or not password:
+        return Response(
+            {'error': 'Email and password are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if user already exists
+    if User.objects.filter(email=email).exists():
+        return Response(
+            {'error': 'User with this email already exists'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate password
+    try:
+        validate_password(password)
+    except ValidationError as e:
+        return Response(
+            {'error': list(e.messages)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Create user with email as username
+    try:
+        user = User.objects.create_user(
+            username=email,  # Use email as username
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+            is_active=True  # Make sure user is active
+        )
+
+        # Create default settings for the user
+        CompanySettings.objects.create(
+            user=user,
+            companyName=company_name if company_name else f"{first_name} {last_name}".strip() or email
+        )
+        InvoiceSettings.objects.create(user=user)
+        EmailSettings.objects.create(user=user)
+
+        return Response({
+            'message': 'User registered successfully',
+            'email': email,
+            'user_id': user.id
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['GET', 'PUT'])
