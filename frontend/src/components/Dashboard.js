@@ -172,7 +172,7 @@ function Dashboard({ user, onLogout }) {
               </>
             )}
           </div>
-          <p className="company-subtitle">Chinmay Technosoft Private Limited</p>
+          <p className="company-subtitle">NexInvo - Invoice Management System</p>
         </div>
 
         <nav className="sidebar-nav">

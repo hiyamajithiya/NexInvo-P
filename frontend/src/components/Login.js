@@ -125,7 +125,7 @@ const Login = ({ onLogin }) => {
           </div>
 
           <div className="features-footer">
-            <p className="company-credit">Powered by Chinmay Technosoft Private Limited</p>
+            <p className="company-credit">Powered by NexInvo</p>
           </div>
         </div>
       </div>

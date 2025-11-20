@@ -1097,8 +1097,11 @@ def superadmin_stats(request):
         )
 
     from datetime import datetime, timedelta
-    from django.db.models import Count, Sum, Avg
+    from django.db.models import Count, Sum, Avg, Q
     from django.db.models.functions import TruncMonth
+    import platform
+    import psutil
+    from django.db import connection
 
     # Total organizations
     total_organizations = Organization.objects.filter(is_active=True).count()
@@ -1114,9 +1117,40 @@ def superadmin_stats(request):
 
     # Active organizations (with at least one invoice in last 30 days)
     thirty_days_ago = datetime.now().date() - timedelta(days=30)
+    sixty_days_ago = datetime.now().date() - timedelta(days=60)
     active_orgs = Invoice.objects.filter(
         invoice_date__gte=thirty_days_ago
     ).values('organization').distinct().count()
+
+    # Previous month data for growth calculation
+    previous_month_revenue = Payment.objects.filter(
+        payment_date__gte=sixty_days_ago,
+        payment_date__lt=thirty_days_ago
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    current_month_revenue = Payment.objects.filter(
+        payment_date__gte=thirty_days_ago
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    # Calculate revenue growth percentage
+    revenue_growth = 0
+    if previous_month_revenue > 0:
+        revenue_growth = ((current_month_revenue - previous_month_revenue) / previous_month_revenue) * 100
+
+    # Previous month invoices for growth calculation
+    previous_month_invoices = Invoice.objects.filter(
+        invoice_date__gte=sixty_days_ago,
+        invoice_date__lt=thirty_days_ago
+    ).count()
+
+    current_month_invoices = Invoice.objects.filter(
+        invoice_date__gte=thirty_days_ago
+    ).count()
+
+    # Calculate invoice growth percentage
+    invoice_growth = 0
+    if previous_month_invoices > 0:
+        invoice_growth = ((current_month_invoices - previous_month_invoices) / previous_month_invoices) * 100
 
     # Organizations by plan
     plan_breakdown = {}
@@ -1171,16 +1205,28 @@ def superadmin_stats(request):
     ).values('user').distinct().count()
     superadmins = User.objects.filter(is_superuser=True, is_active=True).count()
 
-    # Top performing organizations
+    # Top performing organizations with growth calculation
     top_orgs = Organization.objects.filter(
         is_active=True
     ).annotate(
         invoice_count=Count('invoices'),
-        total_revenue=Sum('invoices__payments__amount')
+        total_revenue=Sum('invoices__payments__amount'),
+        recent_revenue=Sum('invoices__payments__amount',
+                          filter=Q(invoices__payments__payment_date__gte=thirty_days_ago)),
+        previous_revenue=Sum('invoices__payments__amount',
+                           filter=Q(invoices__payments__payment_date__gte=sixty_days_ago,
+                                  invoices__payments__payment_date__lt=thirty_days_ago))
     ).order_by('-total_revenue')[:10]
 
     top_organizations = []
     for org in top_orgs:
+        # Calculate growth percentage
+        growth = 0
+        if org.previous_revenue and org.previous_revenue > 0:
+            recent = org.recent_revenue or 0
+            previous = org.previous_revenue or 0
+            growth = ((recent - previous) / previous) * 100
+
         top_organizations.append({
             'id': org.id,
             'name': org.name,
@@ -1188,6 +1234,7 @@ def superadmin_stats(request):
             'plan': org.plan,
             'invoice_count': org.invoice_count or 0,
             'revenue': float(org.total_revenue or 0),
+            'growth': round(growth, 1),
             'created_at': org.created_at.isoformat() if org.created_at else None
         })
 
@@ -1199,11 +1246,86 @@ def superadmin_stats(request):
         status__in=['draft', 'sent']
     ).aggregate(total=Sum('total_amount'))['total'] or 0
 
+    # Recent transactions (last 10)
+    from .models import Subscription, CouponUsage
+    recent_transactions = []
+
+    # Get recent subscription payments
+    recent_subscriptions = Subscription.objects.filter(
+        amount_paid__gt=0
+    ).select_related('organization', 'plan').order_by('-last_payment_date')[:10]
+
+    for sub in recent_subscriptions:
+        if sub.last_payment_date:
+            recent_transactions.append({
+                'id': str(sub.id),
+                'organization': sub.organization.name,
+                'plan': sub.plan.name if sub.plan else 'N/A',
+                'amount': float(sub.amount_paid),
+                'date': sub.last_payment_date.isoformat(),
+                'status': 'completed',
+                'type': 'subscription'
+            })
+
+    # Sort by date
+    recent_transactions.sort(key=lambda x: x['date'], reverse=True)
+    recent_transactions = recent_transactions[:10]
+
+    # System information
+    try:
+        # Get database size
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_database_size(current_database());")
+            db_size_bytes = cursor.fetchone()[0]
+            db_size_gb = round(db_size_bytes / (1024 ** 3), 2)
+    except:
+        db_size_gb = 0
+
+    # Get system uptime (using psutil)
+    try:
+        boot_time = datetime.fromtimestamp(psutil.boot_time())
+        uptime_delta = datetime.now() - boot_time
+        uptime_days = uptime_delta.days
+        uptime_hours = uptime_delta.seconds // 3600
+        uptime_str = f"{uptime_days} days, {uptime_hours} hours"
+    except:
+        uptime_str = "Unknown"
+
+    # Application version (from Django settings or hardcoded)
+    from django.conf import settings
+    app_version = getattr(settings, 'APP_VERSION', 'v2.1.0')
+    environment = getattr(settings, 'ENVIRONMENT', 'Production')
+
+    system_info = {
+        'appVersion': app_version,
+        'databaseSize': f"{db_size_gb} GB",
+        'serverUptime': uptime_str,
+        'environment': environment,
+        'pythonVersion': platform.python_version(),
+        'djangoVersion': '4.2.7'
+    }
+
+    # Feature flags (these should ideally be in a separate FeatureFlag model)
+    feature_flags = {
+        'organizationInvites': True,
+        'apiAccess': True,
+        'trialPeriod': True,
+        'analyticsTracking': True,
+        'emailNotifications': True,
+        'autoBackup': False
+    }
+
+    # Average processing/response time (simplified calculation)
+    # In production, this should come from a monitoring service
+    avg_processing_time = 0.8  # seconds (placeholder - would need actual monitoring)
+
     return Response({
         'totalOrganizations': total_organizations,
         'totalUsers': total_users,
         'totalInvoices': total_invoices,
         'totalRevenue': float(total_revenue),
+        'revenueGrowth': round(revenue_growth, 1),
+        'invoiceGrowth': round(invoice_growth, 1),
         'activeOrganizations': active_orgs,
         'planBreakdown': plan_breakdown,
         'recentOrganizations': recent_orgs,
@@ -1213,7 +1335,11 @@ def superadmin_stats(request):
         'superAdmins': superadmins,
         'topOrganizations': top_organizations,
         'paidSubscriptions': paid_subscriptions,
-        'pendingPayments': float(pending_invoices)
+        'pendingPayments': float(pending_invoices),
+        'recentTransactions': recent_transactions,
+        'systemInfo': system_info,
+        'featureFlags': feature_flags,
+        'avgProcessingTime': avg_processing_time
     })
 
 

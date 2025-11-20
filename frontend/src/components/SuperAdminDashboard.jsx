@@ -583,7 +583,11 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.totalRevenue || 0).toLocaleString('en-IN')}</Typography>
               </Box>
             </Box>
-            <Typography variant="caption" sx={{ color: '#10b981' }}>↑ 12.5% from last month</Typography>
+            {stats?.revenueGrowth !== undefined && (
+              <Typography variant="caption" sx={{ color: stats.revenueGrowth >= 0 ? '#10b981' : '#ef4444' }}>
+                {stats.revenueGrowth >= 0 ? '↑' : '↓'} {Math.abs(stats.revenueGrowth).toFixed(1)}% from last month
+              </Typography>
+            )}
           </Paper>
 
           <Paper sx={{ p: 3 }}>
@@ -596,7 +600,11 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.totalInvoices || 0}</Typography>
               </Box>
             </Box>
-            <Typography variant="caption" sx={{ color: '#3b82f6' }}>↑ 8.2% from last month</Typography>
+            {stats?.invoiceGrowth !== undefined && (
+              <Typography variant="caption" sx={{ color: stats.invoiceGrowth >= 0 ? '#3b82f6' : '#ef4444' }}>
+                {stats.invoiceGrowth >= 0 ? '↑' : '↓'} {Math.abs(stats.invoiceGrowth).toFixed(1)}% from last month
+              </Typography>
+            )}
           </Paper>
 
           <Paper sx={{ p: 3 }}>
@@ -606,10 +614,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#6b7280' }}>Avg. Processing Time</Typography>
-                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>2.4s</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.avgProcessingTime || 0}s</Typography>
               </Box>
             </Box>
-            <Typography variant="caption" sx={{ color: '#10b981' }}>↓ 15% faster</Typography>
+            <Typography variant="caption" sx={{ color: '#6b7280' }}>System response time</Typography>
           </Paper>
         </div>
 
@@ -670,7 +678,13 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     <TableCell sx={{ color: '#6b7280' }}>{org.invoice_count || 0}</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{(org.revenue || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell>
-                      <Typography sx={{ color: '#10b981', fontWeight: 600 }}>-</Typography>
+                      {org.growth !== undefined && org.growth !== 0 ? (
+                        <Typography sx={{ color: org.growth >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                          {org.growth >= 0 ? '↑' : '↓'} {Math.abs(org.growth)}%
+                        </Typography>
+                      ) : (
+                        <Typography sx={{ color: '#9ca3af', fontWeight: 600 }}>-</Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -683,20 +697,28 @@ const SuperAdminDashboard = ({ onLogout }) => {
   };
 
   const renderBillingContent = () => {
-    const subscriptionPlans = [
-      { name: 'Free', price: 0, users: stats?.planBreakdown?.free || 0, color: '#6b7280', features: ['1 User', '10 Invoices/month', 'Basic Support'] },
-      { name: 'Basic', price: 499, users: stats?.planBreakdown?.basic || 0, color: '#3b82f6', features: ['5 Users', '100 Invoices/month', 'Email Support', 'Custom Branding'] },
-      { name: 'Professional', price: 1499, users: stats?.planBreakdown?.professional || 0, color: '#8b5cf6', features: ['20 Users', 'Unlimited Invoices', 'Priority Support', 'API Access', 'Analytics'] },
-      { name: 'Enterprise', price: 4999, users: stats?.planBreakdown?.enterprise || 0, color: '#f59e0b', features: ['Unlimited Users', 'Unlimited Invoices', '24/7 Support', 'Custom Features', 'Dedicated Manager'] },
-    ];
+    // Map organization plan types to display info
+    const planColorMap = {
+      'free': '#6b7280',
+      'basic': '#3b82f6',
+      'professional': '#8b5cf6',
+      'enterprise': '#f59e0b'
+    };
+
+    // Build subscription plans array from plan breakdown data
+    const subscriptionPlans = Object.entries(stats?.planBreakdown || {}).map(([planKey, count]) => ({
+      name: planKey.charAt(0).toUpperCase() + planKey.slice(1),
+      users: count,
+      color: planColorMap[planKey] || '#6b7280'
+    }));
 
     // Calculate monthly revenue from revenue trends (last month)
     const lastMonthRevenue = stats?.revenueTrends?.length > 0
       ? stats.revenueTrends[stats.revenueTrends.length - 1]?.revenue || 0
       : 0;
 
-    // No recent transactions data yet, show message instead
-    const recentTransactions = [];
+    // Get recent transactions from API
+    const recentTransactions = stats?.recentTransactions || [];
 
     return (
       <>
@@ -754,7 +776,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
         {/* Subscription Plans */}
         <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Subscription Plans Overview</Typography>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
             {subscriptionPlans.map((plan) => (
               <Paper key={plan.name} sx={{ p: 3, border: '2px solid', borderColor: plan.color, position: 'relative', overflow: 'hidden' }}>
                 <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: plan.color, color: 'white', px: 2, py: 0.5, borderBottomLeftRadius: 2 }}>
@@ -762,13 +784,9 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 </Box>
                 <Typography variant="h6" sx={{ fontWeight: 'bold', color: plan.color, mb: 1 }}>{plan.name}</Typography>
                 <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
-                  ₹{plan.price}<Typography component="span" variant="body2" sx={{ color: '#6b7280' }}>/mo</Typography>
+                  {plan.users}
+                  <Typography component="span" variant="body2" sx={{ color: '#6b7280' }}> organizations</Typography>
                 </Typography>
-                <Box sx={{ borderTop: '1px solid #e5e7eb', pt: 2 }}>
-                  {plan.features.map((feature, idx) => (
-                    <Typography key={idx} variant="body2" sx={{ color: '#6b7280', mb: 1 }}>✓ {feature}</Typography>
-                  ))}
-                </Box>
               </Paper>
             ))}
           </div>
@@ -780,10 +798,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
           {recentTransactions.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <Typography variant="body1" sx={{ color: '#6b7280', mb: 2 }}>
-                Payment transaction tracking coming soon
+                No recent subscription transactions
               </Typography>
               <Typography variant="body2" sx={{ color: '#9ca3af' }}>
-                This section will display subscription payments and billing transactions
+                Subscription payments will appear here once organizations start subscribing
               </Typography>
             </Box>
           ) : (
@@ -802,20 +820,20 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 <TableBody>
                   {recentTransactions.map((txn) => (
                     <TableRow key={txn.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
-                      <TableCell sx={{ color: '#6b7280', fontFamily: 'monospace' }}>#{txn.id.toString().padStart(6, '0')}</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>{txn.org}</TableCell>
+                      <TableCell sx={{ color: '#6b7280', fontFamily: 'monospace' }}>#{txn.id.substring(0, 8)}</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>{txn.organization}</TableCell>
                       <TableCell>
                         <Chip label={txn.plan} size="small" sx={{ bgcolor: '#f3f4f6' }} />
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{txn.amount}</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{txn.amount.toLocaleString('en-IN')}</TableCell>
                       <TableCell sx={{ color: '#6b7280' }}>{new Date(txn.date).toLocaleDateString('en-IN')}</TableCell>
                       <TableCell>
                         <Chip
-                          label={txn.status}
+                          label={txn.status.toUpperCase()}
                           size="small"
                           sx={{
-                            bgcolor: txn.status === 'Paid' ? '#d1fae5' : txn.status === 'Pending' ? '#fed7aa' : '#fee2e2',
-                            color: txn.status === 'Paid' ? '#065f46' : txn.status === 'Pending' ? '#92400e' : '#991b1b',
+                            bgcolor: txn.status === 'completed' ? '#d1fae5' : txn.status === 'pending' ? '#fed7aa' : '#fee2e2',
+                            color: txn.status === 'completed' ? '#065f46' : txn.status === 'pending' ? '#92400e' : '#991b1b',
                             fontWeight: 'bold'
                           }}
                         />
@@ -894,34 +912,112 @@ const SuperAdminDashboard = ({ onLogout }) => {
           <Paper sx={{ p: 3, borderRadius: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Feature Flags</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Organization Invites</Typography>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Allow users to invite members</Typography>
-                </Box>
-                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>API Access</Typography>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Enable API for integrations</Typography>
-                </Box>
-                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Trial Period</Typography>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>14-day trial for new signups</Typography>
-                </Box>
-                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Analytics Tracking</Typography>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Google Analytics integration</Typography>
-                </Box>
-                <Chip label="OFF" size="small" sx={{ bgcolor: '#fee2e2', color: '#991b1b', fontWeight: 'bold' }} />
-              </Box>
+              {stats?.featureFlags && (
+                <>
+                  {stats.featureFlags.organizationInvites !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Organization Invites</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Allow users to invite members</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.organizationInvites ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.organizationInvites ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.organizationInvites ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                  {stats.featureFlags.apiAccess !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>API Access</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Enable API for integrations</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.apiAccess ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.apiAccess ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.apiAccess ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                  {stats.featureFlags.trialPeriod !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Trial Period</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>14-day trial for new signups</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.trialPeriod ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.trialPeriod ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.trialPeriod ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                  {stats.featureFlags.analyticsTracking !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Analytics Tracking</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Google Analytics integration</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.analyticsTracking ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.analyticsTracking ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.analyticsTracking ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                  {stats.featureFlags.emailNotifications !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Email Notifications</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Automated email alerts</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.emailNotifications ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.emailNotifications ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.emailNotifications ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                  {stats.featureFlags.autoBackup !== undefined && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Auto Backup</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Automated database backups</Typography>
+                      </Box>
+                      <Chip
+                        label={stats.featureFlags.autoBackup ? "ON" : "OFF"}
+                        size="small"
+                        sx={{
+                          bgcolor: stats.featureFlags.autoBackup ? '#d1fae5' : '#fee2e2',
+                          color: stats.featureFlags.autoBackup ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </Box>
+                  )}
+                </>
+              )}
             </Box>
           </Paper>
 
@@ -929,26 +1025,42 @@ const SuperAdminDashboard = ({ onLogout }) => {
           <Paper sx={{ p: 3, borderRadius: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>System Information</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Application Version</Typography>
-                <Typography sx={{ fontWeight: 600, color: '#111827' }}>v2.1.0</Typography>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Database Size</Typography>
-                <Typography sx={{ fontWeight: 600, color: '#111827' }}>1.2 GB</Typography>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Last Backup</Typography>
-                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Today, 3:00 AM</Typography>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Server Uptime</Typography>
-                <Typography sx={{ fontWeight: 600, color: '#111827' }}>45 days, 12 hours</Typography>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Environment</Typography>
-                <Chip label="Production" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
-              </Box>
+              {stats?.systemInfo && (
+                <>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Application Version</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{stats.systemInfo.appVersion || 'N/A'}</Typography>
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Database Size</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{stats.systemInfo.databaseSize || 'N/A'}</Typography>
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Server Uptime</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{stats.systemInfo.serverUptime || 'N/A'}</Typography>
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Environment</Typography>
+                    <Chip
+                      label={stats.systemInfo.environment || 'Unknown'}
+                      size="small"
+                      sx={{
+                        bgcolor: stats.systemInfo.environment === 'Production' ? '#d1fae5' : '#dbeafe',
+                        color: stats.systemInfo.environment === 'Production' ? '#065f46' : '#1e40af',
+                        fontWeight: 'bold'
+                      }}
+                    />
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Python Version</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{stats.systemInfo.pythonVersion || 'N/A'}</Typography>
+                  </Box>
+                  <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Django Version</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{stats.systemInfo.djangoVersion || 'N/A'}</Typography>
+                  </Box>
+                </>
+              )}
             </Box>
           </Paper>
         </div>
@@ -994,7 +1106,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
             <div className="logo-icon">⚡</div>
             <h2 className="logo-text">Super Admin</h2>
           </div>
-          <p className="company-subtitle">Chinmay Technosoft Private Limited</p>
+          <p className="company-subtitle">NexInvo - Admin Portal</p>
         </div>
 
         <nav className="sidebar-nav">
