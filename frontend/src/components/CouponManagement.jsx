@@ -519,205 +519,312 @@ const CouponManagement = () => {
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3 }
+        }}
       >
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>
+        <DialogTitle sx={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          py: 3
+        }}>
           {editMode ? 'Edit Coupon' : 'Create New Coupon'}
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            {/* Basic Information */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1 }}>
-                Basic Information
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Coupon Code"
-                name="code"
-                value={formData.code}
-                onChange={handleInputChange}
-                required
-                inputProps={{ style: { textTransform: 'uppercase' } }}
-                helperText="Unique code (e.g., WELCOME20, SAVE50)"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Display Name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                multiline
-                rows={2}
-              />
+        <DialogContent sx={{ p: 4 }}>
+          <Grid container spacing={4} sx={{ mt: 0.5 }}>
+            {/* Left Column */}
+            <Grid item xs={12} md={6}>
+              {/* Basic Information Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f9fafb', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+                  Basic Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Coupon Code"
+                      name="code"
+                      value={formData.code}
+                      onChange={handleInputChange}
+                      required
+                      inputProps={{ style: { textTransform: 'uppercase' } }}
+                      placeholder="e.g., WELCOME20, SAVE50"
+                      helperText="Unique code for users to redeem"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Display Name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      placeholder="e.g., Welcome Offer"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Description"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      multiline
+                      rows={3}
+                      placeholder="Describe the coupon offer and its terms"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Discount Settings Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f0fdf4', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#10b981', borderRadius: 1, mr: 2 }} />
+                  Discount Settings
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth sx={{ bgcolor: 'white' }}>
+                      <InputLabel>Discount Type</InputLabel>
+                      <Select
+                        name="discount_type"
+                        value={formData.discount_type}
+                        onChange={handleInputChange}
+                        label="Discount Type"
+                      >
+                        <MenuItem value="percentage">Percentage Discount (%)</MenuItem>
+                        <MenuItem value="fixed">Fixed Amount (₹)</MenuItem>
+                        <MenuItem value="extended_period">Extended Period (Days)</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label={
+                        formData.discount_type === 'percentage' ? 'Discount Percentage' :
+                        formData.discount_type === 'fixed' ? 'Discount Amount (₹)' :
+                        'Additional Days'
+                      }
+                      name="discount_value"
+                      type="number"
+                      value={formData.discount_value}
+                      onChange={handleInputChange}
+                      required
+                      placeholder={
+                        formData.discount_type === 'percentage' ? 'e.g., 20' :
+                        formData.discount_type === 'fixed' ? 'e.g., 500' :
+                        'e.g., 30'
+                      }
+                      InputProps={{
+                        startAdornment: formData.discount_type === 'fixed' ?
+                          <Typography sx={{ mr: 1, fontWeight: 'bold' }}>₹</Typography> : null,
+                        endAdornment: formData.discount_type === 'percentage' ?
+                          <Typography sx={{ ml: 1, fontWeight: 'bold' }}>%</Typography> :
+                          formData.discount_type === 'extended_period' ?
+                          <Typography sx={{ ml: 1, fontWeight: 'bold' }}>days</Typography> : null,
+                      }}
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Autocomplete
+                      multiple
+                      options={plans}
+                      getOptionLabel={(option) => option.name}
+                      value={plans.filter(plan => formData.applicable_plans.includes(plan.id))}
+                      onChange={(event, newValue) => {
+                        setFormData({
+                          ...formData,
+                          applicable_plans: newValue.map(plan => plan.id)
+                        });
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Applicable Plans"
+                          helperText="Leave empty to apply to all plans"
+                          sx={{ bgcolor: 'white' }}
+                        />
+                      )}
+                      sx={{ bgcolor: 'white', borderRadius: 1 }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Validity Period Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#fef3c7', borderRadius: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#f59e0b', borderRadius: 1, mr: 2 }} />
+                  Validity Period
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Valid From"
+                      name="valid_from"
+                      type="datetime-local"
+                      value={formData.valid_from}
+                      onChange={handleInputChange}
+                      required
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Valid Until"
+                      name="valid_until"
+                      type="datetime-local"
+                      value={formData.valid_until}
+                      onChange={handleInputChange}
+                      required
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
             </Grid>
 
-            {/* Discount Settings */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Discount Settings
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Discount Type</InputLabel>
-                <Select
-                  name="discount_type"
-                  value={formData.discount_type}
-                  onChange={handleInputChange}
-                  label="Discount Type"
-                >
-                  <MenuItem value="percentage">Percentage Discount (%)</MenuItem>
-                  <MenuItem value="fixed">Fixed Amount (₹)</MenuItem>
-                  <MenuItem value="extended_period">Extended Period (Days)</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label={
-                  formData.discount_type === 'percentage' ? 'Discount Percentage' :
-                  formData.discount_type === 'fixed' ? 'Discount Amount (₹)' :
-                  'Additional Days'
-                }
-                name="discount_value"
-                type="number"
-                value={formData.discount_value}
-                onChange={handleInputChange}
-                required
-                InputProps={{
-                  startAdornment: formData.discount_type === 'percentage' ?
-                    null : formData.discount_type === 'fixed' ?
-                    <Typography sx={{ mr: 1 }}>₹</Typography> : null,
-                  endAdornment: formData.discount_type === 'percentage' ?
-                    <Typography sx={{ ml: 1 }}>%</Typography> :
-                    formData.discount_type === 'extended_period' ?
-                    <Typography sx={{ ml: 1 }}>days</Typography> : null,
-                }}
-              />
-            </Grid>
+            {/* Right Column */}
+            <Grid item xs={12} md={6}>
+              {/* Usage Limits Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#dbeafe', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#3b82f6', borderRadius: 1, mr: 2 }} />
+                  Usage Limits
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Max Total Uses"
+                      name="max_total_uses"
+                      type="number"
+                      value={formData.max_total_uses}
+                      onChange={handleInputChange}
+                      placeholder="Leave empty for unlimited"
+                      helperText="Maximum total redemptions across all users"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Max Uses Per User"
+                      name="max_uses_per_user"
+                      type="number"
+                      value={formData.max_uses_per_user}
+                      onChange={handleInputChange}
+                      required
+                      helperText="How many times each user can use this coupon"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
 
-            {/* Applicable Plans */}
-            <Grid item xs={12}>
-              <Autocomplete
-                multiple
-                options={plans}
-                getOptionLabel={(option) => option.name}
-                value={plans.filter(plan => formData.applicable_plans.includes(plan.id))}
-                onChange={(event, newValue) => {
-                  setFormData({
-                    ...formData,
-                    applicable_plans: newValue.map(plan => plan.id)
-                  });
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Applicable Plans"
-                    helperText="Leave empty to apply to all plans"
-                  />
-                )}
-              />
-            </Grid>
-
-            {/* Validity Period */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Validity Period
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Valid From"
-                name="valid_from"
-                type="datetime-local"
-                value={formData.valid_from}
-                onChange={handleInputChange}
-                required
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Valid Until"
-                name="valid_until"
-                type="datetime-local"
-                value={formData.valid_until}
-                onChange={handleInputChange}
-                required
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-
-            {/* Usage Limits */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Usage Limits
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Max Total Uses"
-                name="max_total_uses"
-                type="number"
-                value={formData.max_total_uses}
-                onChange={handleInputChange}
-                helperText="Leave empty for unlimited"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Max Uses Per User"
-                name="max_uses_per_user"
-                type="number"
-                value={formData.max_uses_per_user}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-
-            {/* Status */}
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
+              {/* Status Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f3e8ff', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+                  Status
+                </Typography>
+                <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>Active</Typography>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>Coupon can be redeemed by users</Typography>
+                  </Box>
                   <Switch
                     checked={formData.is_active}
                     onChange={handleInputChange}
                     name="is_active"
+                    color="success"
                   />
-                }
-                label="Active"
-              />
+                </Box>
+              </Paper>
+
+              {/* Preview Card */}
+              <Paper elevation={2} sx={{ p: 3, borderRadius: 2, border: '2px solid #8b5cf6' }}>
+                <Typography variant="caption" sx={{ color: '#6b7280', mb: 1, display: 'block' }}>Preview</Typography>
+                <Box sx={{ textAlign: 'center', py: 2 }}>
+                  <Chip
+                    label={formData.code || 'COUPON CODE'}
+                    sx={{
+                      bgcolor: '#8b5cf6',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontFamily: 'monospace',
+                      fontSize: '1.1rem',
+                      px: 2,
+                      py: 2.5,
+                      mb: 2,
+                    }}
+                  />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                    {formData.name || 'Coupon Name'}
+                  </Typography>
+                  <Chip
+                    label={
+                      formData.discount_value ? (
+                        formData.discount_type === 'percentage' ? `${formData.discount_value}% OFF` :
+                        formData.discount_type === 'fixed' ? `₹${formData.discount_value} OFF` :
+                        `+${formData.discount_value} Days Free`
+                      ) : 'Discount Value'
+                    }
+                    sx={{
+                      bgcolor: formData.discount_type === 'percentage' ? '#ddd6fe' :
+                               formData.discount_type === 'fixed' ? '#dbeafe' : '#d1fae5',
+                      color: formData.discount_type === 'percentage' ? '#5b21b6' :
+                             formData.discount_type === 'fixed' ? '#1e40af' : '#065f46',
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem',
+                      mb: 2,
+                    }}
+                  />
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                    {formData.description || 'Coupon description will appear here'}
+                  </Typography>
+                  {formData.valid_from && formData.valid_until && (
+                    <Box sx={{ mt: 2, p: 2, bgcolor: '#f9fafb', borderRadius: 1 }}>
+                      <Typography variant="caption" sx={{ color: '#6b7280', display: 'block' }}>
+                        Valid: {new Date(formData.valid_from).toLocaleDateString('en-IN')} - {new Date(formData.valid_until).toLocaleDateString('en-IN')}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+        <DialogActions sx={{ p: 3, bgcolor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+          <Button
+            onClick={handleCloseDialog}
+            sx={{ textTransform: 'none', fontWeight: 'bold' }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               textTransform: 'none',
+              fontWeight: 'bold',
+              px: 4,
+              py: 1,
             }}
           >
             {editMode ? 'Update Coupon' : 'Create Coupon'}
