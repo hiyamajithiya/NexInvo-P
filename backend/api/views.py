@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.http import HttpResponse
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
 from django.db import transaction
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
@@ -126,7 +126,7 @@ def register_view(request):
             id=uuid.uuid4(),
             name=org_name,
             slug=slug,
-            plan='free',
+            plan='free_trial',  # Changed from 'free' to 'free_trial'
             is_active=True
         )
 
@@ -143,6 +143,46 @@ def register_view(request):
         InvoiceSettings.objects.create(organization=organization)
         EmailSettings.objects.create(organization=organization)
         InvoiceFormatSettings.objects.create(organization=organization)
+
+        # Create automatic 1-month free trial subscription
+        try:
+            # Get or create Free Trial subscription plan
+            free_trial_plan, created = SubscriptionPlan.objects.get_or_create(
+                name='Free Trial',
+                defaults={
+                    'description': '1-month free trial with basic features',
+                    'price': Decimal('0.00'),
+                    'billing_cycle': 'monthly',
+                    'trial_days': 0,  # No additional trial needed since it's already a trial plan
+                    'max_users': 2,  # Maximum 2 users
+                    'max_invoices_per_month': 50,
+                    'max_storage_gb': 1,
+                    'features': ['Basic invoicing', 'Up to 2 users', '50 invoices per month', '1GB storage'],
+                    'is_active': True,
+                    'is_visible': False,  # Not visible on pricing page
+                    'highlight': False,
+                    'sort_order': 0
+                }
+            )
+
+            # Create subscription for 1 month
+            from datetime import datetime
+            start_date = datetime.now().date()
+            end_date = start_date + timedelta(days=30)  # 1 month = 30 days
+
+            Subscription.objects.create(
+                organization=organization,
+                plan=free_trial_plan,
+                status='trial',
+                start_date=start_date,
+                end_date=end_date,
+                trial_end_date=end_date,
+                amount_paid=Decimal('0.00'),
+                auto_renew=False
+            )
+        except Exception as subscription_error:
+            # Log the error but don't fail registration
+            print(f"Failed to create free trial subscription: {subscription_error}")
 
         return Response({
             'message': 'User registered successfully',
@@ -370,12 +410,19 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing organizations.
     Users can only see organizations they belong to.
+    Superadmins can see all organizations.
     """
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return organizations the user is a member of
+        # Superadmins can see all organizations
+        if self.request.user.is_superuser:
+            return Organization.objects.all().annotate(
+                member_count=Count('memberships', filter=Q(memberships__is_active=True))
+            ).order_by('-created_at')
+
+        # Regular users can only see organizations they belong to
         return Organization.objects.filter(
             memberships__user=self.request.user,
             memberships__is_active=True,
