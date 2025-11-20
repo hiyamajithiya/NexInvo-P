@@ -990,20 +990,48 @@ const SuperAdminDashboard = ({ onLogout }) => {
         {/* Subscription Plans */}
         <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Subscription Plans Overview</Typography>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
-            {subscriptionPlans.map((plan) => (
-              <Paper key={plan.name} sx={{ p: 3, border: '2px solid', borderColor: plan.color, position: 'relative', overflow: 'hidden' }}>
-                <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: plan.color, color: 'white', px: 2, py: 0.5, borderBottomLeftRadius: 2 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{plan.users} Orgs</Typography>
+          {subscriptionPlans.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Box sx={{ mb: 3 }}>
+                <Box sx={{ display: 'inline-flex', p: 3, bgcolor: '#f3f4f6', borderRadius: '50%' }}>
+                  <Typography sx={{ fontSize: 48 }}>📋</Typography>
                 </Box>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: plan.color, mb: 1 }}>{plan.name}</Typography>
-                <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
-                  {plan.users}
-                  <Typography component="span" variant="body2" sx={{ color: '#6b7280' }}> organizations</Typography>
-                </Typography>
-              </Paper>
-            ))}
-          </div>
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
+                No Subscription Plans Created Yet
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#6b7280', mb: 3 }}>
+                Create subscription plans to start managing organization subscriptions
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => setActiveMenu('subscription-plans')}
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  textTransform: 'none',
+                  fontWeight: 'bold',
+                  px: 4
+                }}
+              >
+                Create Subscription Plan
+              </Button>
+            </Box>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
+              {subscriptionPlans.map((plan) => (
+                <Paper key={plan.name} sx={{ p: 3, border: '2px solid', borderColor: plan.color, position: 'relative', overflow: 'hidden' }}>
+                  <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: plan.color, color: 'white', px: 2, py: 0.5, borderBottomLeftRadius: 2 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{plan.users} Orgs</Typography>
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: plan.color, mb: 1 }}>{plan.name}</Typography>
+                  <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
+                    {plan.users}
+                    <Typography component="span" variant="body2" sx={{ color: '#6b7280' }}> organizations</Typography>
+                  </Typography>
+                </Paper>
+              ))}
+            </div>
+          )}
         </Paper>
 
         {/* Recent Transactions */}
