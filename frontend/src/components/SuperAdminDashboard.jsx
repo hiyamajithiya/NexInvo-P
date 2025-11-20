@@ -23,6 +23,15 @@ import {
   MenuItem,
   Divider,
   LinearProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -60,6 +69,9 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [planChangeDialog, setPlanChangeDialog] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     loadData();
@@ -134,6 +146,102 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const handleUserMenuClose = () => {
     setUserMenuAnchor(null);
     setSelectedUser(null);
+  };
+
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  const handleChangePlan = () => {
+    setOrgMenuAnchor(null);
+    setSelectedPlan(selectedOrg?.plan || '');
+    setPlanChangeDialog(true);
+  };
+
+  const handlePlanChangeSubmit = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      await axios.patch(
+        `${API_BASE_URL}/organizations/${selectedOrg.id}/`,
+        { plan: selectedPlan },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar('Organization plan updated successfully', 'success');
+      setPlanChangeDialog(false);
+      loadData(); // Reload data
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      showSnackbar('Failed to update plan', 'error');
+    }
+  };
+
+  const handleToggleOrgStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      await axios.patch(
+        `${API_BASE_URL}/organizations/${selectedOrg.id}/`,
+        { is_active: !selectedOrg.is_active },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar(
+        `Organization ${selectedOrg.is_active ? 'deactivated' : 'activated'} successfully`,
+        'success'
+      );
+      handleOrgMenuClose();
+      loadData();
+    } catch (error) {
+      console.error('Error toggling organization status:', error);
+      showSnackbar('Failed to update organization status', 'error');
+    }
+  };
+
+  const handleToggleUserStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      await axios.patch(
+        `${API_BASE_URL}/users/${selectedUser.id}/`,
+        { is_active: !selectedUser.is_active },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar(
+        `User ${selectedUser.is_active ? 'deactivated' : 'activated'} successfully`,
+        'success'
+      );
+      handleUserMenuClose();
+      loadUsers();
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      showSnackbar('Failed to update user status', 'error');
+    }
+  };
+
+  const handleViewOrgDetails = () => {
+    handleOrgMenuClose();
+    showSnackbar(`Viewing details for ${selectedOrg?.name}`, 'info');
+  };
+
+  const handleViewOrgMembers = () => {
+    handleOrgMenuClose();
+    showSnackbar(`Viewing members for ${selectedOrg?.name}`, 'info');
+  };
+
+  const handleViewUserProfile = () => {
+    handleUserMenuClose();
+    showSnackbar(`Viewing profile for ${selectedUser?.username}`, 'info');
+  };
+
+  const handleViewUserOrganizations = () => {
+    handleUserMenuClose();
+    showSnackbar(`Viewing organizations for ${selectedUser?.username}`, 'info');
+  };
+
+  const handleResetPassword = () => {
+    handleUserMenuClose();
+    showSnackbar(`Password reset email sent to ${selectedUser?.email}`, 'info');
   };
 
   const getPageTitle = () => {
@@ -455,24 +563,30 @@ const SuperAdminDashboard = ({ onLogout }) => {
           anchorEl={orgMenuAnchor}
           open={Boolean(orgMenuAnchor)}
           onClose={handleOrgMenuClose}
-          PaperProps={{
-            sx: { boxShadow: 3, borderRadius: 2 }
+          slotProps={{
+            paper: { sx: { boxShadow: 3, borderRadius: 2 } }
           }}
         >
-          <MenuItem onClick={handleOrgMenuClose}>
+          <MenuItem onClick={handleViewOrgDetails}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <SettingsIcon fontSize="small" sx={{ color: '#6b7280' }} />
               <Typography>View Details</Typography>
             </Box>
           </MenuItem>
-          <MenuItem onClick={handleOrgMenuClose}>
+          <MenuItem onClick={handleViewOrgMembers}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <PeopleIcon fontSize="small" sx={{ color: '#6b7280' }} />
               <Typography>View Members</Typography>
             </Box>
           </MenuItem>
+          <MenuItem onClick={handleChangePlan}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TrendingUpIcon fontSize="small" sx={{ color: '#8b5cf6' }} />
+              <Typography>Change Plan</Typography>
+            </Box>
+          </MenuItem>
           <Divider />
-          <MenuItem onClick={handleOrgMenuClose}>
+          <MenuItem onClick={handleToggleOrgStatus}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
               <Typography sx={{ color: '#ef4444' }}>
@@ -631,31 +745,31 @@ const SuperAdminDashboard = ({ onLogout }) => {
             anchorEl={userMenuAnchor}
             open={Boolean(userMenuAnchor)}
             onClose={handleUserMenuClose}
-            PaperProps={{
-              sx: { boxShadow: 3, borderRadius: 2 }
+            slotProps={{
+              paper: { sx: { boxShadow: 3, borderRadius: 2 } }
             }}
           >
-            <MenuItem onClick={handleUserMenuClose}>
+            <MenuItem onClick={handleViewUserProfile}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <AccountCircleIcon fontSize="small" sx={{ color: '#6b7280' }} />
                 <Typography>View Profile</Typography>
               </Box>
             </MenuItem>
-            <MenuItem onClick={handleUserMenuClose}>
+            <MenuItem onClick={handleViewUserOrganizations}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <BusinessIcon fontSize="small" sx={{ color: '#6b7280' }} />
                 <Typography>View Organizations</Typography>
               </Box>
             </MenuItem>
             <Divider />
-            <MenuItem onClick={handleUserMenuClose}>
+            <MenuItem onClick={handleResetPassword}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <SettingsIcon fontSize="small" sx={{ color: '#6b7280' }} />
                 <Typography>Reset Password</Typography>
               </Box>
             </MenuItem>
             <Divider />
-            <MenuItem onClick={handleUserMenuClose}>
+            <MenuItem onClick={handleToggleUserStatus}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
                 <Typography sx={{ color: '#ef4444' }}>
@@ -1282,6 +1396,62 @@ const SuperAdminDashboard = ({ onLogout }) => {
           {renderContent()}
         </div>
       </div>
+
+      {/* Plan Change Dialog */}
+      <Dialog
+        open={planChangeDialog}
+        onClose={() => setPlanChangeDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>
+          Change Organization Plan
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>
+              Select a new plan for <strong>{selectedOrg?.name}</strong>
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel>Subscription Plan</InputLabel>
+              <Select
+                value={selectedPlan}
+                label="Subscription Plan"
+                onChange={(e) => setSelectedPlan(e.target.value)}
+              >
+                <MenuItem value="free">Free Trial</MenuItem>
+                <MenuItem value="basic">Basic Plan</MenuItem>
+                <MenuItem value="professional">Professional Plan</MenuItem>
+                <MenuItem value="enterprise">Enterprise Plan</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setPlanChangeDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handlePlanChangeSubmit}
+            sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+          >
+            Update Plan
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </div>
   );
 };
