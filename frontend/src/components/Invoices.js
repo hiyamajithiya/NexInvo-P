@@ -14,11 +14,20 @@ function Invoices() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importProgress, setImportProgress] = useState(null);
+  const [activeTab, setActiveTab] = useState('proforma'); // Tab for invoice type
+  const [proformaCount, setProformaCount] = useState(0);
+  const [taxInvoiceCount, setTaxInvoiceCount] = useState(0);
 
   useEffect(() => {
     loadInvoices();
+    loadInvoiceCounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeTab]);
+
+  useEffect(() => {
+    loadInvoiceCounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices]);
 
   const loadInvoices = async () => {
     setLoading(true);
@@ -26,7 +35,8 @@ function Invoices() {
       const params = {};
       if (searchTerm) params.search = searchTerm;
       if (statusFilter) params.status = statusFilter;
-      if (typeFilter) params.invoice_type = typeFilter;
+      // Use active tab to filter invoice type
+      params.invoice_type = activeTab;
 
       const response = await invoiceAPI.getAll(params);
       setInvoices(response.data.results || response.data || []);
@@ -34,6 +44,18 @@ function Invoices() {
       console.error('Error loading invoices:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInvoiceCounts = async () => {
+    try {
+      const proformaResponse = await invoiceAPI.getAll({ invoice_type: 'proforma' });
+      setProformaCount((proformaResponse.data.results || proformaResponse.data || []).length);
+
+      const taxResponse = await invoiceAPI.getAll({ invoice_type: 'tax' });
+      setTaxInvoiceCount((taxResponse.data.results || taxResponse.data || []).length);
+    } catch (err) {
+      console.error('Error loading invoice counts:', err);
     }
   };
 
@@ -277,6 +299,54 @@ function Invoices() {
         </div>
       )}
 
+      {/* Tabs for Invoice Types */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginBottom: '24px',
+        borderBottom: '2px solid #e5e7eb',
+        paddingBottom: '0'
+      }}>
+        <button
+          onClick={() => setActiveTab('proforma')}
+          style={{
+            padding: '12px 24px',
+            border: 'none',
+            background: activeTab === 'proforma' ? '#6366f1' : 'transparent',
+            color: activeTab === 'proforma' ? 'white' : '#6b7280',
+            fontWeight: activeTab === 'proforma' ? '600' : '500',
+            fontSize: '14px',
+            cursor: 'pointer',
+            borderRadius: '8px 8px 0 0',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            bottom: '-2px',
+            borderBottom: activeTab === 'proforma' ? 'none' : '2px solid transparent'
+          }}
+        >
+          Proforma Invoices ({proformaCount})
+        </button>
+        <button
+          onClick={() => setActiveTab('tax')}
+          style={{
+            padding: '12px 24px',
+            border: 'none',
+            background: activeTab === 'tax' ? '#6366f1' : 'transparent',
+            color: activeTab === 'tax' ? 'white' : '#6b7280',
+            fontWeight: activeTab === 'tax' ? '600' : '500',
+            fontSize: '14px',
+            cursor: 'pointer',
+            borderRadius: '8px 8px 0 0',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            bottom: '-2px',
+            borderBottom: activeTab === 'tax' ? 'none' : '2px solid transparent'
+          }}
+        >
+          Tax Invoices ({taxInvoiceCount})
+        </button>
+      </div>
+
       <div className="filters-section">
         <div className="filter-group">
           <input
@@ -287,17 +357,6 @@ function Invoices() {
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyUp={(e) => e.key === 'Enter' && loadInvoices()}
           />
-        </div>
-        <div className="filter-group">
-          <select
-            className="filter-select"
-            value={typeFilter}
-            onChange={(e) => { setTypeFilter(e.target.value); }}
-          >
-            <option value="">All Types</option>
-            <option value="proforma">Proforma</option>
-            <option value="tax">Tax Invoice</option>
-          </select>
         </div>
         <div className="filter-group">
           <select
@@ -327,8 +386,12 @@ function Invoices() {
         ) : invoices.length === 0 ? (
           <div className="empty-state-large">
             <div className="empty-icon-large">📄</div>
-            <h3 className="empty-title">No Invoices Yet</h3>
-            <p className="empty-description">Click the "Create Invoice" button above to get started</p>
+            <h3 className="empty-title">No {activeTab === 'proforma' ? 'Proforma' : 'Tax'} Invoices Yet</h3>
+            <p className="empty-description">
+              {activeTab === 'proforma'
+                ? 'Click the "Create Invoice" button above to create a proforma invoice'
+                : 'Tax invoices are automatically generated when payments are recorded against proforma invoices'}
+            </p>
           </div>
         ) : (
           <div className="data-table">

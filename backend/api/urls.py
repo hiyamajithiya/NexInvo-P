@@ -9,7 +9,12 @@ router.register(r'service-items', views.ServiceItemViewSet, basename='service-it
 router.register(r'payment-terms', views.PaymentTermViewSet, basename='payment-term')
 router.register(r'invoices', views.InvoiceViewSet, basename='invoice')
 router.register(r'payments', views.PaymentViewSet, basename='payment')
+router.register(r'receipts', views.ReceiptViewSet, basename='receipt')
 router.register(r'users', views.UserViewSet, basename='user')
+router.register(r'subscription-plans', views.SubscriptionPlanViewSet, basename='subscription-plan')
+router.register(r'coupons', views.CouponViewSet, basename='coupon')
+router.register(r'coupon-usages', views.CouponUsageViewSet, basename='coupon-usage')
+router.register(r'subscriptions', views.SubscriptionViewSet, basename='subscription')
 
 urlpatterns = [
     path('', include(router.urls)),

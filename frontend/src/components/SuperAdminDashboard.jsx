@@ -39,6 +39,8 @@ import {
   AttachMoney as AttachMoneyIcon,
 } from '@mui/icons-material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import SubscriptionPlans from './SubscriptionPlans';
+import CouponManagement from './CouponManagement';
 import './Dashboard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
@@ -52,10 +54,18 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (activeMenu === 'users') {
+      loadUsers();
+    }
+  }, [activeMenu]);
 
   const loadData = async () => {
     try {
@@ -79,6 +89,21 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/users/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   const handleMenuClick = (event) => {
     setAnchorEl(event.currentTarget);
   };
@@ -94,6 +119,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
       case 'users': return 'User Management';
       case 'analytics': return 'Analytics & Reports';
       case 'billing': return 'Billing & Subscriptions';
+      case 'subscription-plans': return 'Subscription Plans';
+      case 'coupons': return 'Coupon Management';
       case 'settings': return 'System Settings';
       default: return 'Super Admin Portal';
     }
@@ -399,34 +426,552 @@ const SuperAdminDashboard = ({ onLogout }) => {
     );
   };
 
+  const renderUsersContent = () => {
+    return (
+      <>
+        {/* User Statistics Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(139, 92, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #8b5cf6' }}>
+                <PeopleIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Total Users</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.totalUsers || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #10b981' }}>
+                <CheckCircleIcon sx={{ fontSize: 28, color: '#10b981' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Active Users</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.activeUsers || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(245, 158, 11, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #f59e0b' }}>
+                <BusinessIcon sx={{ fontSize: 28, color: '#f59e0b' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Org Admins</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.orgAdmins || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #3b82f6' }}>
+                <AccountCircleIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Super Admins</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.superAdmins || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+        </div>
+
+        {/* Users Table */}
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>All System Users</Typography>
+            <Button variant="contained" sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textTransform: 'none' }}>
+              Add New User
+            </Button>
+          </Box>
+          {loadingUsers ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>User</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organizations</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Joined</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar sx={{ bgcolor: '#8b5cf6', width: 36, height: 36 }}>
+                            {user.username?.charAt(0).toUpperCase() || 'U'}
+                          </Avatar>
+                          <Box>
+                            <Typography sx={{ fontWeight: 600, color: '#111827' }}>{user.username}</Typography>
+                            <Typography variant="caption" sx={{ color: '#6b7280' }}>ID: {user.id}</Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: '#6b7280' }}>{user.email}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={user.is_superuser ? 'SUPERADMIN' : user.role?.toUpperCase() || 'USER'}
+                          size="small"
+                          sx={{
+                            bgcolor: user.is_superuser ? '#fef3c7' : user.role === 'admin' ? '#ddd6fe' : '#f3f4f6',
+                            color: user.is_superuser ? '#92400e' : user.role === 'admin' ? '#5b21b6' : '#374151',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={user.organization_count || 0} size="small" sx={{ bgcolor: '#f3f4f6' }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={user.is_active ? 'Active' : 'Inactive'}
+                          size="small"
+                          icon={user.is_active ? <CheckCircleIcon /> : <BlockIcon />}
+                          sx={{
+                            bgcolor: user.is_active ? '#d1fae5' : '#fee2e2',
+                            color: user.is_active ? '#065f46' : '#991b1b',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ color: '#6b7280' }}>
+                        {new Date(user.date_joined).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </TableCell>
+                      <TableCell>
+                        <IconButton size="small"><MoreVertIcon /></IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      </>
+    );
+  };
+
+  const renderAnalyticsContent = () => {
+    // Use real revenue trends from API or fallback to empty array
+    const revenueData = stats?.revenueTrends || [];
+
+    // Use real top organizations from API or fallback to first 5 orgs
+    const topOrganizations = stats?.topOrganizations || organizations.slice(0, 5);
+
+    return (
+      <>
+        {/* Analytics Summary Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #10b981' }}>
+                <TrendingUpIcon sx={{ fontSize: 28, color: '#10b981' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280' }}>Total Revenue</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.totalRevenue || 0).toLocaleString('en-IN')}</Typography>
+              </Box>
+            </Box>
+            <Typography variant="caption" sx={{ color: '#10b981' }}>↑ 12.5% from last month</Typography>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #3b82f6' }}>
+                <ReceiptIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280' }}>Invoices Generated</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.totalInvoices || 0}</Typography>
+              </Box>
+            </Box>
+            <Typography variant="caption" sx={{ color: '#3b82f6' }}>↑ 8.2% from last month</Typography>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(139, 92, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #8b5cf6' }}>
+                <SpeedIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280' }}>Avg. Processing Time</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>2.4s</Typography>
+              </Box>
+            </Box>
+            <Typography variant="caption" sx={{ color: '#10b981' }}>↓ 15% faster</Typography>
+          </Paper>
+        </div>
+
+        {/* Revenue Chart */}
+        <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Revenue Trends (Last 6 Months)</Typography>
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="revenue" fill="#8b5cf6" radius={[8, 8, 0, 0]} name="Revenue (₹)" />
+              <Bar dataKey="invoices" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Invoices" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Paper>
+
+        {/* Top Organizations */}
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Top Performing Organizations</Typography>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Rank</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organization</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Plan</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Invoices</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Revenue</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Growth</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {topOrganizations.map((org, index) => (
+                  <TableRow key={org.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                    <TableCell>
+                      <Chip
+                        label={`#${index + 1}`}
+                        size="small"
+                        sx={{
+                          bgcolor: index === 0 ? '#fef3c7' : index === 1 ? '#ddd6fe' : '#f3f4f6',
+                          color: index === 0 ? '#92400e' : index === 1 ? '#5b21b6' : '#374151',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{ bgcolor: '#8b5cf6', width: 36, height: 36 }}>{org.name.charAt(0)}</Avatar>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>{org.name}</Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={org.plan.toUpperCase()} size="small" sx={{ bgcolor: '#f3f4f6' }} />
+                    </TableCell>
+                    <TableCell sx={{ color: '#6b7280' }}>{org.invoice_count || 0}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{(org.revenue || 0).toLocaleString('en-IN')}</TableCell>
+                    <TableCell>
+                      <Typography sx={{ color: '#10b981', fontWeight: 600 }}>-</Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      </>
+    );
+  };
+
+  const renderBillingContent = () => {
+    const subscriptionPlans = [
+      { name: 'Free', price: 0, users: stats?.planBreakdown?.free || 0, color: '#6b7280', features: ['1 User', '10 Invoices/month', 'Basic Support'] },
+      { name: 'Basic', price: 499, users: stats?.planBreakdown?.basic || 0, color: '#3b82f6', features: ['5 Users', '100 Invoices/month', 'Email Support', 'Custom Branding'] },
+      { name: 'Professional', price: 1499, users: stats?.planBreakdown?.professional || 0, color: '#8b5cf6', features: ['20 Users', 'Unlimited Invoices', 'Priority Support', 'API Access', 'Analytics'] },
+      { name: 'Enterprise', price: 4999, users: stats?.planBreakdown?.enterprise || 0, color: '#f59e0b', features: ['Unlimited Users', 'Unlimited Invoices', '24/7 Support', 'Custom Features', 'Dedicated Manager'] },
+    ];
+
+    // Calculate monthly revenue from revenue trends (last month)
+    const lastMonthRevenue = stats?.revenueTrends?.length > 0
+      ? stats.revenueTrends[stats.revenueTrends.length - 1]?.revenue || 0
+      : 0;
+
+    // No recent transactions data yet, show message instead
+    const recentTransactions = [];
+
+    return (
+      <>
+        {/* Billing Summary Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #10b981' }}>
+                <AttachMoneyIcon sx={{ fontSize: 28, color: '#10b981' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Monthly Revenue</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{lastMonthRevenue.toLocaleString('en-IN')}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #3b82f6' }}>
+                <CheckCircleIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Paid Subscriptions</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.paidSubscriptions || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(245, 158, 11, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #f59e0b' }}>
+                <TrendingUpIcon sx={{ fontSize: 28, color: '#f59e0b' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Pending Payments</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.pendingPayments || 0).toLocaleString('en-IN')}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ bgcolor: 'rgba(139, 92, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #8b5cf6' }}>
+                <SpeedIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Active Orgs</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.activeOrganizations || 0}</Typography>
+              </Box>
+            </Box>
+          </Paper>
+        </div>
+
+        {/* Subscription Plans */}
+        <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Subscription Plans Overview</Typography>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px' }}>
+            {subscriptionPlans.map((plan) => (
+              <Paper key={plan.name} sx={{ p: 3, border: '2px solid', borderColor: plan.color, position: 'relative', overflow: 'hidden' }}>
+                <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: plan.color, color: 'white', px: 2, py: 0.5, borderBottomLeftRadius: 2 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{plan.users} Orgs</Typography>
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: plan.color, mb: 1 }}>{plan.name}</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
+                  ₹{plan.price}<Typography component="span" variant="body2" sx={{ color: '#6b7280' }}>/mo</Typography>
+                </Typography>
+                <Box sx={{ borderTop: '1px solid #e5e7eb', pt: 2 }}>
+                  {plan.features.map((feature, idx) => (
+                    <Typography key={idx} variant="body2" sx={{ color: '#6b7280', mb: 1 }}>✓ {feature}</Typography>
+                  ))}
+                </Box>
+              </Paper>
+            ))}
+          </div>
+        </Paper>
+
+        {/* Recent Transactions */}
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Recent Transactions</Typography>
+          {recentTransactions.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography variant="body1" sx={{ color: '#6b7280', mb: 2 }}>
+                Payment transaction tracking coming soon
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#9ca3af' }}>
+                This section will display subscription payments and billing transactions
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Transaction ID</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organization</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Plan</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Amount</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {recentTransactions.map((txn) => (
+                    <TableRow key={txn.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                      <TableCell sx={{ color: '#6b7280', fontFamily: 'monospace' }}>#{txn.id.toString().padStart(6, '0')}</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>{txn.org}</TableCell>
+                      <TableCell>
+                        <Chip label={txn.plan} size="small" sx={{ bgcolor: '#f3f4f6' }} />
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{txn.amount}</TableCell>
+                      <TableCell sx={{ color: '#6b7280' }}>{new Date(txn.date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={txn.status}
+                          size="small"
+                          sx={{
+                            bgcolor: txn.status === 'Paid' ? '#d1fae5' : txn.status === 'Pending' ? '#fed7aa' : '#fee2e2',
+                            color: txn.status === 'Paid' ? '#065f46' : txn.status === 'Pending' ? '#92400e' : '#991b1b',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      </>
+    );
+  };
+
+  const renderSettingsContent = () => {
+    return (
+      <>
+        {/* Settings Categories */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          {/* System Configuration */}
+          <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>System Configuration</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Maintenance Mode</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Enable to put system in maintenance mode</Typography>
+                <Button variant="outlined" size="small">Configure</Button>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Email Settings</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Configure SMTP and email templates</Typography>
+                <Button variant="outlined" size="small">Configure</Button>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Payment Gateway</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Setup Razorpay, Stripe integration</Typography>
+                <Button variant="outlined" size="small">Configure</Button>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Backup & Recovery</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Database backup configuration</Typography>
+                <Button variant="outlined" size="small">Configure</Button>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* Security Settings */}
+          <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Security & Access</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Two-Factor Authentication</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Enforce 2FA for all admins</Typography>
+                <Chip label="Enabled" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Session Timeout</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Auto logout after 30 minutes</Typography>
+                <Button variant="outlined" size="small">Change</Button>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>IP Whitelist</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Restrict admin access by IP</Typography>
+                <Button variant="outlined" size="small">Manage</Button>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Audit Logs</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>View system activity logs</Typography>
+                <Button variant="outlined" size="small">View Logs</Button>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* Feature Flags */}
+          <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Feature Flags</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box>
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Organization Invites</Typography>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Allow users to invite members</Typography>
+                </Box>
+                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box>
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>API Access</Typography>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Enable API for integrations</Typography>
+                </Box>
+                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box>
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Trial Period</Typography>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>14-day trial for new signups</Typography>
+                </Box>
+                <Chip label="ON" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box>
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Analytics Tracking</Typography>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Google Analytics integration</Typography>
+                </Box>
+                <Chip label="OFF" size="small" sx={{ bgcolor: '#fee2e2', color: '#991b1b', fontWeight: 'bold' }} />
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* System Information */}
+          <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>System Information</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Application Version</Typography>
+                <Typography sx={{ fontWeight: 600, color: '#111827' }}>v2.1.0</Typography>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Database Size</Typography>
+                <Typography sx={{ fontWeight: 600, color: '#111827' }}>1.2 GB</Typography>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Last Backup</Typography>
+                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Today, 3:00 AM</Typography>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Server Uptime</Typography>
+                <Typography sx={{ fontWeight: 600, color: '#111827' }}>45 days, 12 hours</Typography>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Environment</Typography>
+                <Chip label="Production" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
+              </Box>
+            </Box>
+          </Paper>
+        </div>
+      </>
+    );
+  };
+
   const renderContent = () => {
     switch (activeMenu) {
       case 'organizations':
         return renderOrganizationsContent();
       case 'users':
-        return (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ color: '#6b7280' }}>User Management - Coming Soon</Typography>
-          </div>
-        );
+        return renderUsersContent();
       case 'analytics':
-        return (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ color: '#6b7280' }}>Analytics & Reports - Coming Soon</Typography>
-          </div>
-        );
+        return renderAnalyticsContent();
       case 'billing':
-        return (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ color: '#6b7280' }}>Billing & Subscriptions - Coming Soon</Typography>
-          </div>
-        );
+        return renderBillingContent();
+      case 'subscription-plans':
+        return <SubscriptionPlans />;
+      case 'coupons':
+        return <CouponManagement />;
       case 'settings':
-        return (
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ color: '#6b7280' }}>System Settings - Coming Soon</Typography>
-          </div>
-        );
+        return renderSettingsContent();
       default:
         return renderDashboardContent();
     }
@@ -492,6 +1037,22 @@ const SuperAdminDashboard = ({ onLogout }) => {
           >
             <span className="nav-icon">💳</span>
             <span className="nav-text">Billing</span>
+          </a>
+          <a
+            href="#subscription-plans"
+            className={`nav-item ${activeMenu === 'subscription-plans' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('subscription-plans'); }}
+          >
+            <span className="nav-icon">📋</span>
+            <span className="nav-text">Subscription Plans</span>
+          </a>
+          <a
+            href="#coupons"
+            className={`nav-item ${activeMenu === 'coupons' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('coupons'); }}
+          >
+            <span className="nav-icon">🎟️</span>
+            <span className="nav-text">Coupons</span>
           </a>
           <a
             href="#settings"

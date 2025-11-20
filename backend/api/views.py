@@ -12,17 +12,20 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from datetime import date
+from django.utils import timezone
+from datetime import date, timedelta
+from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription)
 from .serializers import (
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
-    InvoiceSerializer, PaymentSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer, UserSerializer
+    InvoiceSerializer, PaymentSerializer, ReceiptSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer, UserSerializer,
+    SubscriptionPlanSerializer, CouponSerializer, CouponUsageSerializer, SubscriptionSerializer
 )
 from .pdf_generator import generate_invoice_pdf
-from .email_service import send_invoice_email
+from .email_service import send_invoice_email, send_receipt_email
 from .invoice_importer import InvoiceImporter, generate_excel_template
 
 
@@ -845,7 +848,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 with transaction.atomic():
                     # Create tax invoice with payment date (invoice_number will be auto-generated)
                     tax_invoice = Invoice.objects.create(
-                        user=invoice.user,
+                        organization=self.request.organization,
+                        created_by=self.request.user,
                         client=invoice.client,
                         invoice_type='tax',
                         invoice_date=payment.payment_date,  # Use payment date as invoice date
@@ -874,17 +878,52 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     payment.invoice = tax_invoice
                     payment.save()
 
+                    # Generate Receipt Number
+                    invoice_settings = InvoiceSettings.objects.get(organization=self.request.organization)
+                    receipt_prefix = invoice_settings.receiptPrefix or 'RCPT-'
+
+                    # Get the last receipt number for this organization
+                    last_receipt = Receipt.objects.filter(
+                        organization=self.request.organization
+                    ).order_by('-created_at').first()
+
+                    if last_receipt and last_receipt.receipt_number.startswith(receipt_prefix):
+                        try:
+                            last_number = int(last_receipt.receipt_number.replace(receipt_prefix, ''))
+                            next_number = last_number + 1
+                        except ValueError:
+                            next_number = invoice_settings.receiptStartingNumber
+                    else:
+                        next_number = invoice_settings.receiptStartingNumber
+
+                    receipt_number = f"{receipt_prefix}{next_number}"
+
+                    # Create Receipt
+                    receipt = Receipt.objects.create(
+                        organization=self.request.organization,
+                        created_by=self.request.user,
+                        payment=payment,
+                        invoice=tax_invoice,
+                        receipt_number=receipt_number,
+                        receipt_date=payment.payment_date,
+                        amount_received=payment.amount,
+                        payment_method=payment.payment_method,
+                        received_from=tax_invoice.client.name,
+                        towards=f"Payment against invoice {tax_invoice.invoice_number}",
+                        notes=payment.notes
+                    )
+
                     # Mark proforma as paid
                     invoice.status = 'paid'
                     invoice.save()
 
-                # Auto-send tax invoice email if client has email (outside transaction)
+                # Auto-send tax invoice and receipt email (outside transaction)
                 try:
-                    company_settings = CompanySettings.objects.get(user=self.request.user)
+                    company_settings = CompanySettings.objects.get(organization=self.request.organization)
                     if tax_invoice.client.email:
-                        send_invoice_email(tax_invoice, company_settings)
+                        send_receipt_email(receipt, tax_invoice, company_settings)
                 except Exception as e:
-                    print(f"Error sending tax invoice email: {str(e)}")
+                    print(f"Error sending tax invoice and receipt email: {str(e)}")
             else:
                 # Already converted, just update status
                 invoice.status = 'paid'
@@ -934,6 +973,76 @@ class PaymentViewSet(viewsets.ModelViewSet):
             invoice.status = 'draft'
 
         invoice.save()
+
+
+class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing receipts.
+    Receipts are auto-generated and should not be manually created/edited.
+    """
+    serializer_class = ReceiptSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Receipt.objects.filter(organization=self.request.organization)
+
+        # Filter by invoice if specified
+        invoice_id = self.request.query_params.get('invoice', None)
+        if invoice_id:
+            queryset = queryset.filter(invoice_id=invoice_id)
+
+        # Filter by payment if specified
+        payment_id = self.request.query_params.get('payment', None)
+        if payment_id:
+            queryset = queryset.filter(payment_id=payment_id)
+
+        return queryset.order_by('-receipt_date', '-created_at')
+
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Download receipt as PDF"""
+        from .pdf_generator import generate_receipt_pdf
+
+        receipt = self.get_object()
+        company_settings = CompanySettings.objects.get(organization=request.organization)
+
+        # Generate PDF
+        pdf_data = generate_receipt_pdf(receipt, company_settings)
+
+        # Return PDF response
+        response = HttpResponse(pdf_data, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{receipt.receipt_number}.pdf"'
+        return response
+
+    @action(detail=True, methods=['post'])
+    def resend_email(self, request, pk=None):
+        """Resend receipt email to client"""
+        receipt = self.get_object()
+
+        try:
+            company_settings = CompanySettings.objects.get(organization=request.organization)
+            tax_invoice = receipt.invoice
+
+            if not tax_invoice.client.email:
+                return Response(
+                    {'error': 'Client has no email address'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            success = send_receipt_email(receipt, tax_invoice, company_settings)
+
+            if success:
+                return Response({'message': 'Receipt and invoice sent successfully'})
+            else:
+                return Response(
+                    {'error': 'Failed to send email'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @api_view(['GET'])
@@ -987,6 +1096,10 @@ def superadmin_stats(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    from datetime import datetime, timedelta
+    from django.db.models import Count, Sum, Avg
+    from django.db.models.functions import TruncMonth
+
     # Total organizations
     total_organizations = Organization.objects.filter(is_active=True).count()
 
@@ -1000,7 +1113,6 @@ def superadmin_stats(request):
     total_revenue = Payment.objects.aggregate(total=Sum('amount'))['total'] or 0
 
     # Active organizations (with at least one invoice in last 30 days)
-    from datetime import datetime, timedelta
     thirty_days_ago = datetime.now().date() - timedelta(days=30)
     active_orgs = Invoice.objects.filter(
         invoice_date__gte=thirty_days_ago
@@ -1019,6 +1131,74 @@ def superadmin_stats(request):
         created_at__gte=seven_days_ago
     ).count()
 
+    # Revenue trends (last 6 months)
+    six_months_ago = datetime.now().date() - timedelta(days=180)
+    revenue_by_month = Payment.objects.filter(
+        payment_date__gte=six_months_ago
+    ).annotate(
+        month=TruncMonth('payment_date')
+    ).values('month').annotate(
+        revenue=Sum('amount'),
+        count=Count('id')
+    ).order_by('month')
+
+    revenue_trends = []
+    for item in revenue_by_month:
+        # Get invoice count for the month
+        invoice_count = Invoice.objects.filter(
+            invoice_date__year=item['month'].year,
+            invoice_date__month=item['month'].month
+        ).count()
+
+        # Get user count for the month
+        user_count = User.objects.filter(
+            date_joined__year=item['month'].year,
+            date_joined__month=item['month'].month
+        ).count()
+
+        revenue_trends.append({
+            'month': item['month'].strftime('%b'),
+            'revenue': float(item['revenue'] or 0),
+            'invoices': invoice_count,
+            'users': user_count
+        })
+
+    # User statistics
+    active_users = User.objects.filter(is_active=True).count()
+    org_admins = OrganizationMembership.objects.filter(
+        role__in=['admin', 'owner'],
+        is_active=True
+    ).values('user').distinct().count()
+    superadmins = User.objects.filter(is_superuser=True, is_active=True).count()
+
+    # Top performing organizations
+    top_orgs = Organization.objects.filter(
+        is_active=True
+    ).annotate(
+        invoice_count=Count('invoices'),
+        total_revenue=Sum('invoices__payments__amount')
+    ).order_by('-total_revenue')[:10]
+
+    top_organizations = []
+    for org in top_orgs:
+        top_organizations.append({
+            'id': org.id,
+            'name': org.name,
+            'slug': org.slug,
+            'plan': org.plan,
+            'invoice_count': org.invoice_count or 0,
+            'revenue': float(org.total_revenue or 0),
+            'created_at': org.created_at.isoformat() if org.created_at else None
+        })
+
+    # Monthly recurring revenue calculation
+    paid_subscriptions = total_organizations - plan_breakdown.get('free', 0)
+
+    # Pending payments (invoices not fully paid)
+    pending_invoices = Invoice.objects.filter(
+        status__in=['draft', 'sent']
+    ).aggregate(total=Sum('total_amount'))['total'] or 0
+
     return Response({
         'totalOrganizations': total_organizations,
         'totalUsers': total_users,
@@ -1026,7 +1206,14 @@ def superadmin_stats(request):
         'totalRevenue': float(total_revenue),
         'activeOrganizations': active_orgs,
         'planBreakdown': plan_breakdown,
-        'recentOrganizations': recent_orgs
+        'recentOrganizations': recent_orgs,
+        'revenueTrends': revenue_trends,
+        'activeUsers': active_users,
+        'orgAdmins': org_admins,
+        'superAdmins': superadmins,
+        'topOrganizations': top_organizations,
+        'paidSubscriptions': paid_subscriptions,
+        'pendingPayments': float(pending_invoices)
     })
 
 
@@ -1359,3 +1546,452 @@ class UserViewSet(viewsets.ModelViewSet):
             )
 
         return super().update(request, *args, **kwargs)
+
+
+# ============================================================================
+# SUBSCRIPTION & COUPON ViewSets
+# ============================================================================
+
+class SubscriptionPlanViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for subscription plans.
+    Only superadmins can create/edit/delete plans.
+    Public endpoint available for viewing active plans.
+    """
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Superadmins see all plans
+        if self.request.user.is_superuser:
+            return SubscriptionPlan.objects.all()
+        # Other users see only active and visible plans
+        return SubscriptionPlan.objects.filter(is_active=True, is_visible=True)
+
+    def get_permissions(self):
+        # Only superadmins can create, update, delete
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can create subscription plans'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can update subscription plans'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can delete subscription plans'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'])
+    def public(self, request):
+        """Get all active and visible plans for public viewing"""
+        plans = SubscriptionPlan.objects.filter(is_active=True, is_visible=True).order_by('sort_order', 'price')
+        serializer = self.get_serializer(plans, many=True)
+        return Response(serializer.data)
+
+
+class CouponViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for coupons.
+    Only superadmins can create/edit/delete coupons.
+    """
+    serializer_class = CouponSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Coupon.objects.all()
+        # Non-superadmins can only view active coupons
+        return Coupon.objects.filter(is_active=True)
+
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can create coupons'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can update coupons'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can delete coupons'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Deactivate a coupon"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmin can deactivate coupons'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        coupon = self.get_object()
+        coupon.is_active = False
+        coupon.save()
+        return Response({'message': 'Coupon deactivated successfully'})
+
+    @action(detail=False, methods=['post'])
+    def validate(self, request):
+        """
+        Validate a coupon code.
+        POST data: {"code": "WELCOME20", "plan_id": 2}
+        """
+        code = request.data.get('code', '').upper()
+        plan_id = request.data.get('plan_id')
+
+        if not code:
+            return Response({'error': 'Coupon code is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            coupon = Coupon.objects.get(code__iexact=code)
+        except Coupon.DoesNotExist:
+            return Response({'error': 'Invalid coupon code'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if coupon is valid
+        is_valid, message = coupon.is_valid()
+        if not is_valid:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if organization can redeem this coupon
+        can_redeem, message = coupon.can_redeem(request.organization)
+        if not can_redeem:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if coupon applies to the selected plan
+        if plan_id:
+            try:
+                plan = SubscriptionPlan.objects.get(id=plan_id)
+                if coupon.applicable_plans.exists() and plan not in coupon.applicable_plans.all():
+                    return Response(
+                        {'error': f'This coupon is not applicable to the {plan.name} plan'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # Calculate discount
+                discount_info = calculate_discount(coupon, plan)
+                return Response({
+                    'valid': True,
+                    'coupon': CouponSerializer(coupon).data,
+                    'discount': discount_info
+                })
+            except SubscriptionPlan.DoesNotExist:
+                return Response({'error': 'Invalid plan ID'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            'valid': True,
+            'coupon': CouponSerializer(coupon).data
+        })
+
+    @action(detail=False, methods=['post'])
+    def redeem(self, request):
+        """
+        Redeem a coupon.
+        POST data: {"code": "WELCOME20", "plan_id": 2}
+        """
+        code = request.data.get('code', '').upper()
+        plan_id = request.data.get('plan_id')
+
+        if not code or not plan_id:
+            return Response(
+                {'error': 'Coupon code and plan ID are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            coupon = Coupon.objects.get(code__iexact=code)
+            plan = SubscriptionPlan.objects.get(id=plan_id)
+        except Coupon.DoesNotExist:
+            return Response({'error': 'Invalid coupon code'}, status=status.HTTP_404_NOT_FOUND)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({'error': 'Invalid plan ID'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Validate coupon
+        is_valid, message = coupon.is_valid()
+        if not is_valid:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        can_redeem, message = coupon.can_redeem(request.organization)
+        if not can_redeem:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check plan applicability
+        if coupon.applicable_plans.exists() and plan not in coupon.applicable_plans.all():
+            return Response(
+                {'error': f'This coupon is not applicable to the {plan.name} plan'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Calculate discount
+        discount_info = calculate_discount(coupon, plan)
+
+        # Create or update subscription with coupon
+        with transaction.atomic():
+            # Calculate subscription period
+            start_date = date.today()
+            if plan.billing_cycle == 'monthly':
+                end_date = start_date + timedelta(days=30)
+            else:  # yearly
+                end_date = start_date + timedelta(days=365)
+
+            # Add extended days if applicable
+            if coupon.discount_type == 'extended_period':
+                end_date = end_date + timedelta(days=int(coupon.discount_value))
+
+            # Calculate trial end date
+            trial_end_date = None
+            if plan.trial_days > 0:
+                trial_end_date = start_date + timedelta(days=plan.trial_days)
+
+            # Create or update subscription
+            subscription, created = Subscription.objects.update_or_create(
+                organization=request.organization,
+                defaults={
+                    'plan': plan,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'trial_end_date': trial_end_date,
+                    'status': 'trial' if plan.trial_days > 0 else 'active',
+                    'amount_paid': discount_info['final_price'],
+                    'coupon_applied': coupon,
+                    'auto_renew': True,
+                    'next_billing_date': end_date
+                }
+            )
+
+            # Record coupon usage
+            usage = CouponUsage.objects.create(
+                coupon=coupon,
+                organization=request.organization,
+                user=request.user,
+                subscription=subscription,
+                discount_amount=discount_info['discount_amount'],
+                extended_days=discount_info['extended_days']
+            )
+
+            # Increment coupon usage count
+            coupon.current_usage_count += 1
+            coupon.save()
+
+            # Update organization plan
+            request.organization.plan = plan.name.lower()
+            request.organization.save()
+
+        return Response({
+            'message': 'Coupon redeemed successfully',
+            'subscription': SubscriptionSerializer(subscription).data,
+            'discount_applied': discount_info['discount_amount'],
+            'extended_days': discount_info['extended_days']
+        })
+
+
+class CouponUsageViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for coupon usage records.
+    Read-only for all users.
+    """
+    serializer_class = CouponUsageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            # Superadmins see all usage records
+            return CouponUsage.objects.all()
+        # Organizations see only their own usage
+        return CouponUsage.objects.filter(organization=self.request.organization)
+
+
+class SubscriptionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for subscriptions.
+    """
+    serializer_class = SubscriptionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Subscription.objects.all()
+        # Organizations see only their own subscription
+        return Subscription.objects.filter(organization=self.request.organization)
+
+    @action(detail=False, methods=['get'])
+    def my_subscription(self, request):
+        """Get current organization's subscription"""
+        try:
+            subscription = Subscription.objects.get(organization=request.organization)
+            serializer = self.get_serializer(subscription)
+            return Response(serializer.data)
+        except Subscription.DoesNotExist:
+            return Response({'error': 'No subscription found'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def subscribe(self, request):
+        """Subscribe to a plan"""
+        plan_id = request.data.get('plan_id')
+        coupon_code = request.data.get('coupon_code', '').upper()
+
+        if not plan_id:
+            return Response({'error': 'Plan ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({'error': 'Invalid plan'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if subscription already exists
+        if Subscription.objects.filter(organization=request.organization).exists():
+            return Response(
+                {'error': 'Subscription already exists. Use upgrade endpoint to change plans.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        coupon = None
+        discount_info = {'final_price': plan.price, 'discount_amount': 0, 'extended_days': 0}
+
+        # Apply coupon if provided
+        if coupon_code:
+            try:
+                coupon = Coupon.objects.get(code__iexact=coupon_code)
+                is_valid, message = coupon.is_valid()
+                if not is_valid:
+                    return Response({'error': f'Coupon error: {message}'}, status=status.HTTP_400_BAD_REQUEST)
+
+                can_redeem, message = coupon.can_redeem(request.organization)
+                if not can_redeem:
+                    return Response({'error': f'Coupon error: {message}'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Check plan applicability
+                if coupon.applicable_plans.exists() and plan not in coupon.applicable_plans.all():
+                    return Response(
+                        {'error': f'This coupon is not applicable to the {plan.name} plan'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                discount_info = calculate_discount(coupon, plan)
+            except Coupon.DoesNotExist:
+                return Response({'error': 'Invalid coupon code'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Create subscription
+        with transaction.atomic():
+            start_date = date.today()
+            if plan.billing_cycle == 'monthly':
+                end_date = start_date + timedelta(days=30)
+            else:
+                end_date = start_date + timedelta(days=365)
+
+            # Add extended days
+            if discount_info['extended_days'] > 0:
+                end_date = end_date + timedelta(days=discount_info['extended_days'])
+
+            trial_end_date = None
+            if plan.trial_days > 0:
+                trial_end_date = start_date + timedelta(days=plan.trial_days)
+
+            subscription = Subscription.objects.create(
+                organization=request.organization,
+                plan=plan,
+                start_date=start_date,
+                end_date=end_date,
+                trial_end_date=trial_end_date,
+                status='trial' if plan.trial_days > 0 else 'active',
+                amount_paid=discount_info['final_price'],
+                coupon_applied=coupon,
+                auto_renew=True,
+                next_billing_date=end_date
+            )
+
+            # Record coupon usage if coupon applied
+            if coupon:
+                CouponUsage.objects.create(
+                    coupon=coupon,
+                    organization=request.organization,
+                    user=request.user,
+                    subscription=subscription,
+                    discount_amount=discount_info['discount_amount'],
+                    extended_days=discount_info['extended_days']
+                )
+                coupon.current_usage_count += 1
+                coupon.save()
+
+            # Update organization plan
+            request.organization.plan = plan.name.lower()
+            request.organization.save()
+
+        return Response({
+            'message': 'Subscription created successfully',
+            'subscription': SubscriptionSerializer(subscription).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancel a subscription"""
+        subscription = self.get_object()
+
+        if subscription.organization != request.organization and not request.user.is_superuser:
+            return Response(
+                {'error': 'You can only cancel your own subscription'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        subscription.status = 'cancelled'
+        subscription.auto_renew = False
+        subscription.save()
+
+        return Response({'message': 'Subscription cancelled successfully'})
+
+
+# Helper function
+def calculate_discount(coupon, plan):
+    """Calculate discount for a coupon and plan"""
+    discount_amount = Decimal('0.00')
+    extended_days = 0
+    final_price = plan.price
+
+    if coupon.discount_type == 'percentage':
+        discount_amount = (plan.price * coupon.discount_value) / Decimal('100')
+        final_price = max(Decimal('0.00'), plan.price - discount_amount)
+
+    elif coupon.discount_type == 'fixed':
+        discount_amount = min(coupon.discount_value, plan.price)
+        final_price = max(Decimal('0.00'), plan.price - discount_amount)
+
+    elif coupon.discount_type == 'extended_period':
+        extended_days = int(coupon.discount_value)
+        final_price = plan.price
+
+    return {
+        'final_price': float(final_price),
+        'discount_amount': float(discount_amount),
+        'extended_days': extended_days,
+        'original_price': float(plan.price)
+    }

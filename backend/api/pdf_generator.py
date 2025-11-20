@@ -545,3 +545,131 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         doc.build(elements, canvasmaker=NumberedCanvas)  # Build with page numbers
     buffer.seek(0)
     return buffer
+
+
+def generate_receipt_pdf(receipt, company_settings):
+    """Generate a professional receipt PDF"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#2c3e50'),
+        spaceAfter=30,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#34495e'),
+        spaceAfter=12,
+        fontName='Helvetica-Bold'
+    )
+
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#2c3e50'),
+        spaceAfter=6
+    )
+
+    # Title
+    elements.append(Paragraph("PAYMENT RECEIPT", title_style))
+    elements.append(Spacer(1, 20))
+
+    # Company Info and Receipt Details Side by Side
+    company_data = [
+        [
+            Paragraph(f"<b>{company_settings.companyName}</b><br/>"
+                     f"{company_settings.address}<br/>"
+                     f"{company_settings.city}, {company_settings.state} - {company_settings.pinCode}<br/>"
+                     f"GSTIN: {company_settings.gstin}<br/>"
+                     f"Phone: {company_settings.phone}<br/>"
+                     f"Email: {company_settings.email}", normal_style),
+            Paragraph(f"<b>Receipt No:</b> {receipt.receipt_number}<br/>"
+                     f"<b>Receipt Date:</b> {receipt.receipt_date.strftime('%d-%b-%Y')}<br/>"
+                     f"<b>Invoice No:</b> {receipt.invoice.invoice_number}", normal_style)
+        ]
+    ]
+
+    company_table = Table(company_data, colWidths=[doc.width * 0.6, doc.width * 0.4])
+    company_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+    ]))
+    elements.append(company_table)
+    elements.append(Spacer(1, 20))
+
+    # Received From Section
+    elements.append(Paragraph(f"<b>Received From:</b>", heading_style))
+    elements.append(Paragraph(f"{receipt.received_from}", normal_style))
+    elements.append(Spacer(1, 10))
+
+    # Payment Details
+    payment_data = [
+        ['Description', 'Amount'],
+        [receipt.towards, f"₹ {receipt.amount_received:,.2f}"]
+    ]
+
+    payment_table = Table(payment_data, colWidths=[doc.width * 0.7, doc.width * 0.3])
+    payment_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
+        ('FONTSIZE', (0, 1), (-1, -1), 11),
+        ('TOPPADDING', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+    ]))
+    elements.append(payment_table)
+    elements.append(Spacer(1, 15))
+
+    # Amount in Words
+    amount_words = number_to_words(receipt.amount_received)
+    elements.append(Paragraph(f"<b>Amount in Words:</b> {amount_words}", normal_style))
+    elements.append(Spacer(1, 15))
+
+    # Payment Method
+    elements.append(Paragraph(f"<b>Payment Method:</b> {receipt.get_payment_method_display()}", normal_style))
+    if receipt.payment.reference_number:
+        elements.append(Paragraph(f"<b>Reference Number:</b> {receipt.payment.reference_number}", normal_style))
+    elements.append(Spacer(1, 20))
+
+    # Notes
+    if receipt.notes:
+        elements.append(Paragraph(f"<b>Notes:</b>", heading_style))
+        elements.append(Paragraph(receipt.notes, normal_style))
+        elements.append(Spacer(1, 20))
+
+    # Footer
+    elements.append(Spacer(1, 30))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.grey, spaceBefore=10, spaceAfter=10))
+    elements.append(Paragraph(
+        f"<i>This is a computer-generated receipt and does not require a signature.</i><br/>"
+        f"<i>For any queries, please contact: {company_settings.email}</i>",
+        ParagraphStyle('Footer', parent=normal_style, fontSize=8, textColor=colors.grey, alignment=TA_CENTER)
+    ))
+
+    # Build PDF
+    doc.build(elements)
+    pdf_data = buffer.getvalue()
+    buffer.close()
+
+    return pdf_data

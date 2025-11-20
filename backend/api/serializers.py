@@ -3,8 +3,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
-    Client, Invoice, InvoiceItem, Payment, EmailSettings, InvoiceFormatSettings,
-    ServiceItem, PaymentTerm
+    Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings,
+    ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription
 )
 
 
@@ -48,7 +48,8 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceSettings
         fields = ['id', 'invoicePrefix', 'startingNumber', 'proformaPrefix',
-                  'proformaStartingNumber', 'defaultGstRate', 'paymentDueDays',
+                  'proformaStartingNumber', 'receiptPrefix', 'receiptStartingNumber',
+                  'defaultGstRate', 'paymentDueDays',
                   'termsAndConditions', 'notes', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -140,6 +141,21 @@ class PaymentSerializer(serializers.ModelSerializer):
                   'payment_date', 'payment_method', 'reference_number', 'notes',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'invoice_number', 'client_name', 'created_at', 'updated_at']
+
+
+class ReceiptSerializer(serializers.ModelSerializer):
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True)
+    client_name = serializers.CharField(source='invoice.client.name', read_only=True)
+    payment_reference = serializers.CharField(source='payment.reference_number', read_only=True)
+
+    class Meta:
+        model = Receipt
+        fields = ['id', 'payment', 'invoice', 'invoice_number', 'client_name',
+                  'receipt_number', 'receipt_date', 'amount_received', 'payment_method',
+                  'received_from', 'towards', 'notes', 'payment_reference',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'receipt_number', 'invoice_number', 'client_name',
+                            'payment_reference', 'created_at', 'updated_at']
 
 
 class EmailSettingsSerializer(serializers.ModelSerializer):
@@ -238,3 +254,91 @@ class UserSerializer(serializers.ModelSerializer):
         
         instance.save()
         return instance
+
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    """Serializer for subscription plans"""
+
+    class Meta:
+        model = SubscriptionPlan
+        fields = [
+            'id', 'name', 'description', 'price', 'billing_cycle', 'trial_days',
+            'max_users', 'max_invoices_per_month', 'max_storage_gb',
+            'features', 'is_active', 'is_visible', 'sort_order', 'highlight',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class CouponSerializer(serializers.ModelSerializer):
+    """Serializer for coupons"""
+    applicable_plan_names = serializers.SerializerMethodField()
+    created_by_email = serializers.EmailField(source='created_by.email', read_only=True)
+    is_valid_now = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Coupon
+        fields = [
+            'id', 'code', 'name', 'description', 'discount_type', 'discount_value',
+            'applicable_plans', 'applicable_plan_names', 'valid_from', 'valid_until',
+            'max_total_uses', 'max_uses_per_user', 'current_usage_count',
+            'is_active', 'is_valid_now', 'created_by', 'created_by_email',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'current_usage_count', 'created_by', 'created_at', 'updated_at']
+
+    def get_applicable_plan_names(self, obj):
+        """Get names of applicable plans"""
+        if obj.applicable_plans.count() == 0:
+            return ['All Plans']
+        return [plan.name for plan in obj.applicable_plans.all()]
+
+    def get_is_valid_now(self, obj):
+        """Check if coupon is currently valid"""
+        is_valid, message = obj.is_valid()
+        return is_valid
+
+
+class CouponUsageSerializer(serializers.ModelSerializer):
+    """Serializer for coupon usage records"""
+    coupon_code = serializers.CharField(source='coupon.code', read_only=True)
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model = CouponUsage
+        fields = [
+            'id', 'coupon', 'coupon_code', 'organization', 'organization_name',
+            'user', 'user_email', 'subscription', 'discount_amount', 'extended_days',
+            'used_at'
+        ]
+        read_only_fields = ['id', 'used_at']
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    """Serializer for subscriptions"""
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    plan_name = serializers.CharField(source='plan.name', read_only=True)
+    plan_details = SubscriptionPlanSerializer(source='plan', read_only=True)
+    coupon_code = serializers.CharField(source='coupon_applied.code', read_only=True)
+    days_remaining = serializers.SerializerMethodField()
+    is_active_now = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Subscription
+        fields = [
+            'id', 'organization', 'organization_name', 'plan', 'plan_name', 'plan_details',
+            'start_date', 'end_date', 'trial_end_date', 'status', 'auto_renew',
+            'last_payment_date', 'next_billing_date', 'amount_paid',
+            'coupon_applied', 'coupon_code', 'days_remaining', 'is_active_now',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_days_remaining(self, obj):
+        """Get days remaining in subscription"""
+        return obj.days_remaining()
+
+    def get_is_active_now(self, obj):
+        """Check if subscription is currently active"""
+        return obj.is_active()

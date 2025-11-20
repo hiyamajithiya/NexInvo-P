@@ -96,6 +96,9 @@ class InvoiceSettings(models.Model):
     # Proforma Invoice Settings
     proformaPrefix = models.CharField(max_length=20, default='PI-')
     proformaStartingNumber = models.IntegerField(default=1)
+    # Receipt Settings
+    receiptPrefix = models.CharField(max_length=20, default='RCPT-')
+    receiptStartingNumber = models.IntegerField(default=1)
     # General Settings
     defaultGstRate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
     paymentDueDays = models.IntegerField(default=30)
@@ -267,6 +270,40 @@ class Payment(models.Model):
         return f"Payment {self.amount} for {self.invoice.invoice_number}"
 
 
+class Receipt(models.Model):
+    """
+    Receipt model for payment acknowledgment.
+    Generated automatically when payment is recorded against an invoice.
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='receipts')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_receipts')
+    payment = models.OneToOneField(Payment, on_delete=models.CASCADE, related_name='receipt')
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='receipts')
+
+    # Receipt details
+    receipt_number = models.CharField(max_length=50, unique=True)
+    receipt_date = models.DateField()
+    amount_received = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = models.CharField(max_length=20)
+
+    # Additional info
+    received_from = models.CharField(max_length=255)  # Client name
+    towards = models.CharField(max_length=255, default='Payment against invoice')
+    notes = models.TextField(blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-receipt_date', '-created_at']
+        verbose_name = "Receipt"
+        verbose_name_plural = "Receipts"
+
+    def __str__(self):
+        return f"Receipt {self.receipt_number} - ₹{self.amount_received}"
+
+
 class EmailSettings(models.Model):
     """Email configuration settings for sending invoices"""
     organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name='email_settings')
@@ -404,3 +441,234 @@ class InvoiceFormatSettings(models.Model):
 
     def __str__(self):
         return f"Invoice Format Settings for {self.organization.name}"
+
+
+class SubscriptionPlan(models.Model):
+    """
+    Subscription plans that organizations can subscribe to.
+    Managed by super admin only.
+    """
+    BILLING_CYCLE_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+
+    name = models.CharField(max_length=100)  # Free, Basic, Professional, Enterprise
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES, default='monthly')
+    trial_days = models.IntegerField(default=0)  # Free trial period in days
+
+    # Feature Limits
+    max_users = models.IntegerField(default=1, help_text="Maximum users allowed")
+    max_invoices_per_month = models.IntegerField(default=100, help_text="Maximum invoices per month")
+    max_storage_gb = models.IntegerField(default=1, help_text="Maximum storage in GB")
+
+    # Features (JSON field for flexible feature flags)
+    features = models.JSONField(default=dict, blank=True, help_text='{"email_support": true, "api_access": false}')
+
+    # Display & Status
+    is_active = models.BooleanField(default=True, help_text="Plan is available for subscription")
+    is_visible = models.BooleanField(default=True, help_text="Show on pricing page")
+    sort_order = models.IntegerField(default=0, help_text="Display order on pricing page")
+    highlight = models.BooleanField(default=False, help_text="Highlight as 'Most Popular'")
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Subscription Plan"
+        verbose_name_plural = "Subscription Plans"
+        ordering = ['sort_order', 'price']
+
+    def __str__(self):
+        return f"{self.name} - ₹{self.price}/{self.billing_cycle}"
+
+
+class Coupon(models.Model):
+    """
+    Discount coupons that can be redeemed by organizations.
+    Created and managed by super admin only.
+    """
+    DISCOUNT_TYPE_CHOICES = [
+        ('percentage', 'Percentage Discount'),
+        ('fixed', 'Fixed Amount Discount'),
+        ('extended_period', 'Extended Period'),
+    ]
+
+    code = models.CharField(max_length=50, unique=True, help_text="Coupon code (e.g., WELCOME20)")
+    name = models.CharField(max_length=100, help_text="Internal name for reference")
+    description = models.TextField(blank=True, help_text="Description of the offer")
+
+    # Discount Details
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES)
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2,
+                                        help_text="20 for 20%, 500 for ₹500, 30 for 30 days")
+
+    # Applicable Plans (if empty, applies to all plans)
+    applicable_plans = models.ManyToManyField(SubscriptionPlan, blank=True, related_name='coupons',
+                                             help_text="Leave empty to apply to all plans")
+
+    # Validity Period
+    valid_from = models.DateTimeField(help_text="Coupon valid from this date")
+    valid_until = models.DateTimeField(help_text="Coupon expires after this date")
+
+    # Usage Limits
+    max_total_uses = models.IntegerField(null=True, blank=True,
+                                        help_text="Maximum total redemptions (leave empty for unlimited)")
+    max_uses_per_user = models.IntegerField(default=1,
+                                           help_text="Maximum times one organization can use this")
+    current_usage_count = models.IntegerField(default=0, editable=False,
+                                             help_text="Current total usage count")
+
+    # Status
+    is_active = models.BooleanField(default=True, help_text="Coupon is active and can be redeemed")
+
+    # Audit
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                  related_name='created_coupons')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Coupon"
+        verbose_name_plural = "Coupons"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.code} - {self.discount_type} ({self.discount_value})"
+
+    def is_valid(self):
+        """Check if coupon is currently valid"""
+        from django.utils import timezone
+        now = timezone.now()
+
+        if not self.is_active:
+            return False, "Coupon is not active"
+
+        if now < self.valid_from:
+            return False, "Coupon not yet valid"
+
+        if now > self.valid_until:
+            return False, "Coupon has expired"
+
+        if self.max_total_uses and self.current_usage_count >= self.max_total_uses:
+            return False, "Coupon usage limit reached"
+
+        return True, "Valid"
+
+    def can_redeem(self, organization):
+        """Check if organization can redeem this coupon"""
+        # Check if coupon is valid
+        is_valid, message = self.is_valid()
+        if not is_valid:
+            return False, message
+
+        # Check per-user usage limit
+        usage_count = self.usages.filter(organization=organization).count()
+        if usage_count >= self.max_uses_per_user:
+            return False, f"You have already used this coupon {self.max_uses_per_user} time(s)"
+
+        return True, "Can redeem"
+
+
+class CouponUsage(models.Model):
+    """
+    Record of coupon redemptions by organizations.
+    """
+    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name='usages')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='coupon_usages')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='coupon_usages',
+                            help_text="User who redeemed the coupon")
+
+    # Subscription details
+    subscription = models.ForeignKey('Subscription', on_delete=models.CASCADE,
+                                    related_name='coupon_usages', null=True, blank=True)
+
+    # Applied Discount
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                         help_text="Actual discount amount applied")
+    extended_days = models.IntegerField(default=0, help_text="Extra days added to subscription")
+
+    # Timestamp
+    used_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Coupon Usage"
+        verbose_name_plural = "Coupon Usages"
+        ordering = ['-used_at']
+
+    def __str__(self):
+        return f"{self.coupon.code} used by {self.organization.name}"
+
+
+class Subscription(models.Model):
+    """
+    Organization's subscription to a plan.
+    """
+    STATUS_CHOICES = [
+        ('trial', 'Trial'),
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE,
+                                       related_name='subscription_detail')
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='subscriptions')
+
+    # Subscription Period
+    start_date = models.DateField()
+    end_date = models.DateField()
+    trial_end_date = models.DateField(null=True, blank=True, help_text="End of trial period")
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='trial')
+    auto_renew = models.BooleanField(default=True, help_text="Automatically renew subscription")
+
+    # Payment Details
+    last_payment_date = models.DateField(null=True, blank=True)
+    next_billing_date = models.DateField(null=True, blank=True)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Coupon Applied
+    coupon_applied = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='applied_subscriptions',
+                                      help_text="Coupon used for this subscription")
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Subscription"
+        verbose_name_plural = "Subscriptions"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.plan.name} ({self.status})"
+
+    def is_active(self):
+        """Check if subscription is currently active"""
+        from django.utils import timezone
+        from datetime import date
+
+        if self.status == 'cancelled':
+            return False
+
+        if self.status == 'trial' and self.trial_end_date:
+            return date.today() <= self.trial_end_date
+
+        return date.today() <= self.end_date
+
+    def days_remaining(self):
+        """Calculate days remaining in subscription"""
+        from datetime import date
+
+        if self.status == 'trial' and self.trial_end_date:
+            delta = self.trial_end_date - date.today()
+        else:
+            delta = self.end_date - date.today()
+
+        return max(0, delta.days)

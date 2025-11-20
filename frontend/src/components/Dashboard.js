@@ -10,6 +10,8 @@ import Settings from './Settings';
 import Profile from './Profile';
 import OrganizationSwitcher from './OrganizationSwitcher';
 import OrganizationSettings from '../pages/OrganizationSettings';
+import PricingPlans from './PricingPlans';
+import MySubscription from './MySubscription';
 
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -65,6 +67,10 @@ function Dashboard({ user, onLogout }) {
         return <Settings />;
       case 'organization':
         return <OrganizationSettings />;
+      case 'pricing':
+        return <PricingPlans />;
+      case 'subscription':
+        return <MySubscription />;
       case 'profile':
         return <Profile onLogout={onLogout} />;
       default:
@@ -135,6 +141,8 @@ function Dashboard({ user, onLogout }) {
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
       case 'organization': return 'Organization Settings';
+      case 'pricing': return 'Subscription Plans';
+      case 'subscription': return 'My Subscription';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
     }
@@ -231,6 +239,22 @@ function Dashboard({ user, onLogout }) {
           >
             <span className="nav-icon">🏢</span>
             <span className="nav-text">Organization</span>
+          </a>
+          <a
+            href="#subscription"
+            className={`nav-item ${activeMenu === 'subscription' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('subscription'); }}
+          >
+            <span className="nav-icon">💼</span>
+            <span className="nav-text">My Subscription</span>
+          </a>
+          <a
+            href="#pricing"
+            className={`nav-item ${activeMenu === 'pricing' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('pricing'); }}
+          >
+            <span className="nav-icon">💳</span>
+            <span className="nav-text">Upgrade Plan</span>
           </a>
         </nav>
 
