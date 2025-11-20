@@ -30,6 +30,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  TextField,
   Snackbar,
   Alert,
 } from '@mui/material';
@@ -72,6 +73,21 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [planChangeDialog, setPlanChangeDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [orgDetailsDialog, setOrgDetailsDialog] = useState(false);
+  const [orgMembersDialog, setOrgMembersDialog] = useState(false);
+  const [orgMembers, setOrgMembers] = useState([]);
+  const [userProfileDialog, setUserProfileDialog] = useState(false);
+  const [userOrgsDialog, setUserOrgsDialog] = useState(false);
+  const [userOrganizations, setUserOrganizations] = useState([]);
+  const [emailConfig, setEmailConfig] = useState({
+    host: '',
+    port: '',
+    username: '',
+    password: '',
+    use_tls: true,
+    from_email: ''
+  });
+  const [savingEmail, setSavingEmail] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -221,27 +237,61 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const handleViewOrgDetails = () => {
     handleOrgMenuClose();
-    showSnackbar(`Viewing details for ${selectedOrg?.name}`, 'info');
+    setOrgDetailsDialog(true);
   };
 
-  const handleViewOrgMembers = () => {
+  const handleViewOrgMembers = async () => {
     handleOrgMenuClose();
-    showSnackbar(`Viewing members for ${selectedOrg?.name}`, 'info');
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_BASE_URL}/organizations/${selectedOrg.id}/members/`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setOrgMembers(response.data);
+      setOrgMembersDialog(true);
+    } catch (error) {
+      console.error('Error loading members:', error);
+      showSnackbar('Failed to load organization members', 'error');
+    }
   };
 
   const handleViewUserProfile = () => {
     handleUserMenuClose();
-    showSnackbar(`Viewing profile for ${selectedUser?.username}`, 'info');
+    setUserProfileDialog(true);
   };
 
-  const handleViewUserOrganizations = () => {
+  const handleViewUserOrganizations = async () => {
     handleUserMenuClose();
-    showSnackbar(`Viewing organizations for ${selectedUser?.username}`, 'info');
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_BASE_URL}/users/${selectedUser.id}/organizations/`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setUserOrganizations(response.data);
+      setUserOrgsDialog(true);
+    } catch (error) {
+      console.error('Error loading user organizations:', error);
+      showSnackbar('Failed to load user organizations', 'error');
+    }
   };
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     handleUserMenuClose();
-    showSnackbar(`Password reset email sent to ${selectedUser?.email}`, 'info');
+    try {
+      const token = localStorage.getItem('access_token');
+      await axios.post(
+        `${API_BASE_URL}/users/${selectedUser.id}/reset-password/`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar(`Password reset email sent to ${selectedUser?.email}`, 'success');
+    } catch (error) {
+      console.error('Error sending password reset:', error);
+      const errorMsg = error.response?.data?.error || 'Failed to send password reset email. Please configure email settings first.';
+      showSnackbar(errorMsg, 'error');
+    }
   };
 
   const getPageTitle = () => {
@@ -1091,9 +1141,127 @@ const SuperAdminDashboard = ({ onLogout }) => {
     );
   };
 
+  const handleEmailConfigChange = (field, value) => {
+    setEmailConfig(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveEmailConfig = async () => {
+    setSavingEmail(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      await axios.post(
+        `${API_BASE_URL}/superadmin/email-config/`,
+        emailConfig,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar('Email configuration saved successfully', 'success');
+    } catch (error) {
+      console.error('Error saving email config:', error);
+      showSnackbar('Failed to save email configuration', 'error');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const renderSettingsContent = () => {
     return (
       <>
+        {/* Email Configuration */}
+        <Paper sx={{ p: 4, borderRadius: 3, mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>Email Configuration</Typography>
+              <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
+                Configure SMTP settings for sending emails (password reset, notifications, etc.)
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              onClick={handleSaveEmailConfig}
+              disabled={savingEmail}
+              sx={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                textTransform: 'none',
+                fontWeight: 'bold'
+              }}
+            >
+              {savingEmail ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save Configuration'}
+            </Button>
+          </Box>
+
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="SMTP Host"
+                value={emailConfig.host}
+                onChange={(e) => handleEmailConfigChange('host', e.target.value)}
+                placeholder="smtp.gmail.com"
+                helperText="SMTP server hostname"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="SMTP Port"
+                type="number"
+                value={emailConfig.port}
+                onChange={(e) => handleEmailConfigChange('port', e.target.value)}
+                placeholder="587"
+                helperText="Usually 587 for TLS or 465 for SSL"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Username / Email"
+                value={emailConfig.username}
+                onChange={(e) => handleEmailConfigChange('username', e.target.value)}
+                placeholder="your-email@example.com"
+                helperText="SMTP authentication username"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="password"
+                label="Password"
+                value={emailConfig.password}
+                onChange={(e) => handleEmailConfigChange('password', e.target.value)}
+                placeholder="••••••••"
+                helperText="SMTP authentication password"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="From Email"
+                value={emailConfig.from_email}
+                onChange={(e) => handleEmailConfigChange('from_email', e.target.value)}
+                placeholder="noreply@nexinvo.com"
+                helperText="Default sender email address"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Typography sx={{ fontWeight: 600, color: '#111827' }}>Use TLS</Typography>
+                  <Chip
+                    label={emailConfig.use_tls ? "ON" : "OFF"}
+                    onClick={() => handleEmailConfigChange('use_tls', !emailConfig.use_tls)}
+                    sx={{
+                      bgcolor: emailConfig.use_tls ? '#d1fae5' : '#fee2e2',
+                      color: emailConfig.use_tls ? '#065f46' : '#991b1b',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+
         {/* Settings Categories */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           {/* Feature Flags */}
@@ -1465,6 +1633,277 @@ const SuperAdminDashboard = ({ onLogout }) => {
             sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
           >
             Update Plan
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Organization Details Dialog */}
+      <Dialog
+        open={orgDetailsDialog}
+        onClose={() => setOrgDetailsDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
+          Organization Details
+        </DialogTitle>
+        <DialogContent sx={{ p: 4 }}>
+          {selectedOrg && (
+            <Box>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                    {selectedOrg.name}
+                  </Typography>
+                  <Chip
+                    label={selectedOrg.plan.toUpperCase()}
+                    size="small"
+                    sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold' }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Organization ID</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{selectedOrg.id}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Member Count</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{selectedOrg.member_count || 0} members</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Status</Typography>
+                    <Chip
+                      label={selectedOrg.is_active ? 'Active' : 'Inactive'}
+                      size="small"
+                      sx={{
+                        bgcolor: selectedOrg.is_active ? '#d1fae5' : '#fee2e2',
+                        color: selectedOrg.is_active ? '#065f46' : '#991b1b',
+                        fontWeight: 'bold'
+                      }}
+                    />
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Created At</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                      {new Date(selectedOrg.created_at).toLocaleString('en-IN')}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button onClick={() => setOrgDetailsDialog(false)} sx={{ textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Organization Members Dialog */}
+      <Dialog
+        open={orgMembersDialog}
+        onClose={() => setOrgMembersDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
+          Organization Members - {selectedOrg?.name}
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          {orgMembers.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography sx={{ color: '#6b7280' }}>No members found</Typography>
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>User</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {orgMembers.map((member) => (
+                    <TableRow key={member.id}>
+                      <TableCell>{member.user?.username || 'N/A'}</TableCell>
+                      <TableCell>{member.user?.email || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Chip label={member.role.toUpperCase()} size="small" sx={{ bgcolor: '#f3f4f6' }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={member.is_active ? 'Active' : 'Inactive'}
+                          size="small"
+                          sx={{
+                            bgcolor: member.is_active ? '#d1fae5' : '#fee2e2',
+                            color: member.is_active ? '#065f46' : '#991b1b'
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button onClick={() => setOrgMembersDialog(false)} sx={{ textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* User Profile Dialog */}
+      <Dialog
+        open={userProfileDialog}
+        onClose={() => setUserProfileDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
+          User Profile
+        </DialogTitle>
+        <DialogContent sx={{ p: 4 }}>
+          {selectedUser && (
+            <Box>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                    <Avatar sx={{ bgcolor: '#8b5cf6', width: 56, height: 56, fontSize: '1.5rem' }}>
+                      {selectedUser.username?.charAt(0).toUpperCase() || 'U'}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        {selectedUser.username}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#6b7280' }}>{selectedUser.email}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>User ID</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{selectedUser.id}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Role</Typography>
+                    <Chip
+                      label={selectedUser.is_superuser ? 'SUPERADMIN' : selectedUser.role?.toUpperCase() || 'USER'}
+                      size="small"
+                      sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold' }}
+                    />
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Status</Typography>
+                    <Chip
+                      label={selectedUser.is_active ? 'Active' : 'Inactive'}
+                      size="small"
+                      sx={{
+                        bgcolor: selectedUser.is_active ? '#d1fae5' : '#fee2e2',
+                        color: selectedUser.is_active ? '#065f46' : '#991b1b',
+                        fontWeight: 'bold'
+                      }}
+                    />
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Organizations</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                      {selectedUser.organization_count || 0} organizations
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Date Joined</Typography>
+                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                      {new Date(selectedUser.date_joined).toLocaleString('en-IN')}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button onClick={() => setUserProfileDialog(false)} sx={{ textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* User Organizations Dialog */}
+      <Dialog
+        open={userOrgsDialog}
+        onClose={() => setUserOrgsDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
+          User Organizations - {selectedUser?.username}
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          {userOrganizations.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography sx={{ color: '#6b7280' }}>User is not a member of any organizations</Typography>
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organization</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Role</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Plan</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {userOrganizations.map((membership) => (
+                    <TableRow key={membership.id}>
+                      <TableCell>{membership.organization?.name || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Chip label={membership.role.toUpperCase()} size="small" sx={{ bgcolor: '#f3f4f6' }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={membership.organization?.plan?.toUpperCase() || 'N/A'} size="small" sx={{ bgcolor: '#ddd6fe', color: '#5b21b6' }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={membership.is_active ? 'Active' : 'Inactive'}
+                          size="small"
+                          sx={{
+                            bgcolor: membership.is_active ? '#d1fae5' : '#fee2e2',
+                            color: membership.is_active ? '#065f46' : '#991b1b'
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button onClick={() => setUserOrgsDialog(false)} sx={{ textTransform: 'none' }}>
+            Close
           </Button>
         </DialogActions>
       </Dialog>
