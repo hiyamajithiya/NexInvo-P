@@ -437,210 +437,291 @@ const SubscriptionPlans = () => {
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3 }
+        }}
       >
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>
+        <DialogTitle sx={{
+          fontWeight: 'bold',
+          color: '#111827',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          py: 3
+        }}>
           {editMode ? 'Edit Subscription Plan' : 'Create New Subscription Plan'}
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            {/* Basic Information */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1 }}>
-                Basic Information
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Plan Name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Sort Order"
-                name="sort_order"
-                type="number"
-                value={formData.sort_order}
-                onChange={handleInputChange}
-                helperText="Lower numbers appear first"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                multiline
-                rows={2}
-              />
-            </Grid>
+        <DialogContent sx={{ p: 4 }}>
+          <Grid container spacing={4} sx={{ mt: 0.5 }}>
+            {/* Left Column */}
+            <Grid item xs={12} md={6}>
+              {/* Basic Information Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f9fafb', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+                  Basic Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Plan Name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="e.g., Professional Plan"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Description"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      multiline
+                      rows={3}
+                      placeholder="Brief description of the plan features and benefits"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Sort Order"
+                      name="sort_order"
+                      type="number"
+                      value={formData.sort_order}
+                      onChange={handleInputChange}
+                      helperText="Lower numbers appear first (0, 1, 2...)"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
 
-            {/* Pricing */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Pricing
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Price"
-                name="price"
-                type="number"
-                value={formData.price}
-                onChange={handleInputChange}
-                required
-                InputProps={{
-                  startAdornment: <Typography sx={{ mr: 1 }}>₹</Typography>,
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Billing Cycle</InputLabel>
-                <Select
-                  name="billing_cycle"
-                  value={formData.billing_cycle}
+              {/* Pricing Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f0fdf4', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#10b981', borderRadius: 1, mr: 2 }} />
+                  Pricing
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Price"
+                      name="price"
+                      type="number"
+                      value={formData.price}
+                      onChange={handleInputChange}
+                      required
+                      InputProps={{
+                        startAdornment: <Typography sx={{ mr: 1, fontWeight: 'bold' }}>₹</Typography>,
+                      }}
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth sx={{ bgcolor: 'white' }}>
+                      <InputLabel>Billing Cycle</InputLabel>
+                      <Select
+                        name="billing_cycle"
+                        value={formData.billing_cycle}
+                        onChange={handleInputChange}
+                        label="Billing Cycle"
+                      >
+                        <MenuItem value="monthly">Monthly</MenuItem>
+                        <MenuItem value="yearly">Yearly</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Trial Period (days)"
+                      name="trial_days"
+                      type="number"
+                      value={formData.trial_days}
+                      onChange={handleInputChange}
+                      helperText="Set to 0 for no trial period"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Features Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#fef3c7', borderRadius: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#f59e0b', borderRadius: 1, mr: 2 }} />
+                  Features
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="Plan Features"
+                  name="features"
+                  value={formData.features}
                   onChange={handleInputChange}
-                  label="Billing Cycle"
-                >
-                  <MenuItem value="monthly">Monthly</MenuItem>
-                  <MenuItem value="yearly">Yearly</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Trial Period (days)"
-                name="trial_days"
-                type="number"
-                value={formData.trial_days}
-                onChange={handleInputChange}
-              />
+                  multiline
+                  rows={6}
+                  helperText="Enter one feature per line"
+                  placeholder={"Priority Support\nAPI Access\nCustom Branding\nAdvanced Analytics\n24/7 Customer Service"}
+                  sx={{ bgcolor: 'white' }}
+                />
+              </Paper>
             </Grid>
 
-            {/* Limits */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Limits
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Max Users"
-                name="max_users"
-                type="number"
-                value={formData.max_users}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Max Invoices/Month"
-                name="max_invoices_per_month"
-                type="number"
-                value={formData.max_invoices_per_month}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField
-                fullWidth
-                label="Storage (GB)"
-                name="max_storage_gb"
-                type="number"
-                value={formData.max_storage_gb}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
+            {/* Right Column */}
+            <Grid item xs={12} md={6}>
+              {/* Limits Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#dbeafe', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#3b82f6', borderRadius: 1, mr: 2 }} />
+                  Usage Limits
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Max Users"
+                      name="max_users"
+                      type="number"
+                      value={formData.max_users}
+                      onChange={handleInputChange}
+                      required
+                      helperText="Maximum number of users allowed"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Max Invoices Per Month"
+                      name="max_invoices_per_month"
+                      type="number"
+                      value={formData.max_invoices_per_month}
+                      onChange={handleInputChange}
+                      required
+                      helperText="Monthly invoice generation limit"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Storage (GB)"
+                      name="max_storage_gb"
+                      type="number"
+                      value={formData.max_storage_gb}
+                      onChange={handleInputChange}
+                      required
+                      helperText="Total storage space in gigabytes"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
 
-            {/* Features */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Features
-              </Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Features"
-                name="features"
-                value={formData.features}
-                onChange={handleInputChange}
-                multiline
-                rows={4}
-                helperText="Enter one feature per line"
-                placeholder="Basic Support&#10;Email Notifications&#10;Custom Branding"
-              />
-            </Grid>
+              {/* Status & Visibility Section */}
+              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f3e8ff', borderRadius: 2, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+                  Status & Visibility
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Active</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Plan is available for subscription</Typography>
+                      </Box>
+                      <Switch
+                        checked={formData.is_active}
+                        onChange={handleInputChange}
+                        name="is_active"
+                        color="success"
+                      />
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Visible to Public</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Show plan on pricing page</Typography>
+                      </Box>
+                      <Switch
+                        checked={formData.is_visible}
+                        onChange={handleInputChange}
+                        name="is_visible"
+                        color="primary"
+                      />
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>Featured Plan</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Highlight as recommended choice</Typography>
+                      </Box>
+                      <Switch
+                        checked={formData.highlight}
+                        onChange={handleInputChange}
+                        name="highlight"
+                        color="warning"
+                      />
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Paper>
 
-            {/* Status & Visibility */}
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#374151', mb: 1, mt: 2 }}>
-                Status & Visibility
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.is_active}
-                    onChange={handleInputChange}
-                    name="is_active"
+              {/* Preview Card */}
+              <Paper elevation={2} sx={{ p: 3, borderRadius: 2, border: formData.highlight ? '2px solid #f59e0b' : '1px solid #e5e7eb' }}>
+                <Typography variant="caption" sx={{ color: '#6b7280', mb: 1, display: 'block' }}>Preview</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                  {formData.name || 'Plan Name'}
+                </Typography>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#8b5cf6', display: 'inline' }}>
+                    ₹{formData.price || '0'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#6b7280', display: 'inline', ml: 1 }}>
+                    / {formData.billing_cycle === 'monthly' ? 'month' : 'year'}
+                  </Typography>
+                </Box>
+                {formData.trial_days > 0 && (
+                  <Chip
+                    label={`${formData.trial_days} days free trial`}
+                    size="small"
+                    sx={{ mb: 2, bgcolor: '#dbeafe', color: '#1e40af' }}
                   />
-                }
-                label="Active"
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.is_visible}
-                    onChange={handleInputChange}
-                    name="is_visible"
-                  />
-                }
-                label="Visible to Public"
-              />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.highlight}
-                    onChange={handleInputChange}
-                    name="highlight"
-                  />
-                }
-                label="Featured Plan"
-              />
+                )}
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 1 }}>
+                  {formData.description || 'Plan description will appear here'}
+                </Typography>
+              </Paper>
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
+        <DialogActions sx={{ p: 3, bgcolor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+          <Button
+            onClick={handleCloseDialog}
+            sx={{ textTransform: 'none', fontWeight: 'bold' }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               textTransform: 'none',
+              fontWeight: 'bold',
+              px: 4,
+              py: 1
             }}
           >
             {editMode ? 'Update Plan' : 'Create Plan'}
