@@ -1096,18 +1096,24 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     """Get dashboard statistics"""
-    user = request.user
+    organization = request.organization
+
+    # Check if user has an organization
+    if not organization:
+        return Response({
+            'error': 'No organization found for user'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     # Total invoices (all types)
-    total_invoices = Invoice.objects.filter(user=user).count()
+    total_invoices = Invoice.objects.filter(organization=organization).count()
 
     # Total revenue - Sum of all payments received
-    revenue = Payment.objects.filter(user=user).aggregate(
+    revenue = Payment.objects.filter(organization=organization).aggregate(
         total=Sum('amount')
     )['total'] or 0
 
     # Calculate pending amount - invoices with unpaid balance
-    all_invoices = Invoice.objects.filter(user=user).exclude(status='cancelled')
+    all_invoices = Invoice.objects.filter(organization=organization).exclude(status='cancelled')
     pending = 0
 
     for invoice in all_invoices:
@@ -1122,7 +1128,7 @@ def dashboard_stats(request):
             pending += balance
 
     # Total clients
-    clients = Client.objects.filter(user=user).count()
+    clients = Client.objects.filter(organization=organization).count()
 
     return Response({
         'totalInvoices': total_invoices,
