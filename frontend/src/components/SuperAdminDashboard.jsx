@@ -56,6 +56,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [orgMenuAnchor, setOrgMenuAnchor] = useState(null);
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
+  const [selectedOrg, setSelectedOrg] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -110,6 +114,26 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleOrgMenuOpen = (event, org) => {
+    setOrgMenuAnchor(event.currentTarget);
+    setSelectedOrg(org);
+  };
+
+  const handleOrgMenuClose = () => {
+    setOrgMenuAnchor(null);
+    setSelectedOrg(null);
+  };
+
+  const handleUserMenuOpen = (event, user) => {
+    setUserMenuAnchor(event.currentTarget);
+    setSelectedUser(user);
+  };
+
+  const handleUserMenuClose = () => {
+    setUserMenuAnchor(null);
+    setSelectedUser(null);
   };
 
   const getPageTitle = () => {
@@ -413,7 +437,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     })}
                   </TableCell>
                   <TableCell>
-                    <IconButton size="small">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleOrgMenuOpen(e, org)}
+                    >
                       <MoreVertIcon />
                     </IconButton>
                   </TableCell>
@@ -422,6 +449,38 @@ const SuperAdminDashboard = ({ onLogout }) => {
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Organization Action Menu */}
+        <Menu
+          anchorEl={orgMenuAnchor}
+          open={Boolean(orgMenuAnchor)}
+          onClose={handleOrgMenuClose}
+          PaperProps={{
+            sx: { boxShadow: 3, borderRadius: 2 }
+          }}
+        >
+          <MenuItem onClick={handleOrgMenuClose}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SettingsIcon fontSize="small" sx={{ color: '#6b7280' }} />
+              <Typography>View Details</Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem onClick={handleOrgMenuClose}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PeopleIcon fontSize="small" sx={{ color: '#6b7280' }} />
+              <Typography>View Members</Typography>
+            </Box>
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={handleOrgMenuClose}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
+              <Typography sx={{ color: '#ef4444' }}>
+                {selectedOrg?.is_active ? 'Deactivate' : 'Activate'}
+              </Typography>
+            </Box>
+          </MenuItem>
+        </Menu>
       </Paper>
     );
   };
@@ -484,7 +543,11 @@ const SuperAdminDashboard = ({ onLogout }) => {
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>All System Users</Typography>
-            <Button variant="contained" sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textTransform: 'none' }}>
+            <Button
+              variant="contained"
+              sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textTransform: 'none' }}
+              onClick={() => alert('Add New User feature coming soon! Users can currently register through the registration page.')}
+            >
               Add New User
             </Button>
           </Box>
@@ -549,7 +612,12 @@ const SuperAdminDashboard = ({ onLogout }) => {
                         {new Date(user.date_joined).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </TableCell>
                       <TableCell>
-                        <IconButton size="small"><MoreVertIcon /></IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleUserMenuOpen(e, user)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -557,6 +625,45 @@ const SuperAdminDashboard = ({ onLogout }) => {
               </Table>
             </TableContainer>
           )}
+
+          {/* User Action Menu */}
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={handleUserMenuClose}
+            PaperProps={{
+              sx: { boxShadow: 3, borderRadius: 2 }
+            }}
+          >
+            <MenuItem onClick={handleUserMenuClose}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AccountCircleIcon fontSize="small" sx={{ color: '#6b7280' }} />
+                <Typography>View Profile</Typography>
+              </Box>
+            </MenuItem>
+            <MenuItem onClick={handleUserMenuClose}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <BusinessIcon fontSize="small" sx={{ color: '#6b7280' }} />
+                <Typography>View Organizations</Typography>
+              </Box>
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleUserMenuClose}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SettingsIcon fontSize="small" sx={{ color: '#6b7280' }} />
+                <Typography>Reset Password</Typography>
+              </Box>
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleUserMenuClose}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
+                <Typography sx={{ color: '#ef4444' }}>
+                  {selectedUser?.is_active ? 'Deactivate User' : 'Activate User'}
+                </Typography>
+              </Box>
+            </MenuItem>
+          </Menu>
         </Paper>
       </>
     );
@@ -847,60 +954,6 @@ const SuperAdminDashboard = ({ onLogout }) => {
       <>
         {/* Settings Categories */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-          {/* System Configuration */}
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>System Configuration</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Maintenance Mode</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Enable to put system in maintenance mode</Typography>
-                <Button variant="outlined" size="small">Configure</Button>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Email Settings</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Configure SMTP and email templates</Typography>
-                <Button variant="outlined" size="small">Configure</Button>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Payment Gateway</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Setup Razorpay, Stripe integration</Typography>
-                <Button variant="outlined" size="small">Configure</Button>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Backup & Recovery</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Database backup configuration</Typography>
-                <Button variant="outlined" size="small">Configure</Button>
-              </Box>
-            </Box>
-          </Paper>
-
-          {/* Security Settings */}
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Security & Access</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Two-Factor Authentication</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Enforce 2FA for all admins</Typography>
-                <Chip label="Enabled" size="small" sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold' }} />
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Session Timeout</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Auto logout after 30 minutes</Typography>
-                <Button variant="outlined" size="small">Change</Button>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>IP Whitelist</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>Restrict admin access by IP</Typography>
-                <Button variant="outlined" size="small">Manage</Button>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#111827', mb: 1 }}>Audit Logs</Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>View system activity logs</Typography>
-                <Button variant="outlined" size="small">View Logs</Button>
-              </Box>
-            </Box>
-          </Paper>
-
           {/* Feature Flags */}
           <Paper sx={{ p: 3, borderRadius: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Feature Flags</Typography>
