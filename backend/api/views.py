@@ -1156,48 +1156,16 @@ def superadmin_stats(request):
     # Total users across all organizations
     total_users = User.objects.filter(is_active=True).count()
 
-    # Total invoices system-wide
-    total_invoices = Invoice.objects.count()
-
-    # Total revenue system-wide
-    total_revenue = Payment.objects.aggregate(total=Sum('amount'))['total'] or 0
-
-    # Active organizations (with at least one invoice in last 30 days)
+    # Active organizations (logged in within last 30 days)
+    # Note: Removed invoice-based activity tracking as invoices are confidential
     thirty_days_ago = datetime.now().date() - timedelta(days=30)
     sixty_days_ago = datetime.now().date() - timedelta(days=60)
-    active_orgs = Invoice.objects.filter(
-        invoice_date__gte=thirty_days_ago
-    ).values('organization').distinct().count()
 
-    # Previous month data for growth calculation
-    previous_month_revenue = Payment.objects.filter(
-        payment_date__gte=sixty_days_ago,
-        payment_date__lt=thirty_days_ago
-    ).aggregate(total=Sum('amount'))['total'] or 0
-
-    current_month_revenue = Payment.objects.filter(
-        payment_date__gte=thirty_days_ago
-    ).aggregate(total=Sum('amount'))['total'] or 0
-
-    # Calculate revenue growth percentage
-    revenue_growth = 0
-    if previous_month_revenue > 0:
-        revenue_growth = ((current_month_revenue - previous_month_revenue) / previous_month_revenue) * 100
-
-    # Previous month invoices for growth calculation
-    previous_month_invoices = Invoice.objects.filter(
-        invoice_date__gte=sixty_days_ago,
-        invoice_date__lt=thirty_days_ago
-    ).count()
-
-    current_month_invoices = Invoice.objects.filter(
-        invoice_date__gte=thirty_days_ago
-    ).count()
-
-    # Calculate invoice growth percentage
-    invoice_growth = 0
-    if previous_month_invoices > 0:
-        invoice_growth = ((current_month_invoices - previous_month_invoices) / previous_month_invoices) * 100
+    # Count organizations with recent user activity instead of invoice activity
+    active_orgs = Organization.objects.filter(
+        is_active=True,
+        memberships__user__last_login__gte=thirty_days_ago
+    ).distinct().count()
 
     # Organizations by plan
     plan_breakdown = {}
@@ -1212,36 +1180,40 @@ def superadmin_stats(request):
         created_at__gte=seven_days_ago
     ).count()
 
-    # Revenue trends (last 6 months)
+    # Subscription revenue trends (last 6 months) - only from subscription payments, not invoices
     six_months_ago = datetime.now().date() - timedelta(days=180)
-    revenue_by_month = Payment.objects.filter(
-        payment_date__gte=six_months_ago
+    from .models import Subscription
+
+    # Get subscription payments by month (not invoice payments - those are confidential)
+    subscription_by_month = Subscription.objects.filter(
+        last_payment_date__gte=six_months_ago,
+        amount_paid__gt=0
     ).annotate(
-        month=TruncMonth('payment_date')
+        month=TruncMonth('last_payment_date')
     ).values('month').annotate(
-        revenue=Sum('amount'),
+        revenue=Sum('amount_paid'),
         count=Count('id')
     ).order_by('month')
 
     revenue_trends = []
-    for item in revenue_by_month:
-        # Get invoice count for the month
-        invoice_count = Invoice.objects.filter(
-            invoice_date__year=item['month'].year,
-            invoice_date__month=item['month'].month
-        ).count()
-
-        # Get user count for the month
+    for item in subscription_by_month:
+        # Get new user registrations for the month (public data)
         user_count = User.objects.filter(
             date_joined__year=item['month'].year,
             date_joined__month=item['month'].month
         ).count()
 
+        # Get new organizations for the month (public data)
+        org_count = Organization.objects.filter(
+            created_at__year=item['month'].year,
+            created_at__month=item['month'].month
+        ).count()
+
         revenue_trends.append({
             'month': item['month'].strftime('%b'),
-            'revenue': float(item['revenue'] or 0),
-            'invoices': invoice_count,
-            'users': user_count
+            'revenue': float(item['revenue'] or 0),  # Only subscription revenue, not invoice revenue
+            'users': user_count,
+            'organizations': org_count
         })
 
     # User statistics
@@ -1252,46 +1224,31 @@ def superadmin_stats(request):
     ).values('user').distinct().count()
     superadmins = User.objects.filter(is_superuser=True, is_active=True).count()
 
-    # Top performing organizations with growth calculation
+    # Top organizations by subscription plan and user count (no invoice/revenue data)
+    # Note: Removed invoice and revenue metrics as they are confidential tenant data
     top_orgs = Organization.objects.filter(
         is_active=True
     ).annotate(
-        invoice_count=Count('invoices'),
-        total_revenue=Sum('invoices__payments__amount'),
-        recent_revenue=Sum('invoices__payments__amount',
-                          filter=Q(invoices__payments__payment_date__gte=thirty_days_ago)),
-        previous_revenue=Sum('invoices__payments__amount',
-                           filter=Q(invoices__payments__payment_date__gte=sixty_days_ago,
-                                  invoices__payments__payment_date__lt=thirty_days_ago))
-    ).order_by('-total_revenue')[:10]
+        user_count=Count('memberships', filter=Q(memberships__is_active=True))
+    ).order_by('-created_at')[:10]  # Show most recent organizations instead
 
     top_organizations = []
     for org in top_orgs:
-        # Calculate growth percentage
-        growth = 0
-        if org.previous_revenue and org.previous_revenue > 0:
-            recent = org.recent_revenue or 0
-            previous = org.previous_revenue or 0
-            growth = ((recent - previous) / previous) * 100
-
         top_organizations.append({
-            'id': org.id,
+            'id': str(org.id),
             'name': org.name,
             'slug': org.slug,
             'plan': org.plan,
-            'invoice_count': org.invoice_count or 0,
-            'revenue': float(org.total_revenue or 0),
-            'growth': round(growth, 1),
+            'user_count': org.user_count or 0,
             'created_at': org.created_at.isoformat() if org.created_at else None
         })
 
-    # Monthly recurring revenue calculation
-    paid_subscriptions = total_organizations - plan_breakdown.get('free', 0)
-
-    # Pending payments (invoices not fully paid)
-    pending_invoices = Invoice.objects.filter(
-        status__in=['draft', 'sent']
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
+    # Monthly recurring revenue calculation (from subscriptions only, not invoices)
+    from .models import Subscription
+    total_subscription_revenue = Subscription.objects.filter(
+        status='active',
+        auto_renew=True
+    ).aggregate(total=Sum('amount_paid'))['total'] or 0
 
     # Recent transactions (last 10)
     from .models import Subscription, CouponUsage
@@ -1366,24 +1323,27 @@ def superadmin_stats(request):
     # In production, this should come from a monitoring service
     avg_processing_time = 0.8  # seconds (placeholder - would need actual monitoring)
 
+    # Count paid subscriptions
+    paid_subscriptions = Subscription.objects.filter(
+        status='active',
+        amount_paid__gt=0
+    ).count()
+
     return Response({
         'totalOrganizations': total_organizations,
         'totalUsers': total_users,
-        'totalInvoices': total_invoices,
-        'totalRevenue': float(total_revenue),
-        'revenueGrowth': round(revenue_growth, 1),
-        'invoiceGrowth': round(invoice_growth, 1),
+        # Invoice data removed - confidential tenant information
         'activeOrganizations': active_orgs,
         'planBreakdown': plan_breakdown,
         'recentOrganizations': recent_orgs,
-        'revenueTrends': revenue_trends,
+        'revenueTrends': revenue_trends,  # Subscription revenue only
         'activeUsers': active_users,
         'orgAdmins': org_admins,
         'superAdmins': superadmins,
-        'topOrganizations': top_organizations,
+        'topOrganizations': top_organizations,  # User count only, no invoice/revenue data
         'paidSubscriptions': paid_subscriptions,
-        'pendingPayments': float(pending_invoices),
-        'recentTransactions': recent_transactions,
+        'monthlyRecurringRevenue': float(total_subscription_revenue),
+        'recentTransactions': recent_transactions,  # Subscription payments only
         'systemInfo': system_info,
         'featureFlags': feature_flags,
         'avgProcessingTime': avg_processing_time

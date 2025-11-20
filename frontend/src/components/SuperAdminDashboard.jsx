@@ -168,29 +168,29 @@ const SuperAdminDashboard = ({ onLogout }) => {
             </div>
           </div>
 
-          <div className="stat-card green" onClick={() => setActiveMenu('analytics')}>
+          <div className="stat-card green" onClick={() => setActiveMenu('billing')}>
             <div className="stat-header">
               <div className="stat-icon-wrapper green-bg">
-                <span className="stat-icon-lg">📄</span>
-              </div>
-            </div>
-            <div className="stat-body">
-              <h3 className="stat-title">Total Invoices</h3>
-              <p className="stat-number">{stats?.totalInvoices || 0}</p>
-              <p className="stat-label">System-wide invoices</p>
-            </div>
-          </div>
-
-          <div className="stat-card orange" onClick={() => setActiveMenu('billing')}>
-            <div className="stat-header">
-              <div className="stat-icon-wrapper orange-bg">
                 <span className="stat-icon-lg">💰</span>
               </div>
             </div>
             <div className="stat-body">
-              <h3 className="stat-title">Total Revenue</h3>
-              <p className="stat-number">₹{(stats?.totalRevenue || 0).toLocaleString('en-IN')}</p>
-              <p className="stat-label">Processed through platform</p>
+              <h3 className="stat-title">MRR</h3>
+              <p className="stat-number">₹{(stats?.monthlyRecurringRevenue || 0).toLocaleString('en-IN')}</p>
+              <p className="stat-label">Monthly Recurring Revenue</p>
+            </div>
+          </div>
+
+          <div className="stat-card orange" onClick={() => setActiveMenu('analytics')}>
+            <div className="stat-header">
+              <div className="stat-icon-wrapper orange-bg">
+                <span className="stat-icon-lg">📊</span>
+              </div>
+            </div>
+            <div className="stat-body">
+              <h3 className="stat-title">Paid Subscriptions</h3>
+              <p className="stat-number">{stats?.paidSubscriptions || 0}</p>
+              <p className="stat-label">Active paid plans</p>
             </div>
           </div>
         </div>
@@ -593,18 +593,14 @@ const SuperAdminDashboard = ({ onLogout }) => {
           <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
               <Box sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #3b82f6' }}>
-                <ReceiptIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+                <AttachMoneyIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
               </Box>
               <Box>
-                <Typography variant="body2" sx={{ color: '#6b7280' }}>Invoices Generated</Typography>
-                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{stats?.totalInvoices || 0}</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280' }}>Monthly Recurring Revenue</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.monthlyRecurringRevenue || 0).toLocaleString('en-IN')}</Typography>
               </Box>
             </Box>
-            {stats?.invoiceGrowth !== undefined && (
-              <Typography variant="caption" sx={{ color: stats.invoiceGrowth >= 0 ? '#3b82f6' : '#ef4444' }}>
-                {stats.invoiceGrowth >= 0 ? '↑' : '↓'} {Math.abs(stats.invoiceGrowth).toFixed(1)}% from last month
-              </Typography>
-            )}
+            <Typography variant="caption" sx={{ color: '#6b7280' }}>Subscription revenue stream</Typography>
           </Paper>
 
           <Paper sx={{ p: 3 }}>
@@ -623,7 +619,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
         {/* Revenue Chart */}
         <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Revenue Trends (Last 6 Months)</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Subscription Revenue Trends (Last 6 Months)</Typography>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={revenueData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -631,25 +627,25 @@ const SuperAdminDashboard = ({ onLogout }) => {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="revenue" fill="#8b5cf6" radius={[8, 8, 0, 0]} name="Revenue (₹)" />
-              <Bar dataKey="invoices" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Invoices" />
+              <Bar dataKey="revenue" fill="#8b5cf6" radius={[8, 8, 0, 0]} name="Subscription Revenue (₹)" />
+              <Bar dataKey="users" fill="#3b82f6" radius={[8, 8, 0, 0]} name="New Users" />
+              <Bar dataKey="organizations" fill="#10b981" radius={[8, 8, 0, 0]} name="New Organizations" />
             </BarChart>
           </ResponsiveContainer>
         </Paper>
 
-        {/* Top Organizations */}
+        {/* Recent Organizations */}
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Top Performing Organizations</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Recent Organizations</Typography>
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Rank</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>#</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organization</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Plan</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Invoices</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Revenue</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Growth</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Users</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Created</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -657,7 +653,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                   <TableRow key={org.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
                     <TableCell>
                       <Chip
-                        label={`#${index + 1}`}
+                        label={`${index + 1}`}
                         size="small"
                         sx={{
                           bgcolor: index === 0 ? '#fef3c7' : index === 1 ? '#ddd6fe' : '#f3f4f6',
@@ -675,16 +671,13 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     <TableCell>
                       <Chip label={org.plan.toUpperCase()} size="small" sx={{ bgcolor: '#f3f4f6' }} />
                     </TableCell>
-                    <TableCell sx={{ color: '#6b7280' }}>{org.invoice_count || 0}</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{(org.revenue || 0).toLocaleString('en-IN')}</TableCell>
-                    <TableCell>
-                      {org.growth !== undefined && org.growth !== 0 ? (
-                        <Typography sx={{ color: org.growth >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                          {org.growth >= 0 ? '↑' : '↓'} {Math.abs(org.growth)}%
-                        </Typography>
-                      ) : (
-                        <Typography sx={{ color: '#9ca3af', fontWeight: 600 }}>-</Typography>
-                      )}
+                    <TableCell sx={{ color: '#6b7280' }}>{org.user_count || 0} users</TableCell>
+                    <TableCell sx={{ color: '#6b7280' }}>
+                      {org.created_at ? new Date(org.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      }) : '-'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -754,8 +747,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 <TrendingUpIcon sx={{ fontSize: 28, color: '#f59e0b' }} />
               </Box>
               <Box>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Pending Payments</Typography>
-                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.pendingPayments || 0).toLocaleString('en-IN')}</Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Monthly Recurring Revenue</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>₹{(stats?.monthlyRecurringRevenue || 0).toLocaleString('en-IN')}</Typography>
               </Box>
             </Box>
           </Paper>
@@ -763,7 +756,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
           <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ bgcolor: 'rgba(139, 92, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #8b5cf6' }}>
-                <SpeedIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+                <CheckCircleIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Active Orgs</Typography>
