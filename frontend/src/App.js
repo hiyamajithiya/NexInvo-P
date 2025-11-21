@@ -35,15 +35,21 @@ function App() {
       setIsSuperAdmin(true);
       setIsAuthenticated(true);
     } catch (error) {
-      // If forbidden, user is regular user
+      // If forbidden, user is regular user (not a superadmin)
       if (error.response?.status === 403) {
         setIsSuperAdmin(false);
         setIsAuthenticated(true);
-      } else {
-        // Token invalid or other error
+      } else if (error.response?.status === 401) {
+        // Only logout on 401 (Unauthorized - invalid/expired token)
         setIsAuthenticated(false);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+      } else {
+        // For other errors (500, network issues, etc.), assume regular user
+        // Don't logout - the token might still be valid
+        console.warn('Error checking superadmin status:', error);
+        setIsSuperAdmin(false);
+        setIsAuthenticated(true);
       }
     } finally {
       setLoading(false);
