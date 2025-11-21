@@ -3,6 +3,9 @@ Organization middleware for multi-tenant support.
 Sets the current organization context for each request.
 """
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib.auth.models import AnonymousUser
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 from .models import OrganizationMembership
 
 
@@ -13,12 +16,30 @@ class OrganizationMiddleware(MiddlewareMixin):
     The organization is determined by:
     1. X-Organization-ID header (for organization switching)
     2. User's most recently joined active organization (default)
+
+    This middleware handles JWT authentication to ensure the user is authenticated
+    before setting the organization context.
     """
 
     def process_request(self, request):
+        # Initialize organization attributes
+        request.organization = None
+        request.organization_role = None
+
+        # Try to authenticate with JWT if Authorization header is present
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            try:
+                jwt_auth = JWTAuthentication()
+                validated_token = jwt_auth.get_validated_token(auth_header.split(' ')[1])
+                user = jwt_auth.get_user(validated_token)
+                request.user = user
+            except (AuthenticationFailed, Exception):
+                # Authentication failed, user will remain unauthenticated
+                pass
+
         # Only process for authenticated users
-        if not hasattr(request, 'user') or not request.user.is_authenticated:
-            request.organization = None
+        if not hasattr(request, 'user') or not request.user.is_authenticated or isinstance(request.user, AnonymousUser):
             return
 
         # Check for organization ID in header (for switching)
@@ -51,9 +72,8 @@ class OrganizationMiddleware(MiddlewareMixin):
             if membership:
                 request.organization = membership.organization
                 request.organization_role = membership.role
-            else:
-                request.organization = None
-                request.organization_role = None
-        except Exception:
-            request.organization = None
-            request.organization_role = None
+        except Exception as e:
+            # Log the exception for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error setting organization for user {request.user.email}: {str(e)}")
