@@ -17,7 +17,14 @@ router.register(r'coupon-usages', views.CouponUsageViewSet, basename='coupon-usa
 router.register(r'subscriptions', views.SubscriptionViewSet, basename='subscription')
 
 urlpatterns = [
+    # Invoice-specific endpoints must come before router to avoid conflicts
+    path('invoices/import/', views.import_invoices, name='import-invoices'),
+    path('invoices/import-template/', views.download_import_template, name='download-import-template'),
+
+    # Router URLs
     path('', include(router.urls)),
+
+    # Other endpoints
     path('settings/company/', views.company_settings_view, name='company-settings'),
     path('settings/invoice/', views.invoice_settings_view, name='invoice-settings'),
     path('settings/email/', views.email_settings_view, name='email-settings'),
@@ -25,8 +32,6 @@ urlpatterns = [
     path('settings/invoice-format/', views.invoice_format_settings_view, name='invoice-format-settings'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
     path('superadmin/stats/', views.superadmin_stats, name='superadmin-stats'),
-    path('invoices/import/', views.import_invoices, name='import-invoices'),
-    path('invoices/import-template/', views.download_import_template, name='download-import-template'),
     path('profile/', views.user_profile_view, name='user-profile'),
     path('profile/change-password/', views.change_password_view, name='change-password'),
 ]
