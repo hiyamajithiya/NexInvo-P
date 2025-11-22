@@ -62,6 +62,14 @@ class ClientSerializer(serializers.ModelSerializer):
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate_code(self, value):
+        """Allow empty code for auto-generation"""
+        # Convert empty string or whitespace-only string to empty string
+        # The model's save() method will auto-generate it
+        if value and value.strip():
+            return value.strip()
+        return ''
+
 
 class ServiceItemSerializer(serializers.ModelSerializer):
     class Meta:
