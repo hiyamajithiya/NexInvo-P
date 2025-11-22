@@ -100,6 +100,7 @@ class InvoiceSettings(models.Model):
     receiptPrefix = models.CharField(max_length=20, default='RCPT-')
     receiptStartingNumber = models.IntegerField(default=1)
     # General Settings
+    gstEnabled = models.BooleanField(default=True, help_text='Enable GST calculations for invoices')
     defaultGstRate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
     paymentDueDays = models.IntegerField(default=30)
     termsAndConditions = models.TextField(blank=True)

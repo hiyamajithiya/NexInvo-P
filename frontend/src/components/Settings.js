@@ -32,6 +32,7 @@ function Settings() {
     startingNumber: 1,
     proformaPrefix: 'PI-',
     proformaStartingNumber: 1,
+    gstEnabled: true,
     defaultGstRate: 18,
     paymentDueDays: 30,
     termsAndConditions: '',
@@ -800,6 +801,20 @@ function Settings() {
                   ⚙️ General Invoice Settings
                 </h3>
                 <div className="form-grid">
+                  <div className="form-field full-width">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={invoiceSettings.gstEnabled}
+                        onChange={(e) => handleInvoiceChange('gstEnabled', e.target.checked)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      Enable GST/Tax Calculations
+                    </label>
+                    <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                      Uncheck this if your organization is not registered for GST or tax is not applicable
+                    </p>
+                  </div>
                   <div className="form-field">
                     <label>Default GST Rate (%)</label>
                     <input
@@ -807,6 +822,7 @@ function Settings() {
                       value={invoiceSettings.defaultGstRate}
                       onChange={(e) => handleInvoiceChange('defaultGstRate', parseInt(e.target.value) || 18)}
                       className="form-input"
+                      disabled={!invoiceSettings.gstEnabled}
                     />
                   </div>
                   <div className="form-field">
