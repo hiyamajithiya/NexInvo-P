@@ -1,8 +1,9 @@
 import pandas as pd
 import json
+import re
 from datetime import datetime
 from decimal import Decimal
-from .models import Invoice, InvoiceItem, Client, Organization
+from .models import Invoice, InvoiceItem, Client, Organization, InvoiceSettings
 
 
 class InvoiceImporter:
@@ -26,6 +27,7 @@ class InvoiceImporter:
         self.created_clients = []
         self.success_count = 0
         self.failed_count = 0
+        self.imported_invoice_numbers = []  # Track imported invoice numbers for format detection
 
     def import_from_excel(self, file_path):
         """
@@ -62,10 +64,15 @@ class InvoiceImporter:
             for invoice_number, group in invoice_groups:
                 try:
                     self._process_invoice_group(invoice_number, group)
+                    self.imported_invoice_numbers.append(str(invoice_number))
                     self.success_count += 1
                 except Exception as e:
                     self.failed_count += 1
                     self.errors.append(f"Invoice {invoice_number}: {str(e)}")
+
+            # Auto-detect and update invoice number format
+            if self.imported_invoice_numbers:
+                self._update_invoice_format()
 
             return {
                 'success': True,
@@ -96,11 +103,17 @@ class InvoiceImporter:
 
             for invoice_data in invoices_data:
                 try:
-                    self._process_gst_invoice(invoice_data)
+                    invoice = self._process_gst_invoice(invoice_data)
+                    if invoice:
+                        self.imported_invoice_numbers.append(invoice.invoice_number)
                     self.success_count += 1
                 except Exception as e:
                     self.failed_count += 1
                     self.errors.append(f"GST Invoice: {str(e)}")
+
+            # Auto-detect and update invoice number format
+            if self.imported_invoice_numbers:
+                self._update_invoice_format()
 
             return {
                 'success': True,
@@ -318,6 +331,106 @@ class InvoiceImporter:
             )
 
         return new_client
+
+    def _detect_invoice_format(self, invoice_numbers):
+        """
+        Detect invoice number format from imported invoices
+
+        Analyzes invoice numbers to extract:
+        1. Prefix pattern (e.g., 'INV-', 'BILL-', '2024-INV-')
+        2. Numeric sequence and next number
+
+        Args:
+            invoice_numbers: List of invoice number strings
+
+        Returns:
+            dict with 'prefix' and 'next_number', or None if pattern unclear
+        """
+        if not invoice_numbers:
+            return None
+
+        # Pattern to separate prefix from numeric part
+        # Matches: optional text/symbols, then digits at the end
+        pattern = r'^(.*?)(\d+)$'
+
+        formats = []
+        for inv_num in invoice_numbers:
+            match = re.match(pattern, str(inv_num).strip())
+            if match:
+                prefix = match.group(1)  # Everything before the number
+                number = int(match.group(2))  # The numeric part
+                formats.append({
+                    'prefix': prefix,
+                    'number': number,
+                    'full': inv_num
+                })
+
+        if not formats:
+            return None
+
+        # Find the most common prefix
+        prefix_counts = {}
+        for fmt in formats:
+            prefix = fmt['prefix']
+            if prefix not in prefix_counts:
+                prefix_counts[prefix] = []
+            prefix_counts[prefix].append(fmt['number'])
+
+        # Get the most common prefix
+        most_common_prefix = max(prefix_counts.keys(), key=lambda k: len(prefix_counts[k]))
+
+        # Get the highest number for that prefix
+        max_number = max(prefix_counts[most_common_prefix])
+
+        return {
+            'prefix': most_common_prefix,
+            'next_number': max_number + 1,
+            'sample': f"{most_common_prefix}{max_number}"
+        }
+
+    def _update_invoice_format(self):
+        """
+        Auto-detect invoice format from imported invoices and update InvoiceSettings
+        """
+        # Separate tax invoices and proforma invoices if possible
+        # For now, we'll detect the overall format
+        detected = self._detect_invoice_format(self.imported_invoice_numbers)
+
+        if not detected:
+            self.warnings.append(
+                "Could not auto-detect invoice number format. "
+                "Invoice settings were not updated."
+            )
+            return
+
+        try:
+            # Get or create invoice settings
+            settings, created = InvoiceSettings.objects.get_or_create(
+                organization=self.organization
+            )
+
+            # Check if we should update the settings
+            # Only update if the detected format is different
+            current_prefix = settings.invoicePrefix
+            current_next = settings.startingNumber
+
+            if detected['prefix'] != current_prefix or detected['next_number'] > current_next:
+                # Update the settings
+                old_format = f"{current_prefix}{current_next}"
+                new_format = f"{detected['prefix']}{detected['next_number']}"
+
+                settings.invoicePrefix = detected['prefix']
+                settings.startingNumber = detected['next_number']
+                settings.save()
+
+                self.warnings.append(
+                    f"Invoice number format auto-updated: '{old_format}' → '{new_format}'. "
+                    f"Next invoice will be: {new_format}"
+                )
+        except Exception as e:
+            self.warnings.append(
+                f"Could not update invoice settings: {str(e)}"
+            )
 
 
 def generate_excel_template():
