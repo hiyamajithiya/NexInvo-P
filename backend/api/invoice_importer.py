@@ -2,7 +2,7 @@ import pandas as pd
 import json
 from datetime import datetime
 from decimal import Decimal
-from .models import Invoice, InvoiceItem, Client
+from .models import Invoice, InvoiceItem, Client, Organization
 
 
 class InvoiceImporter:
@@ -11,11 +11,19 @@ class InvoiceImporter:
     Supports:
     1. Custom Excel template format
     2. GST Portal JSON/Excel export
+
+    Features:
+    - Auto-creates clients if not found in master
+    - Collects errors/warnings but continues importing
+    - Reports missing mandatory fields after import
     """
 
-    def __init__(self, user):
-        self.user = user
+    def __init__(self, organization, created_by=None):
+        self.organization = organization
+        self.created_by = created_by
         self.errors = []
+        self.warnings = []
+        self.created_clients = []
         self.success_count = 0
         self.failed_count = 0
 
@@ -23,17 +31,25 @@ class InvoiceImporter:
         """
         Import invoices from Excel file (custom template)
         Expected columns:
-        - Invoice Number
-        - Invoice Date
-        - Invoice Type (tax/proforma)
-        - Client Name
-        - Client GSTIN
+        - Invoice Number* (required)
+        - Invoice Date* (required)
+        - Invoice Type (tax/proforma, default: tax)
+        - Client Name* (required)
         - Client Email
-        - Item Description
+        - Client Phone
+        - Client Mobile
+        - Client Address
+        - Client City
+        - Client State
+        - Client PIN Code
+        - Client State Code
+        - Client GSTIN
+        - Client PAN
+        - Item Description* (required)
         - HSN/SAC
-        - Quantity
-        - Rate
-        - GST Rate
+        - Quantity* (required)
+        - Rate* (required)
+        - GST Rate (default: 18)
         - Payment Terms
         - Notes
         """
@@ -55,12 +71,16 @@ class InvoiceImporter:
                 'success': True,
                 'success_count': self.success_count,
                 'failed_count': self.failed_count,
-                'errors': self.errors
+                'errors': self.errors,
+                'warnings': self.warnings,
+                'created_clients': self.created_clients
             }
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'errors': self.errors,
+                'warnings': self.warnings
             }
 
     def import_from_gst_json(self, file_path):
@@ -86,24 +106,37 @@ class InvoiceImporter:
                 'success': True,
                 'success_count': self.success_count,
                 'failed_count': self.failed_count,
-                'errors': self.errors
+                'errors': self.errors,
+                'warnings': self.warnings,
+                'created_clients': self.created_clients
             }
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'errors': self.errors,
+                'warnings': self.warnings
             }
 
     def _process_invoice_group(self, invoice_number, group):
         """Process a single invoice with its items from Excel"""
         first_row = group.iloc[0]
 
-        # Get or create client
-        client = self._get_or_create_client(
-            name=first_row.get('Client Name', ''),
-            gstin=first_row.get('Client GSTIN', ''),
-            email=first_row.get('Client Email', '')
-        )
+        # Get or create client with all available fields
+        client_data = {
+            'name': first_row.get('Client Name', ''),
+            'email': first_row.get('Client Email', ''),
+            'phone': first_row.get('Client Phone', ''),
+            'mobile': first_row.get('Client Mobile', ''),
+            'address': first_row.get('Client Address', ''),
+            'city': first_row.get('Client City', ''),
+            'state': first_row.get('Client State', ''),
+            'pinCode': first_row.get('Client PIN Code', ''),
+            'stateCode': first_row.get('Client State Code', ''),
+            'gstin': first_row.get('Client GSTIN', ''),
+            'pan': first_row.get('Client PAN', '')
+        }
+        client = self._get_or_create_client(client_data)
 
         # Parse invoice date
         invoice_date = pd.to_datetime(first_row['Invoice Date']).date()
@@ -137,7 +170,8 @@ class InvoiceImporter:
 
         # Create invoice
         invoice = Invoice.objects.create(
-            user=self.user,
+            organization=self.organization,
+            created_by=self.created_by,
             client=client,
             invoice_number=str(invoice_number),
             invoice_type=first_row.get('Invoice Type', 'tax').lower(),
@@ -159,13 +193,17 @@ class InvoiceImporter:
     def _process_gst_invoice(self, invoice_data):
         """Process GST Portal invoice format"""
         # This is a simplified version - actual GST format may vary
-        client_data = invoice_data.get('recipient', {})
+        recipient = invoice_data.get('recipient', {})
 
-        client = self._get_or_create_client(
-            name=client_data.get('name', ''),
-            gstin=client_data.get('gstin', ''),
-            email=client_data.get('email', '')
-        )
+        client_data = {
+            'name': recipient.get('name', ''),
+            'gstin': recipient.get('gstin', ''),
+            'email': recipient.get('email', ''),
+            'address': recipient.get('address', ''),
+            'state': recipient.get('state', ''),
+            'stateCode': recipient.get('state_code', '')
+        }
+        client = self._get_or_create_client(client_data)
 
         invoice_date = datetime.strptime(
             invoice_data.get('date', ''),
@@ -178,7 +216,8 @@ class InvoiceImporter:
         tax_amount = Decimal('0.00')
 
         invoice = Invoice.objects.create(
-            user=self.user,
+            organization=self.organization,
+            created_by=self.created_by,
             client=client,
             invoice_number=invoice_data.get('invoice_number', ''),
             invoice_type='tax',
@@ -203,29 +242,82 @@ class InvoiceImporter:
 
         return invoice
 
-    def _get_or_create_client(self, name, gstin='', email=''):
-        """Get existing client or create new one"""
+    def _get_or_create_client(self, client_data):
+        """
+        Get existing client or create new one
+
+        Args:
+            client_data: Dictionary containing client fields
+
+        Returns:
+            Client object
+
+        Side effects:
+            - Adds to self.created_clients if new client is created
+            - Adds to self.warnings if mandatory fields are missing
+        """
+        name = client_data.get('name', '').strip()
+
         if not name:
             raise ValueError("Client name is required")
 
+        gstin = client_data.get('gstin', '').strip()
+        email = client_data.get('email', '').strip()
+
         # Try to find by GSTIN first if provided
         if gstin:
-            client = Client.objects.filter(user=self.user, gstin=gstin).first()
+            client = Client.objects.filter(organization=self.organization, gstin=gstin).first()
             if client:
                 return client
 
         # Try to find by name
-        client = Client.objects.filter(user=self.user, name=name).first()
+        client = Client.objects.filter(organization=self.organization, name__iexact=name).first()
         if client:
             return client
 
-        # Create new client
-        return Client.objects.create(
-            user=self.user,
+        # Client not found - create new one with available data
+        missing_fields = []
+
+        # Check for missing optional but important fields
+        if not email:
+            missing_fields.append('email')
+        if not client_data.get('phone') and not client_data.get('mobile'):
+            missing_fields.append('phone/mobile')
+        if not client_data.get('address'):
+            missing_fields.append('address')
+        if not client_data.get('gstin'):
+            missing_fields.append('GSTIN')
+
+        # Create client with available data
+        new_client = Client.objects.create(
+            organization=self.organization,
             name=name,
+            email=email,
+            phone=client_data.get('phone', '').strip(),
+            mobile=client_data.get('mobile', '').strip(),
+            address=client_data.get('address', '').strip(),
+            city=client_data.get('city', '').strip(),
+            state=client_data.get('state', '').strip(),
+            pinCode=client_data.get('pinCode', '').strip(),
+            stateCode=client_data.get('stateCode', '').strip(),
             gstin=gstin,
-            email=email
+            pan=client_data.get('pan', '').strip()
         )
+
+        # Track created client
+        client_info = f"'{name}'"
+        if missing_fields:
+            client_info += f" (missing: {', '.join(missing_fields)})"
+
+        self.created_clients.append(client_info)
+
+        if missing_fields:
+            self.warnings.append(
+                f"Client '{name}' was created but is missing: {', '.join(missing_fields)}. "
+                f"Please update these details in Client Master."
+            )
+
+        return new_client
 
 
 def generate_excel_template():
@@ -236,10 +328,18 @@ def generate_excel_template():
     template_data = {
         'Invoice Number': ['INV-0001', 'INV-0001', 'INV-0002'],
         'Invoice Date': ['2025-01-15', '2025-01-15', '2025-01-20'],
-        'Invoice Type': ['tax', 'tax', 'tax'],
+        'Invoice Type': ['tax', 'tax', 'proforma'],
         'Client Name': ['ABC Corporation', 'ABC Corporation', 'XYZ Ltd'],
-        'Client GSTIN': ['27XXXXX0000X1Z5', '27XXXXX0000X1Z5', '07XXXXX0000X1Z5'],
         'Client Email': ['abc@example.com', 'abc@example.com', 'xyz@example.com'],
+        'Client Phone': ['022-12345678', '022-12345678', ''],
+        'Client Mobile': ['9876543210', '9876543210', '9876543211'],
+        'Client Address': ['123 Main St, Andheri', '123 Main St, Andheri', '456 Park Ave'],
+        'Client City': ['Mumbai', 'Mumbai', 'Delhi'],
+        'Client State': ['Maharashtra', 'Maharashtra', 'Delhi'],
+        'Client PIN Code': ['400001', '400001', '110001'],
+        'Client State Code': ['27', '27', '07'],
+        'Client GSTIN': ['27XXXXX0000X1Z5', '27XXXXX0000X1Z5', '07XXXXX0000X1Z5'],
+        'Client PAN': ['ABCDE1234F', 'ABCDE1234F', 'XYZAB5678C'],
         'Item Description': ['Consulting Services - January', 'Software License', 'Design Services'],
         'HSN/SAC': ['998314', '998313', '998311'],
         'Quantity': [1, 1, 10],

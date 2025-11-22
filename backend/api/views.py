@@ -1478,7 +1478,10 @@ def import_invoices(request):
         tmp_file_path = tmp_file.name
 
     try:
-        importer = InvoiceImporter(request.user)
+        importer = InvoiceImporter(
+            organization=request.organization,
+            created_by=request.user
+        )
 
         if file_extension in ['.xlsx', '.xls']:
             result = importer.import_from_excel(tmp_file_path)
@@ -1498,11 +1501,17 @@ def import_invoices(request):
                 'message': 'Import completed',
                 'success_count': result.get('success_count', 0),
                 'failed_count': result.get('failed_count', 0),
-                'errors': result.get('errors', [])
+                'errors': result.get('errors', []),
+                'warnings': result.get('warnings', []),
+                'created_clients': result.get('created_clients', [])
             })
         else:
             return Response(
-                {'error': result.get('error', 'Import failed')},
+                {
+                    'error': result.get('error', 'Import failed'),
+                    'errors': result.get('errors', []),
+                    'warnings': result.get('warnings', [])
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
