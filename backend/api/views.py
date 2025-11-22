@@ -1245,7 +1245,8 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    """Get dashboard statistics"""
+    """Get dashboard statistics with subscription info"""
+    from datetime import date, timedelta
     organization = request.organization
 
     # Check if user has an organization
@@ -1280,11 +1281,73 @@ def dashboard_stats(request):
     # Total clients
     clients = Client.objects.filter(organization=organization).count()
 
+    # Get subscription details
+    subscription_info = None
+    try:
+        subscription = Subscription.objects.get(organization=organization)
+        plan = subscription.plan
+
+        # Calculate total days (from start to end)
+        total_days = (subscription.end_date - subscription.start_date).days
+
+        # Calculate days remaining
+        days_remaining = subscription.days_remaining()
+
+        # Calculate days elapsed
+        days_elapsed = total_days - days_remaining
+
+        # Count active users in organization
+        current_users = OrganizationMembership.objects.filter(
+            organization=organization,
+            is_active=True
+        ).count()
+
+        # Get invoices this month for usage tracking
+        current_month_start = date.today().replace(day=1)
+        invoices_this_month = Invoice.objects.filter(
+            organization=organization,
+            invoice_date__gte=current_month_start
+        ).count()
+
+        subscription_info = {
+            'plan_name': plan.name,
+            'status': subscription.status,
+            'is_active': subscription.is_active(),
+
+            # Days information
+            'total_days': total_days,
+            'days_remaining': days_remaining,
+            'days_elapsed': days_elapsed,
+            'start_date': subscription.start_date.strftime('%Y-%m-%d'),
+            'end_date': subscription.end_date.strftime('%Y-%m-%d'),
+
+            # Users information
+            'current_users': current_users,
+            'max_users': plan.max_users,
+            'users_remaining': max(0, plan.max_users - current_users),
+
+            # Invoices information
+            'invoices_this_month': invoices_this_month,
+            'max_invoices_per_month': plan.max_invoices_per_month,
+            'invoices_remaining': max(0, plan.max_invoices_per_month - invoices_this_month),
+
+            # Storage information
+            'max_storage_gb': plan.max_storage_gb,
+
+            # Billing
+            'next_billing_date': subscription.next_billing_date.strftime('%Y-%m-%d') if subscription.next_billing_date else None,
+            'auto_renew': subscription.auto_renew,
+        }
+    except Subscription.DoesNotExist:
+        # No subscription found
+        subscription_info = None
+
     return Response({
         'totalInvoices': total_invoices,
         'revenue': float(revenue),
         'pending': float(pending),
-        'clients': clients
+        'clients': clients,
+        'subscription': subscription_info
     })
 
 
