@@ -320,6 +320,11 @@ function Dashboard({ user, onLogout }) {
         <div className="content-area">
           {renderContent()}
         </div>
+
+        {/* Footer with Branding */}
+        <footer className="app-footer">
+          <p>© {new Date().getFullYear()} Chinmay Technosoft Private Limited. All rights reserved.</p>
+        </footer>
       </div>
     </div>
   );

@@ -1919,6 +1919,20 @@ const SuperAdminDashboard = ({ onLogout }) => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Footer with Branding */}
+      <Box sx={{
+        background: '#fff',
+        borderTop: '1px solid #e5e7eb',
+        padding: '16px 32px',
+        textAlign: 'center',
+        marginTop: 'auto',
+        boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.05)'
+      }}>
+        <Typography variant="body2" sx={{ color: '#6b7280', fontWeight: 500 }}>
+          © {new Date().getFullYear()} Chinmay Technosoft Private Limited. All rights reserved.
+        </Typography>
+      </Box>
     </div>
   );
 };

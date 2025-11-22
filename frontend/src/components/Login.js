@@ -243,6 +243,11 @@ const Login = ({ onLogin }) => {
             </div>
           </form>
         </div>
+
+        {/* Footer with Branding */}
+        <footer className="login-footer">
+          <p>© {new Date().getFullYear()} Chinmay Technosoft Private Limited. All rights reserved.</p>
+        </footer>
       </div>
     </div>
   );
