@@ -191,7 +191,7 @@ class InvoiceImporter:
             tax_amount += item_tax
 
             # Auto-create service item from import data
-            description = str(row.get('Item Description', '')).strip()
+            description = self._safe_str(row.get('Item Description', ''))
             hsn_sac = self._safe_str(row.get('HSN/SAC', ''))
 
             # Create or get service item
@@ -208,19 +208,23 @@ class InvoiceImporter:
             })
 
         # Create invoice
+        # Use _safe_str for all text fields to handle pandas numeric types
+        invoice_type = self._safe_str(first_row.get('Invoice Type', 'tax'))
+        invoice_type = invoice_type.lower() if invoice_type else 'tax'
+
         invoice = Invoice.objects.create(
             organization=self.organization,
             created_by=self.created_by,
             client=client,
             invoice_number=str(invoice_number),
-            invoice_type=first_row.get('Invoice Type', 'tax').lower(),
+            invoice_type=invoice_type,
             invoice_date=invoice_date,
             status='sent',  # Imported invoices are assumed to be sent
             subtotal=subtotal,
             tax_amount=tax_amount,
             total_amount=subtotal + tax_amount,
-            payment_terms=first_row.get('Payment Terms', ''),
-            notes=first_row.get('Notes', '')
+            payment_terms=self._safe_str(first_row.get('Payment Terms', '')),
+            notes=self._safe_str(first_row.get('Notes', ''))
         )
 
         # Create invoice items
