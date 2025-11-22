@@ -29,6 +29,21 @@ class InvoiceImporter:
         self.failed_count = 0
         self.imported_invoice_numbers = []  # Track imported invoice numbers for format detection
 
+    @staticmethod
+    def _safe_str(value):
+        """
+        Convert pandas value to string, handling NaN and numeric types
+
+        Args:
+            value: Any value from pandas DataFrame (can be str, float, int, NaN, etc.)
+
+        Returns:
+            String value with whitespace stripped, or empty string for NaN/None
+        """
+        if pd.isna(value):
+            return ''
+        return str(value).strip()
+
     def import_from_excel(self, file_path):
         """
         Import invoices from Excel file (custom template)
@@ -136,18 +151,19 @@ class InvoiceImporter:
         first_row = group.iloc[0]
 
         # Get or create client with all available fields
+        # Use _safe_str to handle pandas numeric types and NaN values
         client_data = {
-            'name': first_row.get('Client Name', ''),
-            'email': first_row.get('Client Email', ''),
-            'phone': first_row.get('Client Phone', ''),
-            'mobile': first_row.get('Client Mobile', ''),
-            'address': first_row.get('Client Address', ''),
-            'city': first_row.get('Client City', ''),
-            'state': first_row.get('Client State', ''),
-            'pinCode': first_row.get('Client PIN Code', ''),
-            'stateCode': first_row.get('Client State Code', ''),
-            'gstin': first_row.get('Client GSTIN', ''),
-            'pan': first_row.get('Client PAN', '')
+            'name': self._safe_str(first_row.get('Client Name', '')),
+            'email': self._safe_str(first_row.get('Client Email', '')),
+            'phone': self._safe_str(first_row.get('Client Phone', '')),
+            'mobile': self._safe_str(first_row.get('Client Mobile', '')),
+            'address': self._safe_str(first_row.get('Client Address', '')),
+            'city': self._safe_str(first_row.get('Client City', '')),
+            'state': self._safe_str(first_row.get('Client State', '')),
+            'pinCode': self._safe_str(first_row.get('Client PIN Code', '')),
+            'stateCode': self._safe_str(first_row.get('Client State Code', '')),
+            'gstin': self._safe_str(first_row.get('Client GSTIN', '')),
+            'pan': self._safe_str(first_row.get('Client PAN', ''))
         }
         client = self._get_or_create_client(client_data)
 
@@ -209,12 +225,12 @@ class InvoiceImporter:
         recipient = invoice_data.get('recipient', {})
 
         client_data = {
-            'name': recipient.get('name', ''),
-            'gstin': recipient.get('gstin', ''),
-            'email': recipient.get('email', ''),
-            'address': recipient.get('address', ''),
-            'state': recipient.get('state', ''),
-            'stateCode': recipient.get('state_code', '')
+            'name': self._safe_str(recipient.get('name', '')),
+            'gstin': self._safe_str(recipient.get('gstin', '')),
+            'email': self._safe_str(recipient.get('email', '')),
+            'address': self._safe_str(recipient.get('address', '')),
+            'state': self._safe_str(recipient.get('state', '')),
+            'stateCode': self._safe_str(recipient.get('state_code', ''))
         }
         client = self._get_or_create_client(client_data)
 
@@ -260,7 +276,7 @@ class InvoiceImporter:
         Get existing client or create new one
 
         Args:
-            client_data: Dictionary containing client fields
+            client_data: Dictionary containing client fields (already stripped)
 
         Returns:
             Client object
@@ -269,13 +285,13 @@ class InvoiceImporter:
             - Adds to self.created_clients if new client is created
             - Adds to self.warnings if mandatory fields are missing
         """
-        name = client_data.get('name', '').strip()
+        name = client_data.get('name', '')
 
         if not name:
             raise ValueError("Client name is required")
 
-        gstin = client_data.get('gstin', '').strip()
-        email = client_data.get('email', '').strip()
+        gstin = client_data.get('gstin', '')
+        email = client_data.get('email', '')
 
         # Try to find by GSTIN first if provided
         if gstin:
@@ -301,20 +317,20 @@ class InvoiceImporter:
         if not client_data.get('gstin'):
             missing_fields.append('GSTIN')
 
-        # Create client with available data
+        # Create client with available data (all values already stripped by _safe_str)
         new_client = Client.objects.create(
             organization=self.organization,
             name=name,
             email=email,
-            phone=client_data.get('phone', '').strip(),
-            mobile=client_data.get('mobile', '').strip(),
-            address=client_data.get('address', '').strip(),
-            city=client_data.get('city', '').strip(),
-            state=client_data.get('state', '').strip(),
-            pinCode=client_data.get('pinCode', '').strip(),
-            stateCode=client_data.get('stateCode', '').strip(),
+            phone=client_data.get('phone', ''),
+            mobile=client_data.get('mobile', ''),
+            address=client_data.get('address', ''),
+            city=client_data.get('city', ''),
+            state=client_data.get('state', ''),
+            pinCode=client_data.get('pinCode', ''),
+            stateCode=client_data.get('stateCode', ''),
             gstin=gstin,
-            pan=client_data.get('pan', '').strip()
+            pan=client_data.get('pan', '')
         )
 
         # Track created client
