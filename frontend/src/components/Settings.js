@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { settingsAPI, paymentTermAPI } from '../services/api';
+import { settingsAPI, paymentTermAPI, userAPI } from '../services/api';
 import InvoiceFormatEditor from './InvoiceFormatEditor';
 import './Pages.css';
 
@@ -60,9 +60,7 @@ function Settings() {
   });
 
   // Users & Roles State
-  const [users, setUsers] = useState([
-    { id: 1, name: 'Admin User', email: 'admin@example.com', role: 'admin', status: 'active' }
-  ]);
+  const [users, setUsers] = useState([]);
   const [showUserForm, setShowUserForm] = useState(false);
   const [currentUser, setCurrentUser] = useState({ name: '', email: '', role: 'user', password: '' });
 
@@ -70,6 +68,7 @@ function Settings() {
   useEffect(() => {
     loadSettings();
     loadPaymentTerms();
+    loadUsers();
   }, []);
 
   const loadSettings = async () => {
@@ -214,6 +213,16 @@ function Settings() {
     }
   };
 
+  // Load Users
+  const loadUsers = async () => {
+    try {
+      const response = await userAPI.getAll();
+      setUsers(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error loading users:', err);
+    }
+  };
+
   // Payment Terms Handlers
   const handleAddPayment = () => {
     setShowPaymentForm(true);
@@ -342,40 +351,91 @@ function Settings() {
     setCurrentUser({ ...currentUser, [field]: value });
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!currentUser.name || !currentUser.email) {
       setError('User name and email are required');
       return;
     }
 
-    if (currentUser.id) {
-      setUsers(users.map(u => u.id === currentUser.id ? currentUser : u));
-    } else {
-      setUsers([...users, { ...currentUser, id: Date.now(), status: 'active' }]);
+    if (!currentUser.id && !currentUser.password) {
+      setError('Password is required for new users');
+      return;
     }
 
-    setShowUserForm(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setLoading(true);
+    setError('');
+
+    try {
+      const userData = {
+        first_name: currentUser.name.split(' ')[0] || currentUser.name,
+        last_name: currentUser.name.split(' ').slice(1).join(' ') || '',
+        email: currentUser.email,
+        username: currentUser.email,
+      };
+
+      // Only include password when creating new user or if it's been changed
+      if (currentUser.password) {
+        userData.password = currentUser.password;
+      }
+
+      if (currentUser.id) {
+        await userAPI.update(currentUser.id, userData);
+      } else {
+        await userAPI.create(userData);
+      }
+
+      setShowUserForm(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      loadUsers();
+    } catch (err) {
+      console.error('Error saving user:', err);
+      setError(err.response?.data?.message || err.response?.data?.email?.[0] || 'Failed to save user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditUser = (user) => {
-    setCurrentUser(user);
+    // Combine first_name and last_name back to name field for the form
+    const userName = user.first_name && user.last_name
+      ? `${user.first_name} ${user.last_name}`
+      : user.first_name || user.last_name || user.username;
+
+    setCurrentUser({
+      ...user,
+      name: userName,
+      password: '' // Don't populate password for security
+    });
     setShowUserForm(true);
   };
 
-  const handleDeleteUser = (id) => {
+  const handleDeleteUser = async (id) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== id));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      try {
+        await userAPI.delete(id);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+        loadUsers();
+      } catch (err) {
+        console.error('Error deleting user:', err);
+        setError('Failed to delete user');
+      }
     }
   };
 
-  const handleToggleUserStatus = (id) => {
-    setUsers(users.map(u =>
-      u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
-    ));
+  const handleToggleUserStatus = async (id) => {
+    try {
+      const user = users.find(u => u.id === id);
+      if (user) {
+        const updatedStatus = user.is_active ? false : true;
+        await userAPI.update(id, { is_active: updatedStatus });
+        loadUsers();
+      }
+    } catch (err) {
+      console.error('Error toggling user status:', err);
+      setError('Failed to update user status');
+    }
   };
 
   const handleCancelUser = () => {
@@ -1163,37 +1223,44 @@ function Settings() {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((user) => (
-                          <tr key={user.id}>
-                            <td><strong>{user.name}</strong></td>
-                            <td>{user.email}</td>
-                            <td>
-                              <span className={`status-badge status-${user.role}`}>
-                                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                              </span>
-                            </td>
-                            <td>
-                              <span className={`status-badge status-${user.status}`}>
-                                {user.status === 'active' ? '✓ Active' : '✗ Inactive'}
-                              </span>
-                            </td>
-                            <td>
-                              <button className="btn-icon-small" onClick={() => handleEditUser(user)} title="Edit">
-                                ✏️
-                              </button>
-                              <button
-                                className="btn-icon-small"
-                                onClick={() => handleToggleUserStatus(user.id)}
-                                title={user.status === 'active' ? 'Deactivate' : 'Activate'}
-                              >
-                                {user.status === 'active' ? '🔒' : '🔓'}
-                              </button>
-                              <button className="btn-icon-small" onClick={() => handleDeleteUser(user.id)} title="Delete">
-                                🗑️
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {users.map((user) => {
+                          const fullName = user.first_name && user.last_name
+                            ? `${user.first_name} ${user.last_name}`
+                            : user.first_name || user.last_name || user.username;
+                          const isActive = user.is_active !== undefined ? user.is_active : user.status === 'active';
+
+                          return (
+                            <tr key={user.id}>
+                              <td><strong>{fullName}</strong></td>
+                              <td>{user.email}</td>
+                              <td>
+                                <span className={`status-badge status-${user.role || 'user'}`}>
+                                  {user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className={`status-badge status-${isActive ? 'active' : 'inactive'}`}>
+                                  {isActive ? '✓ Active' : '✗ Inactive'}
+                                </span>
+                              </td>
+                              <td>
+                                <button className="btn-icon-small" onClick={() => handleEditUser(user)} title="Edit">
+                                  ✏️
+                                </button>
+                                <button
+                                  className="btn-icon-small"
+                                  onClick={() => handleToggleUserStatus(user.id)}
+                                  title={isActive ? 'Deactivate' : 'Activate'}
+                                >
+                                  {isActive ? '🔒' : '🔓'}
+                                </button>
+                                <button className="btn-icon-small" onClick={() => handleDeleteUser(user.id)} title="Delete">
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -244,6 +244,7 @@
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 24px;
   margin-bottom: 32px;
+  align-items: start;
 }
 
 .report-card {
@@ -344,6 +345,7 @@
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 24px;
+  align-items: start;
 }
 
 .settings-sidebar {
@@ -354,7 +356,7 @@
   border: 1px solid #f1f5f9;
   height: fit-content;
   position: sticky;
-  top: 100px;
+  top: 20px;
 }
 
 .settings-tab {
@@ -414,6 +416,7 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-bottom: 32px;
+  align-items: start;
 }
 
 .form-field {
