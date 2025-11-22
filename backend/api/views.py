@@ -1503,7 +1503,8 @@ def import_invoices(request):
                 'failed_count': result.get('failed_count', 0),
                 'errors': result.get('errors', []),
                 'warnings': result.get('warnings', []),
-                'created_clients': result.get('created_clients', [])
+                'created_clients': result.get('created_clients', []),
+                'created_services': result.get('created_services', [])
             })
         else:
             return Response(

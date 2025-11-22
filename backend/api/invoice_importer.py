@@ -3,7 +3,7 @@ import json
 import re
 from datetime import datetime
 from decimal import Decimal
-from .models import Invoice, InvoiceItem, Client, Organization, InvoiceSettings
+from .models import Invoice, InvoiceItem, Client, Organization, InvoiceSettings, ServiceItem
 
 
 class InvoiceImporter:
@@ -25,6 +25,7 @@ class InvoiceImporter:
         self.errors = []
         self.warnings = []
         self.created_clients = []
+        self.created_services = []
         self.success_count = 0
         self.failed_count = 0
         self.imported_invoice_numbers = []  # Track imported invoice numbers for format detection
@@ -95,7 +96,8 @@ class InvoiceImporter:
                 'failed_count': self.failed_count,
                 'errors': self.errors,
                 'warnings': self.warnings,
-                'created_clients': self.created_clients
+                'created_clients': self.created_clients,
+                'created_services': self.created_services
             }
         except Exception as e:
             return {
@@ -136,7 +138,8 @@ class InvoiceImporter:
                 'failed_count': self.failed_count,
                 'errors': self.errors,
                 'warnings': self.warnings,
-                'created_clients': self.created_clients
+                'created_clients': self.created_clients,
+                'created_services': self.created_services
             }
         except Exception as e:
             return {
@@ -187,9 +190,16 @@ class InvoiceImporter:
             subtotal += taxable_amount
             tax_amount += item_tax
 
+            # Auto-create service item from import data
+            description = str(row.get('Item Description', '')).strip()
+            hsn_sac = self._safe_str(row.get('HSN/SAC', ''))
+
+            # Create or get service item
+            self._get_or_create_service(description, hsn_sac, gst_rate)
+
             items_data.append({
-                'description': row['Item Description'],
-                'hsn_sac': row.get('HSN/SAC', ''),
+                'description': description,
+                'hsn_sac': hsn_sac,
                 'quantity': quantity,
                 'rate': rate,
                 'gst_rate': gst_rate,
@@ -347,6 +357,65 @@ class InvoiceImporter:
             )
 
         return new_client
+
+    def _get_or_create_service(self, description, hsn_sac, gst_rate):
+        """
+        Get existing service or create new one
+
+        Args:
+            description: Service description/name
+            hsn_sac: HSN/SAC code
+            gst_rate: GST rate as Decimal
+
+        Returns:
+            ServiceItem object
+
+        Side effects:
+            - Adds to self.created_services if new service is created
+        """
+        description = description.strip()
+
+        if not description:
+            # If no description provided, skip service creation
+            return None
+
+        # Try to find by description first
+        service = ServiceItem.objects.filter(
+            organization=self.organization,
+            name__iexact=description
+        ).first()
+
+        if service:
+            return service
+
+        # Try to find by HSN/SAC if provided
+        if hsn_sac:
+            service = ServiceItem.objects.filter(
+                organization=self.organization,
+                sac_code=hsn_sac
+            ).first()
+            if service:
+                return service
+
+        # Service not found - create new one
+        new_service = ServiceItem.objects.create(
+            organization=self.organization,
+            name=description,
+            description=description,
+            sac_code=hsn_sac if hsn_sac else '',
+            gst_rate=gst_rate
+        )
+
+        # Track created service
+        service_info = f"'{description}'"
+        if hsn_sac:
+            service_info += f" (SAC: {hsn_sac}, GST: {gst_rate}%)"
+        else:
+            service_info += f" (GST: {gst_rate}%)"
+
+        self.created_services.append(service_info)
+
+        return new_service
 
     def _detect_invoice_format(self, invoice_numbers):
         """

@@ -164,6 +164,8 @@ function Invoices() {
       const successCount = response.data.success_count || 0;
       const failedCount = response.data.failed_count || 0;
       const errors = response.data.errors || [];
+      const createdClients = response.data.created_clients || [];
+      const createdServices = response.data.created_services || [];
 
       let message = `Import completed!\n\nSuccessfully imported: ${successCount} invoices`;
       if (failedCount > 0) {
@@ -173,6 +175,21 @@ function Invoices() {
           if (errors.length > 5) {
             message += `\n... and ${errors.length - 5} more errors`;
           }
+        }
+      }
+
+      // Show created clients and services
+      if (createdClients.length > 0) {
+        message += `\n\nAuto-created ${createdClients.length} new clients:\n${createdClients.slice(0, 3).join('\n')}`;
+        if (createdClients.length > 3) {
+          message += `\n... and ${createdClients.length - 3} more`;
+        }
+      }
+
+      if (createdServices.length > 0) {
+        message += `\n\nAuto-created ${createdServices.length} new services:\n${createdServices.slice(0, 3).join('\n')}`;
+        if (createdServices.length > 3) {
+          message += `\n... and ${createdServices.length - 3} more`;
         }
       }
 
