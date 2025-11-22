@@ -511,7 +511,7 @@ class SubscriptionPlan(models.Model):
     max_storage_gb = models.IntegerField(default=1, help_text="Maximum storage in GB")
 
     # Features (JSON field for flexible feature flags)
-    features = models.JSONField(default=dict, blank=True, help_text='{"email_support": true, "api_access": false}')
+    features = models.JSONField(default=list, blank=True, help_text='["Feature 1", "Feature 2", "Feature 3"]')
 
     # Display & Status
     is_active = models.BooleanField(default=True, help_text="Plan is available for subscription")
