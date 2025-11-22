@@ -71,7 +71,7 @@ class InvoiceImporter:
 
     def import_from_excel(self, file_path):
         """
-        Import invoices from Excel file (custom template)
+        Import invoices from Excel file (custom template for professional services)
         Expected columns:
         - Invoice Number* (required)
         - Invoice Date* (required)
@@ -89,8 +89,7 @@ class InvoiceImporter:
         - Client PAN
         - Item Description* (required)
         - HSN/SAC
-        - Quantity* (required)
-        - Rate* (required)
+        - Amount* (required) - Taxable amount for the service
         - GST Rate (default: 18)
         - Payment Terms
         - Notes
@@ -203,12 +202,14 @@ class InvoiceImporter:
 
         items_data = []
         for _, row in group.iterrows():
-            # Use _safe_decimal to handle NaN values
-            quantity = self._safe_decimal(row.get('Quantity'), default='1')
-            rate = self._safe_decimal(row.get('Rate'), default='0.00')
+            # For professional services, we use Amount directly (not Quantity × Rate)
+            # The Amount column represents the taxable amount for the service
             gst_rate = self._safe_decimal(row.get('GST Rate'), default='0.00')
 
-            taxable_amount = quantity * rate
+            # Get the taxable amount from 'Amount' column (professional services)
+            taxable_amount = self._safe_decimal(row.get('Amount'), default='0.00')
+
+            # Calculate tax and total
             item_tax = taxable_amount * (gst_rate / Decimal('100'))
             total_amount = taxable_amount + item_tax
 
@@ -225,8 +226,6 @@ class InvoiceImporter:
             items_data.append({
                 'description': description,
                 'hsn_sac': hsn_sac,
-                'quantity': quantity,
-                'rate': rate,
                 'gst_rate': gst_rate,
                 'taxable_amount': taxable_amount,
                 'total_amount': total_amount
@@ -549,8 +548,10 @@ class InvoiceImporter:
 
 def generate_excel_template():
     """
-    Generate Excel template for invoice import
+    Generate Excel template for invoice import (Professional Services)
     Returns a pandas DataFrame that can be exported to Excel
+
+    For professional services, use Amount column instead of Quantity × Rate
     """
     template_data = {
         'Invoice Number': ['INV-0001', 'INV-0001', 'INV-0002'],
@@ -567,10 +568,9 @@ def generate_excel_template():
         'Client State Code': ['27', '27', '07'],
         'Client GSTIN': ['27XXXXX0000X1Z5', '27XXXXX0000X1Z5', '07XXXXX0000X1Z5'],
         'Client PAN': ['ABCDE1234F', 'ABCDE1234F', 'XYZAB5678C'],
-        'Item Description': ['Consulting Services - January', 'Software License', 'Design Services'],
+        'Item Description': ['Consulting Services - January', 'Software Development', 'Design Services'],
         'HSN/SAC': ['998314', '998313', '998311'],
-        'Quantity': [1, 1, 10],
-        'Rate': [50000, 25000, 5000],
+        'Amount': [50000, 25000, 50000],  # Taxable amount for professional services
         'GST Rate': [18, 18, 18],
         'Payment Terms': ['Net 30 days', 'Net 30 days', 'Net 15 days'],
         'Notes': ['Thank you for your business', 'Thank you for your business', 'Advance payment received']
