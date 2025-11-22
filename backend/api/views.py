@@ -1453,26 +1453,27 @@ def superadmin_stats(request):
 
     # Application version (from Django settings or hardcoded)
     from django.conf import settings
-    app_version = getattr(settings, 'APP_VERSION', 'v2.1.0')
-    environment = getattr(settings, 'ENVIRONMENT', 'Production')
+    import django
+    app_version = getattr(settings, 'APP_VERSION', 'v1.0.0')
+    environment = getattr(settings, 'ENVIRONMENT', 'Development' if settings.DEBUG else 'Production')
 
     system_info = {
         'appVersion': app_version,
-        'databaseSize': f"{db_size_gb} GB",
+        'databaseSize': f"{db_size_gb:.2f} GB",
         'serverUptime': uptime_str,
         'environment': environment,
         'pythonVersion': platform.python_version(),
-        'djangoVersion': '4.2.7'
+        'djangoVersion': django.get_version()
     }
 
-    # Feature flags (these should ideally be in a separate FeatureFlag model)
+    # Feature flags - reflecting actual system capabilities
     feature_flags = {
-        'organizationInvites': True,
-        'apiAccess': True,
-        'trialPeriod': True,
-        'analyticsTracking': True,
-        'emailNotifications': True,
-        'autoBackup': False
+        'organizationInvites': True,  # Users can invite members to organizations
+        'apiAccess': True,  # REST API is enabled
+        'trialPeriod': True,  # Free trial subscription plan exists
+        'analyticsTracking': False,  # Google Analytics not integrated
+        'emailNotifications': False,  # Email system not configured by default
+        'autoBackup': False  # Automatic backups not configured
     }
 
     # Average processing/response time (simplified calculation)
