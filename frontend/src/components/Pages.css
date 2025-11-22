@@ -381,9 +381,10 @@
 }
 
 .settings-tab.active {
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.1) 0%, rgba(13, 148, 136, 0.1) 100%);
-  color: var(--primary-600);
+  background: #e0f2fe;
+  color: #0369a1;
   font-weight: 600;
+  border-left: 3px solid #0284c7;
 }
 
 .tab-icon {
