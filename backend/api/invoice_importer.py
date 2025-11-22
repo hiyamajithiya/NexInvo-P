@@ -69,6 +69,34 @@ class InvoiceImporter:
         except (ValueError, decimal.InvalidOperation):
             return Decimal(default)
 
+    def _should_apply_gst(self, invoice_date):
+        """
+        Determine if GST should be applied to an invoice based on:
+        1. Organization's GST enabled setting
+        2. GST registration date (if set)
+        3. Invoice date
+        """
+        from .models import InvoiceSettings, CompanySettings
+
+        try:
+            invoice_settings = InvoiceSettings.objects.get(organization=self.organization)
+            company_settings = CompanySettings.objects.get(organization=self.organization)
+
+            # If GST is not enabled for this organization, don't apply GST
+            if not invoice_settings.gstEnabled:
+                return False
+
+            # If GST is enabled but no registration date is set, apply GST to all invoices
+            if not company_settings.gstRegistrationDate:
+                return True
+
+            # If registration date is set, only apply GST to invoices on or after that date
+            return invoice_date >= company_settings.gstRegistrationDate
+
+        except (InvoiceSettings.DoesNotExist, CompanySettings.DoesNotExist):
+            # Default to applying GST if settings don't exist
+            return True
+
     def import_from_excel(self, file_path):
         """
         Import invoices from Excel file (custom template for professional services)
@@ -196,6 +224,9 @@ class InvoiceImporter:
         # Parse invoice date
         invoice_date = pd.to_datetime(first_row['Invoice Date']).date()
 
+        # Check if GST should be applied based on organization settings
+        should_apply_gst = self._should_apply_gst(invoice_date)
+
         # Calculate totals
         subtotal = Decimal('0.00')
         tax_amount = Decimal('0.00')
@@ -205,6 +236,10 @@ class InvoiceImporter:
             # For professional services, we use Amount directly (not Quantity × Rate)
             # The Amount column represents the taxable amount for the service
             gst_rate = self._safe_decimal(row.get('GST Rate'), default='0.00')
+
+            # If GST should not be applied, set gst_rate to 0
+            if not should_apply_gst:
+                gst_rate = Decimal('0.00')
 
             # Get the taxable amount from 'Amount' column (professional services)
             taxable_amount = self._safe_decimal(row.get('Amount'), default='0.00')

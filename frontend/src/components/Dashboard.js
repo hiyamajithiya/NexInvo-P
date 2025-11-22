@@ -69,9 +69,9 @@ function Dashboard({ user, onLogout }) {
       case 'organization':
         return <OrganizationSettings />;
       case 'pricing':
-        return <PricingPlans />;
+        return <PricingPlans onNavigate={setActiveMenu} />;
       case 'subscription':
-        return <MySubscription />;
+        return <MySubscription onNavigate={setActiveMenu} />;
       case 'profile':
         return <Profile onLogout={onLogout} />;
       default:

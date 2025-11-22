@@ -384,8 +384,7 @@ function InvoiceForm({ onBack, invoice }) {
                     <th style={{width: '120px'}}>SAC Code</th>
                     <th style={{width: '100px'}}>GST %</th>
                     <th style={{width: '150px'}}>Amount (₹)</th>
-                    <th style={{width: '150px'}}>Total (₹)</th>
-                    <th style={{width: '60px'}}>Action</th>
+                    <th style={{width: '150px', textAlign: 'center'}}>Total (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -428,16 +427,6 @@ function InvoiceForm({ onBack, invoice }) {
                         />
                       </td>
                       <td className="text-right">₹{item.totalAmount.toFixed(2)}</td>
-                      <td className="text-center">
-                        {invoiceData.items.length > 1 && (
-                          <button
-                            className="btn-delete-item"
-                            onClick={() => removeItem(index)}
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>

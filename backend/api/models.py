@@ -74,6 +74,11 @@ class CompanySettings(models.Model):
     pinCode = models.CharField(max_length=20, blank=True)
     stateCode = models.CharField(max_length=10, blank=True)
     gstin = models.CharField(max_length=50, blank=True)
+    gstRegistrationDate = models.DateField(
+        blank=True,
+        null=True,
+        help_text='Date when organization was registered under GST (leave blank if not registered or GST not applicable)'
+    )
     pan = models.CharField(max_length=20, blank=True)
     phone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
@@ -226,6 +231,32 @@ class Invoice(models.Model):
 
     def __str__(self):
         return f"{self.invoice_number} - {self.client.name}"
+
+    def should_apply_gst(self):
+        """
+        Determine if GST should be applied to this invoice based on:
+        1. Organization's GST enabled setting
+        2. GST registration date (if set)
+        3. Invoice date
+        """
+        try:
+            invoice_settings = InvoiceSettings.objects.get(organization=self.organization)
+            company_settings = CompanySettings.objects.get(organization=self.organization)
+
+            # If GST is not enabled for this organization, don't apply GST
+            if not invoice_settings.gstEnabled:
+                return False
+
+            # If GST is enabled but no registration date is set, apply GST to all invoices
+            if not company_settings.gstRegistrationDate:
+                return True
+
+            # If registration date is set, only apply GST to invoices on or after that date
+            return self.invoice_date >= company_settings.gstRegistrationDate
+
+        except (InvoiceSettings.DoesNotExist, CompanySettings.DoesNotExist):
+            # Default to applying GST if settings don't exist
+            return True
 
     def save(self, *args, **kwargs):
         # Auto-generate unique invoice number if not provided
@@ -718,3 +749,63 @@ class Subscription(models.Model):
             delta = self.end_date - date.today()
 
         return max(0, delta.days)
+
+
+class SubscriptionUpgradeRequest(models.Model):
+    """
+    Tracks subscription upgrade/change requests from users.
+    Superadmin approves after payment confirmation.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled by User'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE,
+                                    related_name='upgrade_requests')
+    requested_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                    related_name='subscription_requests')
+
+    # Current and requested plans
+    current_plan = models.ForeignKey(SubscriptionPlan, on_delete=models.SET_NULL,
+                                    null=True, blank=True,
+                                    related_name='upgrade_from_requests',
+                                    help_text="Current plan (if any)")
+    requested_plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT,
+                                      related_name='upgrade_to_requests')
+
+    # Coupon (optional)
+    coupon_code = models.CharField(max_length=50, blank=True,
+                                   help_text="Coupon code user wants to apply")
+
+    # Payment Information
+    payment_method = models.CharField(max_length=100, blank=True,
+                                     help_text="User's intended payment method")
+    payment_reference = models.CharField(max_length=200, blank=True,
+                                        help_text="Payment reference/transaction ID after payment")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                help_text="Amount user will pay")
+
+    # Request details
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    user_notes = models.TextField(blank=True, help_text="User's message/notes")
+    admin_notes = models.TextField(blank=True, help_text="Superadmin's notes")
+
+    # Approval details
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='approved_requests')
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Subscription Upgrade Request"
+        verbose_name_plural = "Subscription Upgrade Requests"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.requested_plan.name} ({self.status})"

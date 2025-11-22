@@ -337,3 +337,119 @@ def send_organization_registration_email(user, organization):
     except Exception as e:
         logger.error(f"Failed to send organization registration notification: {str(e)}")
         return False
+
+
+def send_upgrade_request_notification_to_superadmin(upgrade_request):
+    """
+    Send email notification to superadmins when a user requests subscription upgrade
+
+    Args:
+        upgrade_request: SubscriptionUpgradeRequest object
+
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        # Get all superadmin emails
+        superadmin_emails = list(User.objects.filter(is_superuser=True).values_list('email', flat=True))
+
+        if not superadmin_emails:
+            logger.warning("No superadmin emails found for upgrade request notification")
+            return False
+
+        subject = f'New Subscription Upgrade Request - {upgrade_request.organization.name}'
+
+        # Calculate discount if coupon applied
+        discount_info = ""
+        if upgrade_request.coupon_code:
+            discount_info = f"<p><strong>Coupon Code:</strong> {upgrade_request.coupon_code}</p>"
+
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">New Subscription Upgrade Request</h1>
+            </div>
+
+            <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+                <p style="font-size: 16px; margin-bottom: 20px;">
+                    A user has requested to upgrade their subscription plan. Please review and approve after payment confirmation.
+                </p>
+
+                <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1e3a8a;">Organization Details:</h3>
+                    <p><strong>Organization Name:</strong> {upgrade_request.organization.name}</p>
+                    <p><strong>Organization Status:</strong> {"Active" if upgrade_request.organization.is_active else "Inactive"}</p>
+                </div>
+
+                <div style="background-color: #eff6ff; padding: 15px; border-radius: 6px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1e3a8a;">Subscription Details:</h3>
+                    <p><strong>Current Plan:</strong> {upgrade_request.current_plan.name if upgrade_request.current_plan else "No active plan (Trial)"}</p>
+                    <p><strong>Requested Plan:</strong> {upgrade_request.requested_plan.name}</p>
+                    <p><strong>Billing Cycle:</strong> {upgrade_request.requested_plan.billing_cycle.title()}</p>
+                    <p><strong>Plan Price:</strong> ₹{upgrade_request.requested_plan.price:,.2f}</p>
+                    {discount_info}
+                    <p><strong>Amount to Pay:</strong> <span style="font-size: 20px; color: #1e3a8a; font-weight: bold;">₹{upgrade_request.amount:,.2f}</span></p>
+                </div>
+
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1e3a8a;">Requested By:</h3>
+                    <p><strong>Name:</strong> {upgrade_request.requested_by.get_full_name() or upgrade_request.requested_by.username if upgrade_request.requested_by else "Unknown"}</p>
+                    <p><strong>Email:</strong> {upgrade_request.requested_by.email if upgrade_request.requested_by else "N/A"}</p>
+                    <p><strong>Request Date:</strong> {upgrade_request.created_at.strftime('%d %B %Y at %I:%M %p')}</p>
+                </div>
+
+                {f'''<div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                    <h3 style="margin-top: 0; color: #92400e;">User Notes:</h3>
+                    <p style="margin: 0; white-space: pre-wrap;">{upgrade_request.user_notes}</p>
+                </div>''' if upgrade_request.user_notes else ''}
+
+                <div style="margin: 30px 0; text-align: center;">
+                    <p style="margin-bottom: 15px; font-weight: bold; color: #1e3a8a;">
+                        Please verify payment confirmation before approving this request.
+                    </p>
+                    <a href="http://localhost:3000/superadmin"
+                       style="background-color: #1e3a8a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                        Review in Admin Panel
+                    </a>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+
+                <p style="font-size: 12px; color: #666;">
+                    This is an automated notification from NexInvo Invoice Management System.
+                </p>
+
+                <p style="font-size: 12px; color: #666;">
+                    © 2025 Chinmay Technosoft Private Limited. All rights reserved.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        plain_message = strip_tags(html_message)
+
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=superadmin_emails,
+            html_message=html_message,
+            fail_silently=False,
+        )
+
+        logger.info(f"Upgrade request notification sent to superadmins for organization: {upgrade_request.organization.name}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send upgrade request notification: {str(e)}")
+        return False

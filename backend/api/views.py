@@ -17,12 +17,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest)
 from .serializers import (
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
     InvoiceSerializer, PaymentSerializer, ReceiptSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer, UserSerializer,
-    SubscriptionPlanSerializer, CouponSerializer, CouponUsageSerializer, SubscriptionSerializer
+    SubscriptionPlanSerializer, CouponSerializer, CouponUsageSerializer, SubscriptionSerializer, SubscriptionUpgradeRequestSerializer
 )
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email, send_receipt_email
@@ -447,6 +447,58 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             role='owner',
             is_active=True
         )
+
+    def update(self, request, *args, **kwargs):
+        """Override update to create/update subscription when plan changes"""
+        from datetime import date, timedelta
+        from django.db import transaction
+
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        old_plan = instance.plan
+
+        # Perform the update
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Check if plan was changed
+        new_plan = serializer.validated_data.get('plan', old_plan)
+        if new_plan != old_plan and request.user.is_superuser:
+            # Create or update subscription when superadmin changes plan
+            try:
+                with transaction.atomic():
+                    # Get the subscription plan
+                    subscription_plan = SubscriptionPlan.objects.get(
+                        name__iexact=new_plan,
+                        is_active=True
+                    )
+
+                    # Check if subscription exists
+                    subscription, created = Subscription.objects.get_or_create(
+                        organization=instance,
+                        defaults={
+                            'plan': subscription_plan,
+                            'start_date': date.today(),
+                            'end_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30),
+                            'status': 'active',
+                            'amount_paid': subscription_plan.price,
+                            'auto_renew': False,
+                            'next_billing_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30)
+                        }
+                    )
+
+                    if not created:
+                        # Update existing subscription
+                        subscription.plan = subscription_plan
+                        subscription.status = 'active'
+                        subscription.save()
+
+            except SubscriptionPlan.DoesNotExist:
+                # If no matching subscription plan found, skip subscription creation
+                pass
+
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def switch(self, request, pk=None):
@@ -2458,6 +2510,245 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         subscription.save()
 
         return Response({'message': 'Subscription cancelled successfully'})
+
+
+class SubscriptionUpgradeRequestViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for subscription upgrade requests.
+    Users can request upgrades, superadmins can approve/reject.
+    """
+    serializer_class = SubscriptionUpgradeRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            # Superadmins see all upgrade requests
+            return SubscriptionUpgradeRequest.objects.all()
+        # Organizations see only their own requests
+        return SubscriptionUpgradeRequest.objects.filter(organization=self.request.organization)
+
+    def perform_create(self, serializer):
+        """Create an upgrade request and send email notification to superadmin"""
+        from .email_utils import send_upgrade_request_notification_to_superadmin
+
+        # Get current subscription
+        current_subscription = None
+        try:
+            current_subscription = Subscription.objects.get(organization=self.request.organization)
+            current_plan = current_subscription.plan
+        except Subscription.DoesNotExist:
+            current_plan = None
+
+        # Get requested plan
+        requested_plan = serializer.validated_data.get('requested_plan')
+
+        # Calculate amount (with coupon if provided)
+        amount = requested_plan.price
+        coupon_code = serializer.validated_data.get('coupon_code', '')
+
+        if coupon_code:
+            try:
+                coupon = Coupon.objects.get(code__iexact=coupon_code)
+                is_valid, message = coupon.is_valid()
+                if is_valid:
+                    can_redeem, message = coupon.can_redeem(self.request.organization)
+                    if can_redeem:
+                        # Check plan applicability
+                        if not coupon.applicable_plans.exists() or requested_plan in coupon.applicable_plans.all():
+                            discount_info = calculate_discount(coupon, requested_plan)
+                            amount = Decimal(str(discount_info['final_price']))
+            except Coupon.DoesNotExist:
+                pass  # Invalid coupon, just use regular price
+
+        # Save the upgrade request
+        upgrade_request = serializer.save(
+            organization=self.request.organization,
+            requested_by=self.request.user,
+            current_plan=current_plan,
+            amount=amount,
+            status='pending'
+        )
+
+        # Send email notification to superadmin
+        send_upgrade_request_notification_to_superadmin(upgrade_request)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def approve(self, request, pk=None):
+        """
+        Approve an upgrade request and update the subscription.
+        Only superadmins can approve.
+        """
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can approve upgrade requests'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        upgrade_request = self.get_object()
+
+        if upgrade_request.status != 'pending':
+            return Response(
+                {'error': f'Request is already {upgrade_request.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update upgrade request
+        admin_notes = request.data.get('admin_notes', '')
+        payment_reference = request.data.get('payment_reference', '')
+
+        upgrade_request.status = 'approved'
+        upgrade_request.approved_by = request.user
+        upgrade_request.approved_at = timezone.now()
+        upgrade_request.admin_notes = admin_notes
+
+        if payment_reference:
+            upgrade_request.payment_reference = payment_reference
+
+        upgrade_request.save()
+
+        # Update or create subscription
+        with transaction.atomic():
+            try:
+                subscription = Subscription.objects.get(organization=upgrade_request.organization)
+                # Update existing subscription
+                subscription.plan = upgrade_request.requested_plan
+                subscription.status = 'active'
+                subscription.amount_paid = upgrade_request.amount
+                subscription.last_payment_date = date.today()
+
+                # Extend the subscription period
+                start_date = date.today()
+                if upgrade_request.requested_plan.billing_cycle == 'monthly':
+                    subscription.end_date = start_date + timedelta(days=30)
+                else:
+                    subscription.end_date = start_date + timedelta(days=365)
+
+                subscription.next_billing_date = subscription.end_date
+
+                # Apply coupon if provided
+                if upgrade_request.coupon_code:
+                    try:
+                        coupon = Coupon.objects.get(code__iexact=upgrade_request.coupon_code)
+                        subscription.coupon_applied = coupon
+
+                        # Record coupon usage
+                        CouponUsage.objects.create(
+                            coupon=coupon,
+                            organization=upgrade_request.organization,
+                            subscription=subscription,
+                            discount_applied=subscription.plan.price - upgrade_request.amount
+                        )
+                    except Coupon.DoesNotExist:
+                        pass
+
+                subscription.save()
+
+            except Subscription.DoesNotExist:
+                # Create new subscription
+                start_date = date.today()
+                if upgrade_request.requested_plan.billing_cycle == 'monthly':
+                    end_date = start_date + timedelta(days=30)
+                else:
+                    end_date = start_date + timedelta(days=365)
+
+                coupon_obj = None
+                if upgrade_request.coupon_code:
+                    try:
+                        coupon_obj = Coupon.objects.get(code__iexact=upgrade_request.coupon_code)
+                    except Coupon.DoesNotExist:
+                        pass
+
+                subscription = Subscription.objects.create(
+                    organization=upgrade_request.organization,
+                    plan=upgrade_request.requested_plan,
+                    start_date=start_date,
+                    end_date=end_date,
+                    status='active',
+                    amount_paid=upgrade_request.amount,
+                    coupon_applied=coupon_obj,
+                    auto_renew=True,
+                    next_billing_date=end_date,
+                    last_payment_date=date.today()
+                )
+
+                # Record coupon usage
+                if coupon_obj:
+                    CouponUsage.objects.create(
+                        coupon=coupon_obj,
+                        organization=upgrade_request.organization,
+                        subscription=subscription,
+                        discount_applied=subscription.plan.price - upgrade_request.amount
+                    )
+
+            # Update organization plan
+            upgrade_request.organization.plan = upgrade_request.requested_plan.name.lower()
+            upgrade_request.organization.save()
+
+        return Response({
+            'message': 'Upgrade request approved and subscription updated successfully',
+            'subscription': SubscriptionSerializer(subscription).data
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def reject(self, request, pk=None):
+        """
+        Reject an upgrade request.
+        Only superadmins can reject.
+        """
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can reject upgrade requests'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        upgrade_request = self.get_object()
+
+        if upgrade_request.status != 'pending':
+            return Response(
+                {'error': f'Request is already {upgrade_request.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update upgrade request
+        admin_notes = request.data.get('admin_notes', 'Request rejected by admin')
+
+        upgrade_request.status = 'rejected'
+        upgrade_request.approved_by = request.user
+        upgrade_request.approved_at = timezone.now()
+        upgrade_request.admin_notes = admin_notes
+        upgrade_request.save()
+
+        return Response({
+            'message': 'Upgrade request rejected',
+            'upgrade_request': self.get_serializer(upgrade_request).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        Cancel an upgrade request by the user who created it.
+        """
+        upgrade_request = self.get_object()
+
+        # Only the requesting organization can cancel their own request
+        if upgrade_request.organization != request.organization and not request.user.is_superuser:
+            return Response(
+                {'error': 'You can only cancel your own upgrade requests'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if upgrade_request.status != 'pending':
+            return Response(
+                {'error': f'Cannot cancel a request that is already {upgrade_request.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        upgrade_request.status = 'cancelled'
+        upgrade_request.save()
+
+        return Response({
+            'message': 'Upgrade request cancelled successfully'
+        })
 
 
 # Helper function

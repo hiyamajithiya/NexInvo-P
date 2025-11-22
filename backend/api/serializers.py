@@ -4,7 +4,8 @@ from django.contrib.auth.password_validation import validate_password
 from .models import (
     Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
     Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings,
-    ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription
+    ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription,
+    SubscriptionUpgradeRequest
 )
 
 
@@ -39,7 +40,7 @@ class CompanySettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanySettings
         fields = ['id', 'companyName', 'tradingName', 'address', 'city', 'state',
-                  'pinCode', 'stateCode', 'gstin', 'pan', 'phone', 'email', 'logo',
+                  'pinCode', 'stateCode', 'gstin', 'gstRegistrationDate', 'pan', 'phone', 'email', 'logo',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -113,15 +114,34 @@ class InvoiceSerializer(serializers.ModelSerializer):
                            'created_at', 'updated_at']
 
     def create(self, validated_data):
+        from decimal import Decimal
+
         items_data = validated_data.pop('items')
         invoice = Invoice.objects.create(**validated_data)
 
+        # Check if GST should be applied to this invoice
+        should_apply_gst = invoice.should_apply_gst()
+
         for item_data in items_data:
+            # If GST should not be applied, set gst_rate to 0 and recalculate amounts
+            if not should_apply_gst:
+                item_data['gst_rate'] = Decimal('0.00')
+                # Recalculate total_amount without GST
+                item_data['total_amount'] = item_data['taxable_amount']
+
             InvoiceItem.objects.create(invoice=invoice, **item_data)
+
+        # Recalculate invoice totals
+        invoice.subtotal = sum(item.taxable_amount for item in invoice.items.all())
+        invoice.tax_amount = sum(item.total_amount - item.taxable_amount for item in invoice.items.all())
+        invoice.total_amount = invoice.subtotal + invoice.tax_amount
+        invoice.save()
 
         return invoice
 
     def update(self, instance, validated_data):
+        from decimal import Decimal
+
         items_data = validated_data.pop('items', None)
 
         # Update invoice fields
@@ -131,11 +151,26 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
         # Update items if provided
         if items_data is not None:
+            # Check if GST should be applied to this invoice
+            should_apply_gst = instance.should_apply_gst()
+
             # Delete existing items
             instance.items.all().delete()
             # Create new items
             for item_data in items_data:
+                # If GST should not be applied, set gst_rate to 0 and recalculate amounts
+                if not should_apply_gst:
+                    item_data['gst_rate'] = Decimal('0.00')
+                    # Recalculate total_amount without GST
+                    item_data['total_amount'] = item_data['taxable_amount']
+
                 InvoiceItem.objects.create(invoice=instance, **item_data)
+
+            # Recalculate invoice totals
+            instance.subtotal = sum(item.taxable_amount for item in instance.items.all())
+            instance.tax_amount = sum(item.total_amount - item.taxable_amount for item in instance.items.all())
+            instance.total_amount = instance.subtotal + instance.tax_amount
+            instance.save()
 
         return instance
 
@@ -404,3 +439,31 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     def get_is_active_now(self, obj):
         """Check if subscription is currently active"""
         return obj.is_active()
+
+
+class SubscriptionUpgradeRequestSerializer(serializers.ModelSerializer):
+    """Serializer for subscription upgrade requests"""
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+    requested_by_email = serializers.EmailField(source='requested_by.email', read_only=True)
+    requested_by_name = serializers.SerializerMethodField()
+    current_plan_name = serializers.CharField(source='current_plan.name', read_only=True, allow_null=True)
+    requested_plan_name = serializers.CharField(source='requested_plan.name', read_only=True)
+    approved_by_email = serializers.EmailField(source='approved_by.email', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SubscriptionUpgradeRequest
+        fields = [
+            'id', 'organization', 'organization_name', 'requested_by', 'requested_by_email',
+            'requested_by_name', 'current_plan', 'current_plan_name', 'requested_plan',
+            'requested_plan_name', 'coupon_code', 'payment_method', 'payment_reference',
+            'amount', 'status', 'user_notes', 'admin_notes', 'approved_by',
+            'approved_by_email', 'approved_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'requested_by', 'approved_by', 'approved_at',
+                           'created_at', 'updated_at']
+
+    def get_requested_by_name(self, obj):
+        """Get requested by user's full name"""
+        if obj.requested_by:
+            return obj.requested_by.get_full_name() or obj.requested_by.username
+        return None

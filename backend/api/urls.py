@@ -15,6 +15,7 @@ router.register(r'subscription-plans', views.SubscriptionPlanViewSet, basename='
 router.register(r'coupons', views.CouponViewSet, basename='coupon')
 router.register(r'coupon-usages', views.CouponUsageViewSet, basename='coupon-usage')
 router.register(r'subscriptions', views.SubscriptionViewSet, basename='subscription')
+router.register(r'subscription-upgrade-requests', views.SubscriptionUpgradeRequestViewSet, basename='subscription-upgrade-request')
 
 urlpatterns = [
     # Invoice-specific endpoints must come before router to avoid conflicts

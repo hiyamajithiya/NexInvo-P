@@ -32,7 +32,7 @@ import {
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
-const PricingPlans = () => {
+const PricingPlans = ({ onNavigate }) => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -116,23 +116,26 @@ const PricingPlans = () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await axios.post(
-        `${API_BASE_URL}/subscriptions/subscribe/`,
+        `${API_BASE_URL}/subscription-upgrade-requests/`,
         {
-          plan_id: selectedPlan.id,
-          coupon_code: couponCode.toUpperCase() || undefined
+          requested_plan: selectedPlan.id,
+          coupon_code: couponCode.toUpperCase() || undefined,
+          user_notes: ''  // Can be extended to include user notes field
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      showSnackbar(response.data.message || 'Subscription successful!', 'success');
+      showSnackbar('Upgrade request submitted successfully! Our team will review and approve it after payment confirmation.', 'success');
       handleCloseSubscribeDialog();
-      // You might want to refresh the page or redirect to current subscription
+      // Navigate to subscription page
       setTimeout(() => {
-        window.location.reload();
+        if (onNavigate) {
+          onNavigate('subscription');
+        }
       }, 2000);
     } catch (error) {
-      console.error('Error subscribing:', error);
-      showSnackbar(error.response?.data?.error || 'Failed to subscribe', 'error');
+      console.error('Error submitting upgrade request:', error);
+      showSnackbar(error.response?.data?.error || 'Failed to submit upgrade request', 'error');
     } finally {
       setSubscribing(false);
     }

@@ -19,6 +19,7 @@ function Settings() {
     pinCode: '',
     stateCode: '',
     gstin: '',
+    gstRegistrationDate: '',
     pan: '',
     phone: '',
     email: '',
@@ -608,6 +609,18 @@ function Settings() {
                       className="form-input"
                       placeholder="e.g., 24XXXXX0000X1Z5"
                     />
+                  </div>
+                  <div className="form-field">
+                    <label>GST Registration Date</label>
+                    <input
+                      type="date"
+                      value={companyInfo.gstRegistrationDate || ''}
+                      onChange={(e) => handleCompanyChange('gstRegistrationDate', e.target.value)}
+                      className="form-input"
+                    />
+                    <small style={{ color: '#666', fontSize: '0.85em', display: 'block', marginTop: '4px' }}>
+                      Leave blank if not registered under GST or GST not applicable
+                    </small>
                   </div>
                   <div className="form-field">
                     <label>PAN</label>

@@ -34,7 +34,7 @@ import {
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
-const MySubscription = () => {
+const MySubscription = ({ onNavigate }) => {
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
@@ -158,7 +158,7 @@ const MySubscription = () => {
             variant="contained"
             size="large"
             startIcon={<UpgradeIcon />}
-            onClick={() => window.location.href = '#pricing'}
+            onClick={() => onNavigate && onNavigate('pricing')}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               textTransform: 'none',
@@ -408,7 +408,7 @@ const MySubscription = () => {
               fullWidth
               variant="outlined"
               startIcon={<UpgradeIcon />}
-              onClick={() => window.location.href = '#pricing'}
+              onClick={() => onNavigate && onNavigate('pricing')}
               sx={{ mb: 2 }}
             >
               Upgrade Plan
