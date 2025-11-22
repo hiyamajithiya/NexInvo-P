@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import re
+import decimal
 from datetime import datetime
 from decimal import Decimal
 from .models import Invoice, InvoiceItem, Client, Organization, InvoiceSettings, ServiceItem
@@ -44,6 +45,29 @@ class InvoiceImporter:
         if pd.isna(value):
             return ''
         return str(value).strip()
+
+    @staticmethod
+    def _safe_decimal(value, default='0.00'):
+        """
+        Convert pandas value to Decimal, handling NaN and invalid values
+
+        Args:
+            value: Any value from pandas DataFrame
+            default: Default value if conversion fails (default '0.00')
+
+        Returns:
+            Decimal value
+        """
+        if pd.isna(value):
+            return Decimal(default)
+        try:
+            # Convert to string and strip whitespace
+            str_value = str(value).strip()
+            if not str_value or str_value.lower() in ('nan', 'none', ''):
+                return Decimal(default)
+            return Decimal(str_value)
+        except (ValueError, decimal.InvalidOperation):
+            return Decimal(default)
 
     def import_from_excel(self, file_path):
         """
@@ -179,9 +203,10 @@ class InvoiceImporter:
 
         items_data = []
         for _, row in group.iterrows():
-            quantity = Decimal(str(row['Quantity']))
-            rate = Decimal(str(row['Rate']))
-            gst_rate = Decimal(str(row['GST Rate']))
+            # Use _safe_decimal to handle NaN values
+            quantity = self._safe_decimal(row.get('Quantity'), default='1')
+            rate = self._safe_decimal(row.get('Rate'), default='0.00')
+            gst_rate = self._safe_decimal(row.get('GST Rate'), default='0.00')
 
             taxable_amount = quantity * rate
             item_tax = taxable_amount * (gst_rate / Decimal('100'))
