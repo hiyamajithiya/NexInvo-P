@@ -1687,9 +1687,11 @@ class UserViewSet(viewsets.ModelViewSet):
         return context
 
     def get_queryset(self):
-        # Superadmin can see all users
+        # Superadmin can see all users with organization count
         if self.request.user.is_superuser:
-            return User.objects.all().order_by('-date_joined')
+            return User.objects.annotate(
+                organization_count=Count('organization_memberships', filter=Q(organization_memberships__is_active=True))
+            ).order_by('-date_joined')
 
         # Check if user is admin/owner of their organization
         try:
@@ -1705,12 +1707,16 @@ class UserViewSet(viewsets.ModelViewSet):
                     organization=self.request.organization,
                     is_active=True
                 ).values_list('user_id', flat=True)
-                return User.objects.filter(id__in=org_user_ids).order_by('-date_joined')
+                return User.objects.filter(id__in=org_user_ids).annotate(
+                    organization_count=Count('organization_memberships', filter=Q(organization_memberships__is_active=True))
+                ).order_by('-date_joined')
         except OrganizationMembership.DoesNotExist:
             pass
 
         # Regular users can only see themselves
-        return User.objects.filter(id=self.request.user.id)
+        return User.objects.filter(id=self.request.user.id).annotate(
+            organization_count=Count('organization_memberships', filter=Q(organization_memberships__is_active=True))
+        )
     
     def destroy(self, request, *args, **kwargs):
         """Prevent users from deleting themselves"""

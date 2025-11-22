@@ -204,15 +204,23 @@ class InvoiceFormatSettingsSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     role = serializers.CharField(required=False, allow_blank=True)
+    organization_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'password', 'role', 'date_joined']
-        read_only_fields = ['id', 'username', 'date_joined']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'password', 'role', 'date_joined', 'organization_count']
+        read_only_fields = ['id', 'username', 'date_joined', 'organization_count', 'is_superuser']
 
     def to_representation(self, instance):
-        """Add role from OrganizationMembership to the response"""
+        """Add role from OrganizationMembership and organization_count to the response"""
         data = super().to_representation(instance)
+
+        # Add organization_count from annotation if available
+        if hasattr(instance, 'organization_count'):
+            data['organization_count'] = instance.organization_count
+        else:
+            # Fallback: count organizations manually
+            data['organization_count'] = instance.organization_memberships.filter(is_active=True).count()
 
         # Get organization from context
         organization = self.context.get('organization')
