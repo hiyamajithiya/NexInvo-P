@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -127,6 +127,15 @@ export const clientAPI = {
   create: (data) => api.post('/clients/', data),
   update: (id, data) => api.put(`/clients/${id}/`, data),
   delete: (id) => api.delete(`/clients/${id}/`),
+  bulkUpload: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/clients/bulk_upload/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
 };
 
 // Service Item APIs

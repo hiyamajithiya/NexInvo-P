@@ -30,7 +30,7 @@ import {
   LocalOffer as CouponIcon,
 } from '@mui/icons-material';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 const PricingPlans = () => {
   const [plans, setPlans] = useState([]);

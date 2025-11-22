@@ -57,8 +57,9 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
 class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
-        fields = ['id', 'name', 'email', 'phone', 'address', 'city', 'state',
-                  'pinCode', 'gstin', 'pan', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'code', 'email', 'phone', 'mobile', 'address', 'city', 'state',
+                  'pinCode', 'stateCode', 'gstin', 'pan', 'date_of_birth', 'date_of_incorporation',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 

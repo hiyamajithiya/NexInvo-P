@@ -122,8 +122,10 @@ class InvoiceSettings(models.Model):
 class Client(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='clients')
     name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50, blank=True, unique=False)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
+    mobile = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True)
     state = models.CharField(max_length=100, blank=True)
@@ -131,6 +133,8 @@ class Client(models.Model):
     stateCode = models.CharField(max_length=10, blank=True)
     gstin = models.CharField(max_length=50, blank=True)
     pan = models.CharField(max_length=20, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    date_of_incorporation = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -139,6 +143,47 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
+
+    def generate_client_code(self):
+        """Auto-generate client code from name and dates"""
+        if self.code:
+            return self.code
+
+        # Get abbreviation from name (first 3 letters of each word, max 6 chars)
+        words = self.name.strip().upper().split()
+        abbreviation = ''
+        for word in words[:2]:  # Take first 2 words
+            abbreviation += word[:3] if len(word) >= 3 else word
+        abbreviation = abbreviation[:6]  # Max 6 characters
+
+        # Get two digits from date
+        date_digits = ''
+        if self.date_of_birth:
+            date_digits = self.date_of_birth.strftime('%d')
+        elif self.date_of_incorporation:
+            date_digits = self.date_of_incorporation.strftime('%d')
+        else:
+            # Use last 2 digits of created year
+            import datetime
+            date_digits = datetime.datetime.now().strftime('%d')
+
+        # Combine abbreviation and date digits
+        base_code = f"{abbreviation}{date_digits}"
+
+        # Check if code exists and add counter if needed
+        code = base_code
+        counter = 1
+        while Client.objects.filter(organization=self.organization, code=code).exclude(id=self.id).exists():
+            code = f"{base_code}{counter}"
+            counter += 1
+
+        return code
+
+    def save(self, *args, **kwargs):
+        # Auto-generate code if not provided
+        if not self.code:
+            self.code = self.generate_client_code()
+        super().save(*args, **kwargs)
 
 
 class Invoice(models.Model):

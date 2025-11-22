@@ -655,6 +655,108 @@ class ClientViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(organization=self.request.organization)
 
+    @action(detail=False, methods=['post'])
+    def bulk_upload(self, request):
+        """Bulk upload clients from CSV/Excel file"""
+        import csv
+        import io
+        from datetime import datetime
+
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Read file content
+            file_content = file.read().decode('utf-8')
+            csv_reader = csv.DictReader(io.StringIO(file_content))
+
+            # Validate CSV headers
+            expected_headers = {'Client Name*', 'Email*'}  # Required headers
+            optional_headers = {'Client Code', 'Phone', 'Mobile', 'Address', 'City', 'State',
+                              'PIN Code', 'State Code', 'GSTIN', 'PAN', 'Date of Birth', 'Date of Incorporation'}
+
+            if csv_reader.fieldnames is None:
+                return Response({'error': 'CSV file is empty or invalid'}, status=status.HTTP_400_BAD_REQUEST)
+
+            file_headers = set(csv_reader.fieldnames)
+            missing_required = expected_headers - file_headers
+
+            if missing_required:
+                return Response({
+                    'error': f'Missing required columns: {", ".join(missing_required)}. Please use the provided template.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            created_count = 0
+            errors = []
+
+            for row_num, row in enumerate(csv_reader, start=2):
+                try:
+                    # Parse date fields if provided
+                    date_of_birth = None
+                    date_of_incorporation = None
+
+                    if row.get('Date of Birth'):
+                        try:
+                            date_of_birth = datetime.strptime(row['Date of Birth'], '%Y-%m-%d').date()
+                        except ValueError:
+                            pass
+
+                    if row.get('Date of Incorporation'):
+                        try:
+                            date_of_incorporation = datetime.strptime(row['Date of Incorporation'], '%Y-%m-%d').date()
+                        except ValueError:
+                            pass
+
+                    # Create client data
+                    client_data = {
+                        'name': row.get('Client Name*', '').strip(),
+                        'code': row.get('Client Code', '').strip(),
+                        'email': row.get('Email*', '').strip(),
+                        'phone': row.get('Phone', '').strip(),
+                        'mobile': row.get('Mobile', '').strip(),
+                        'address': row.get('Address', '').strip(),
+                        'city': row.get('City', '').strip(),
+                        'state': row.get('State', '').strip(),
+                        'pinCode': row.get('PIN Code', '').strip(),
+                        'stateCode': row.get('State Code', '').strip(),
+                        'gstin': row.get('GSTIN', '').strip(),
+                        'pan': row.get('PAN', '').strip(),
+                        'date_of_birth': date_of_birth,
+                        'date_of_incorporation': date_of_incorporation,
+                    }
+
+                    # Validate required fields
+                    if not client_data['name']:
+                        errors.append(f"Row {row_num}: Client name is required")
+                        continue
+
+                    # Create client
+                    serializer = ClientSerializer(data=client_data)
+                    if serializer.is_valid():
+                        serializer.save(organization=request.organization)
+                        created_count += 1
+                    else:
+                        errors.append(f"Row {row_num}: {serializer.errors}")
+
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {str(e)}")
+
+            return Response({
+                'success': True,
+                'created_count': created_count,
+                'errors': errors
+            }, status=status.HTTP_201_CREATED)
+
+        except UnicodeDecodeError:
+            return Response({
+                'error': 'Unable to read the file. Please ensure it is saved as UTF-8 CSV format.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to process file: {str(e)}. Please ensure the file matches the template format.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ServiceItemViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceItemSerializer

@@ -206,11 +206,11 @@ function Clients() {
   };
 
   const handleDownloadTemplate = () => {
-    // Create Excel template data
+    // Create Excel template data with updated fields
     const templateData = [
-      ['Client Name*', 'Client Code', 'Email*', 'Mobile', 'Address', 'City', 'State', 'PIN Code', 'State Code', 'GSTIN', 'PAN'],
-      ['ABC Corporation', 'CLI001', 'abc@example.com', '9876543210', '123 Main St', 'Mumbai', 'Maharashtra', '400001', '27', '27XXXXX0000X1Z5', 'XXXXX0000X'],
-      ['XYZ Ltd', 'CLI002', 'xyz@example.com', '9876543211', '456 Park Ave', 'Delhi', 'Delhi', '110001', '07', '07XXXXX0000X1Z5', 'XXXXX0000Y']
+      ['Client Name*', 'Client Code', 'Email*', 'Phone', 'Mobile', 'Address', 'City', 'State', 'PIN Code', 'State Code', 'GSTIN', 'PAN', 'Date of Birth', 'Date of Incorporation'],
+      ['ABC Corporation', '', 'abc@example.com', '022-12345678', '9876543210', '123 Main St', 'Mumbai', 'Maharashtra', '400001', '27', '27XXXXX0000X1Z5', 'XXXXX0000X', '', '2020-01-15'],
+      ['John Doe', '', 'john@example.com', '', '9876543211', '456 Park Ave', 'Delhi', 'Delhi', '110001', '07', '', '', '1985-05-20', '']
     ];
 
     // Convert to CSV
@@ -236,9 +236,35 @@ function Clients() {
     const file = event.target.files[0];
     if (!file) return;
 
-    // For now, show a message that bulk upload functionality will be implemented
-    alert('Bulk upload functionality will process the file and import clients. This feature will be fully implemented with backend support.');
-    setShowBulkUpload(false);
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await clientAPI.bulkUpload(file);
+
+      const { created_count, errors } = response.data;
+
+      let message = `Successfully uploaded ${created_count} client(s).`;
+      if (errors && errors.length > 0) {
+        message += `\n\nErrors:\n${errors.slice(0, 5).join('\n')}`;
+        if (errors.length > 5) {
+          message += `\n... and ${errors.length - 5} more errors`;
+        }
+      }
+
+      alert(message);
+      setShowBulkUpload(false);
+      loadClients();
+
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Failed to upload file. Please check the format and try again.';
+      setError(errorMsg);
+      alert(errorMsg);
+    } finally {
+      setLoading(false);
+      // Reset file input
+      event.target.value = '';
+    }
   };
 
   const filteredClients = clients.filter(client => {

@@ -28,7 +28,7 @@ export const OrganizationProvider = ({ children }) => {
       // Set current organization from localStorage or use first one
       const storedOrgId = localStorage.getItem('current_org_id');
       if (storedOrgId) {
-        const org = response.data.find(o => o.id === storedOrgId);
+        const org = response.data.find(o => String(o.id) === String(storedOrgId));
         if (org) {
           setCurrentOrganization(org);
         } else if (response.data.length > 0) {
