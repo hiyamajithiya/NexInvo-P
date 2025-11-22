@@ -88,9 +88,11 @@ const SuperAdminDashboard = ({ onLogout }) => {
     from_email: ''
   });
   const [savingEmail, setSavingEmail] = useState(false);
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
 
   useEffect(() => {
     loadData();
+    loadSubscriptionPlans();
   }, []);
 
   useEffect(() => {
@@ -133,6 +135,18 @@ const SuperAdminDashboard = ({ onLogout }) => {
       console.error('Error loading users:', error);
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const loadSubscriptionPlans = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSubscriptionPlans(response.data);
+    } catch (error) {
+      console.error('Error loading subscription plans:', error);
     }
   };
 
@@ -1602,39 +1616,74 @@ const SuperAdminDashboard = ({ onLogout }) => {
       <Dialog
         open={planChangeDialog}
         onClose={() => setPlanChangeDialog(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
           Change Organization Plan
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ p: 3 }}>
           <Box sx={{ mt: 2 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>
-              Select a new plan for <strong>{selectedOrg?.name}</strong>
+            <Typography variant="body2" sx={{ color: '#6b7280', mb: 3 }}>
+              Select a new subscription plan for <strong>{selectedOrg?.name}</strong>
             </Typography>
-            <FormControl fullWidth>
-              <InputLabel>Subscription Plan</InputLabel>
-              <Select
-                value={selectedPlan}
-                label="Subscription Plan"
-                onChange={(e) => setSelectedPlan(e.target.value)}
-              >
-                <MenuItem value="free">Free Trial</MenuItem>
-                <MenuItem value="basic">Basic Plan</MenuItem>
-                <MenuItem value="professional">Professional Plan</MenuItem>
-                <MenuItem value="enterprise">Enterprise Plan</MenuItem>
-              </Select>
-            </FormControl>
+            <Grid container spacing={2}>
+              {subscriptionPlans.map((plan) => (
+                <Grid item xs={12} sm={6} key={plan.id}>
+                  <Paper
+                    elevation={selectedPlan === plan.name.toLowerCase() ? 4 : 1}
+                    sx={{
+                      p: 3,
+                      cursor: 'pointer',
+                      border: selectedPlan === plan.name.toLowerCase() ? '2px solid #8b5cf6' : '1px solid #e5e7eb',
+                      borderRadius: 2,
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        borderColor: '#8b5cf6',
+                        transform: 'translateY(-2px)'
+                      }
+                    }}
+                    onClick={() => setSelectedPlan(plan.name.toLowerCase())}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        {plan.name}
+                      </Typography>
+                      {plan.highlight && (
+                        <Chip label="POPULAR" size="small" sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold' }} />
+                      )}
+                    </Box>
+                    <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#8b5cf6', mb: 1 }}>
+                      ₹{parseFloat(plan.price).toLocaleString('en-IN')}
+                      <Typography component="span" variant="body2" sx={{ color: '#6b7280', ml: 1 }}>
+                        / {plan.billing_cycle}
+                      </Typography>
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" sx={{ color: '#6b7280', display: 'block', mb: 0.5 }}>
+                        👥 {plan.max_users} users
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#6b7280', display: 'block', mb: 0.5 }}>
+                        📄 {plan.max_invoices_per_month} invoices/month
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#6b7280', display: 'block' }}>
+                        💾 {plan.max_storage_gb} GB storage
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
           <Button onClick={() => setPlanChangeDialog(false)}>
             Cancel
           </Button>
           <Button
             variant="contained"
             onClick={handlePlanChangeSubmit}
+            disabled={!selectedPlan}
             sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
           >
             Update Plan

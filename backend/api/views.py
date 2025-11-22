@@ -644,6 +644,54 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         membership.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    def perform_update(self, serializer):
+        """Sync organization plan changes with Subscription model"""
+        from datetime import date, timedelta
+        from .models import SubscriptionPlan, Subscription
+
+        # Get the old plan before updating
+        old_plan = self.get_object().plan
+        organization = serializer.save()
+        new_plan = organization.plan
+
+        # If plan changed and user is superadmin, update/create subscription
+        if old_plan != new_plan and self.request.user.is_superuser:
+            try:
+                # Find the subscription plan by name
+                plan = SubscriptionPlan.objects.filter(
+                    name__iexact=new_plan
+                ).first()
+
+                if plan:
+                    # Calculate subscription dates
+                    start_date = date.today()
+                    if plan.billing_cycle == 'monthly':
+                        end_date = start_date + timedelta(days=30)
+                    else:
+                        end_date = start_date + timedelta(days=365)
+
+                    trial_end_date = None
+                    if plan.trial_days > 0:
+                        trial_end_date = start_date + timedelta(days=plan.trial_days)
+
+                    # Update or create subscription
+                    Subscription.objects.update_or_create(
+                        organization=organization,
+                        defaults={
+                            'plan': plan,
+                            'start_date': start_date,
+                            'end_date': end_date,
+                            'trial_end_date': trial_end_date,
+                            'status': 'trial' if plan.trial_days > 0 else 'active',
+                            'amount_paid': plan.price,
+                            'auto_renew': True,
+                            'next_billing_date': end_date
+                        }
+                    )
+            except Exception as e:
+                # Log error but don't fail the organization update
+                print(f"Error syncing subscription: {e}")
+
 
 class ClientViewSet(viewsets.ModelViewSet):
     serializer_class = ClientSerializer
