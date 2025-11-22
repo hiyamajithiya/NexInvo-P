@@ -371,6 +371,7 @@ function Settings() {
         last_name: currentUser.name.split(' ').slice(1).join(' ') || '',
         email: currentUser.email,
         username: currentUser.email,
+        role: currentUser.role || 'user',
       };
 
       // Only include password when creating new user or if it's been changed

@@ -195,14 +195,37 @@ class InvoiceFormatSettingsSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
-    
+    role = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'password', 'date_joined']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'password', 'role', 'date_joined']
         read_only_fields = ['id', 'username', 'date_joined']
+
+    def to_representation(self, instance):
+        """Add role from OrganizationMembership to the response"""
+        data = super().to_representation(instance)
+
+        # Get organization from context
+        organization = self.context.get('organization')
+
+        if organization:
+            try:
+                membership = OrganizationMembership.objects.get(
+                    user=instance,
+                    organization=organization
+                )
+                data['role'] = membership.role
+            except OrganizationMembership.DoesNotExist:
+                data['role'] = 'user'
+        else:
+            data['role'] = 'user'
+
+        return data
     
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+        role = validated_data.pop('role', 'user')
         email = validated_data.get('email')
 
         if not email:
@@ -213,6 +236,11 @@ class UserSerializer(serializers.ModelSerializer):
 
         # Validate password
         validate_password(password)
+
+        # Validate role
+        valid_roles = ['owner', 'admin', 'user']
+        if role not in valid_roles:
+            role = 'user'
 
         # Create user with email as username
         user = User.objects.create_user(
@@ -229,11 +257,11 @@ class UserSerializer(serializers.ModelSerializer):
         organization = self.context.get('organization')
 
         if organization:
-            # Add user to the organization as a user (regular member)
+            # Add user to the organization with the specified role
             OrganizationMembership.objects.create(
                 organization=organization,
                 user=user,
-                role='user',
+                role=role,
                 is_active=True
             )
 
@@ -241,18 +269,35 @@ class UserSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
-        
+        role = validated_data.pop('role', None)
+
         # Update user fields
         instance.first_name = validated_data.get('first_name', instance.first_name)
         instance.last_name = validated_data.get('last_name', instance.last_name)
         instance.is_active = validated_data.get('is_active', instance.is_active)
         instance.is_staff = validated_data.get('is_staff', instance.is_staff)
-        
+
         # Update password if provided
         if password:
             validate_password(password)
             instance.set_password(password)
-        
+
+        # Update role in OrganizationMembership if provided
+        if role:
+            valid_roles = ['owner', 'admin', 'user']
+            if role in valid_roles:
+                organization = self.context.get('organization')
+                if organization:
+                    try:
+                        membership = OrganizationMembership.objects.get(
+                            user=instance,
+                            organization=organization
+                        )
+                        membership.role = role
+                        membership.save()
+                    except OrganizationMembership.DoesNotExist:
+                        pass
+
         instance.save()
         return instance
 

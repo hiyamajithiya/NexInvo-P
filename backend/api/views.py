@@ -1621,7 +1621,13 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    
+
+    def get_serializer_context(self):
+        """Pass organization to serializer context"""
+        context = super().get_serializer_context()
+        context['organization'] = getattr(self.request, 'organization', None)
+        return context
+
     def get_queryset(self):
         # Superadmin can see all users
         if self.request.user.is_superuser:
