@@ -88,7 +88,7 @@ class Command(BaseCommand):
 
         # Get email settings
         try:
-            email_settings = EmailSettings.objects.get(user=user)
+            email_settings = EmailSettings.objects.get(organization=invoice.organization)
         except EmailSettings.DoesNotExist:
             email_settings = None
 

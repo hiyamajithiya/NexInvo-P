@@ -19,7 +19,7 @@ def send_invoice_email(invoice, company_settings):
     try:
         # Get user's email settings
         try:
-            email_settings = EmailSettings.objects.get(user=invoice.user)
+            email_settings = EmailSettings.objects.get(organization=invoice.organization)
         except EmailSettings.DoesNotExist:
             print("Email settings not configured for this user")
             return False
@@ -35,7 +35,7 @@ def send_invoice_email(invoice, company_settings):
 
         # Get invoice format settings
         try:
-            format_settings = InvoiceFormatSettings.objects.get(user=invoice.user)
+            format_settings = InvoiceFormatSettings.objects.get(organization=invoice.organization)
         except InvoiceFormatSettings.DoesNotExist:
             format_settings = None
 
