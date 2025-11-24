@@ -251,6 +251,13 @@ def invoice_settings_view(request):
 @permission_classes([IsAuthenticated])
 def email_settings_view(request):
     """Get or update email settings for the authenticated user"""
+    # Check if user has an organization
+    if not request.organization:
+        return Response(
+            {'error': 'No organization associated with this user. Superadmin users cannot configure email settings as they are not associated with any organization.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     if request.method == 'GET':
         # Get or create email settings with defaults
         settings, created = EmailSettings.objects.get_or_create(
@@ -290,6 +297,13 @@ def email_settings_view(request):
 @permission_classes([IsAuthenticated])
 def test_email_view(request):
     """Send a test email to verify SMTP configuration"""
+    # Check if user has an organization
+    if not request.organization:
+        return Response(
+            {'error': 'No organization associated with this user. Superadmin users cannot test email settings as they are not associated with any organization.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     try:
         from django.core.mail import send_mail
         from django.conf import settings as django_settings
