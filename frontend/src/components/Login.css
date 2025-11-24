@@ -4,12 +4,10 @@
   display: flex;
   flex-wrap: wrap;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   background: var(--white);
   overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  overflow-y: hidden;
   position: relative;
 }
 
@@ -20,12 +18,13 @@
   flex: 1;
   min-width: 50%;
   background: var(--gradient-primary);
-  padding: 50px 60px 100px 60px;
+  padding: 50px 60px 70px 60px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: visible;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Animated Background Pattern */
@@ -206,9 +205,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 50px 40px 100px 40px;
+  padding: 50px 40px 70px 40px;
   box-shadow: var(--shadow-2xl);
-  overflow: visible;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .login-card {
