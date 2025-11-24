@@ -403,6 +403,25 @@ class EmailSettings(models.Model):
         return f"Email Settings for {self.organization.name}"
 
 
+class SystemEmailSettings(models.Model):
+    """System-level email configuration for superadmin (password reset, notifications, etc.)"""
+    smtp_host = models.CharField(max_length=255, default='smtp.gmail.com')
+    smtp_port = models.IntegerField(default=587)
+    smtp_username = models.CharField(max_length=255, blank=True)
+    smtp_password = models.CharField(max_length=255, blank=True)  # Should be encrypted in production
+    from_email = models.EmailField(blank=True)
+    use_tls = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "System Email Settings"
+        verbose_name_plural = "System Email Settings"
+
+    def __str__(self):
+        return "System Email Settings"
+
+
 class ServiceItem(models.Model):
     """Service/Item master for professional services"""
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='service_items')

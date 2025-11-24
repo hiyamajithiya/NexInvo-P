@@ -33,6 +33,7 @@ urlpatterns = [
     path('settings/invoice-format/', views.invoice_format_settings_view, name='invoice-format-settings'),
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
     path('superadmin/stats/', views.superadmin_stats, name='superadmin-stats'),
+    path('superadmin/email-config/', views.superadmin_email_config_view, name='superadmin-email-config'),
     path('profile/', views.user_profile_view, name='user-profile'),
     path('profile/change-password/', views.change_password_view, name='change-password'),
 ]

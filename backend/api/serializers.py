@@ -3,9 +3,9 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
-    Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings,
-    ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription,
-    SubscriptionUpgradeRequest
+    Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings,
+    InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon,
+    CouponUsage, Subscription, SubscriptionUpgradeRequest
 )
 
 
@@ -208,6 +208,17 @@ class EmailSettingsSerializer(serializers.ModelSerializer):
         fields = ['id', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
                   'from_email', 'from_name', 'use_tls', 'email_signature',
                   'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'smtp_password': {'write_only': True}  # Don't expose password in GET requests
+        }
+
+
+class SystemEmailSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemEmailSettings
+        fields = ['id', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
+                  'from_email', 'use_tls', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
         extra_kwargs = {
             'smtp_password': {'write_only': True}  # Don't expose password in GET requests

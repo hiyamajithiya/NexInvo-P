@@ -17,12 +17,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest)
 from .serializers import (
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
-    InvoiceSerializer, PaymentSerializer, ReceiptSerializer, EmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer, PaymentTermSerializer, UserSerializer,
-    SubscriptionPlanSerializer, CouponSerializer, CouponUsageSerializer, SubscriptionSerializer, SubscriptionUpgradeRequestSerializer
+    InvoiceSerializer, PaymentSerializer, ReceiptSerializer, EmailSettingsSerializer,
+    SystemEmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer,
+    PaymentTermSerializer, UserSerializer, SubscriptionPlanSerializer, CouponSerializer,
+    CouponUsageSerializer, SubscriptionSerializer, SubscriptionUpgradeRequestSerializer
 )
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email, send_receipt_email
@@ -2790,3 +2792,59 @@ def calculate_discount(coupon, plan):
         'extended_days': extended_days,
         'original_price': float(plan.price)
     }
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_config_view(request):
+    """Get or update system-level email settings for superadmin"""
+    # Check if user is superadmin
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'GET':
+        # Get or create system email settings with defaults
+        settings, created = SystemEmailSettings.objects.get_or_create(
+            id=1,  # Singleton pattern - only one system email settings record
+            defaults={
+                'smtp_host': 'smtp.gmail.com',
+                'smtp_port': 587,
+                'smtp_username': '',
+                'smtp_password': '',
+                'from_email': '',
+                'use_tls': True
+            }
+        )
+        serializer = SystemEmailSettingsSerializer(settings)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        # Get or create the singleton settings record
+        settings, created = SystemEmailSettings.objects.get_or_create(
+            id=1,
+            defaults={
+                'smtp_host': 'smtp.gmail.com',
+                'smtp_port': 587,
+                'use_tls': True
+            }
+        )
+
+        # Map frontend field names to backend field names
+        data = {
+            'smtp_host': request.data.get('host', settings.smtp_host),
+            'smtp_port': request.data.get('port', settings.smtp_port),
+            'smtp_username': request.data.get('username', settings.smtp_username),
+            'smtp_password': request.data.get('password', settings.smtp_password),
+            'from_email': request.data.get('from_email', settings.from_email),
+            'use_tls': request.data.get('use_tls', settings.use_tls)
+        }
+
+        serializer = SystemEmailSettingsSerializer(settings, data=data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
