@@ -192,6 +192,10 @@ const PricingPlans = ({ onNavigate }) => {
               borderRadius: 3,
               border: plan.highlight ? '3px solid #8b5cf6' : '1px solid #e5e7eb',
               transition: 'all 0.3s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'visible',
+              mt: plan.highlight ? 2 : 0,
               '&:hover': {
                 transform: 'translateY(-8px)',
                 boxShadow: '0 12px 24px rgba(0,0,0,0.15)',
@@ -202,7 +206,7 @@ const PricingPlans = ({ onNavigate }) => {
               <Box
                 sx={{
                   position: 'absolute',
-                  top: -14,
+                  top: -16,
                   right: 20,
                   background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                   color: 'white',
@@ -213,6 +217,7 @@ const PricingPlans = ({ onNavigate }) => {
                   alignItems: 'center',
                   gap: 0.5,
                   boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+                  zIndex: 1,
                 }}
               >
                 <StarIcon sx={{ fontSize: 16 }} />
@@ -222,7 +227,7 @@ const PricingPlans = ({ onNavigate }) => {
               </Box>
             )}
 
-            <CardContent sx={{ p: 4 }}>
+            <CardContent sx={{ p: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
                 {plan.name}
               </Typography>
@@ -253,7 +258,7 @@ const PricingPlans = ({ onNavigate }) => {
                 Plan Includes:
               </Typography>
 
-              <List dense>
+              <List dense sx={{ flexGrow: 1 }}>
                 <ListItem sx={{ px: 0 }}>
                   <ListItemIcon sx={{ minWidth: 32 }}>
                     <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
@@ -291,7 +296,7 @@ const PricingPlans = ({ onNavigate }) => {
               </List>
             </CardContent>
 
-            <CardActions sx={{ p: 3, pt: 0 }}>
+            <CardActions sx={{ p: 3, pt: 0, mt: 'auto' }}>
               <Button
                 fullWidth
                 variant={plan.highlight ? 'contained' : 'outlined'}
