@@ -2895,3 +2895,127 @@ def superadmin_email_config_view(request):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_test_email_view(request):
+    """Send a test email using the system email settings"""
+    # Check if user is superadmin
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    recipient_email = request.data.get('recipient_email', request.user.email)
+
+    if not recipient_email:
+        return Response(
+            {'error': 'Recipient email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Get system email settings
+        system_settings = SystemEmailSettings.objects.first()
+
+        if not system_settings or not system_settings.smtp_host or not system_settings.smtp_username:
+            return Response(
+                {'error': 'Email settings not configured. Please save email configuration first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create email connection with system settings
+        from django.core.mail import get_connection, send_mail
+
+        connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
+            host=system_settings.smtp_host,
+            port=system_settings.smtp_port,
+            username=system_settings.smtp_username,
+            password=system_settings.smtp_password,
+            use_tls=system_settings.use_tls,
+            fail_silently=False,
+        )
+
+        from_email = system_settings.from_email or system_settings.smtp_username
+
+        # Send test email
+        subject = 'NexInvo - Test Email'
+        plain_message = '''
+This is a test email from NexInvo.
+
+If you received this email, your email configuration is working correctly.
+
+SMTP Host: {smtp_host}
+SMTP Port: {smtp_port}
+From Email: {from_email}
+
+Best regards,
+NexInvo System
+        '''.format(
+            smtp_host=system_settings.smtp_host,
+            smtp_port=system_settings.smtp_port,
+            from_email=from_email
+        )
+
+        html_message = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; text-align: center;">NexInvo</h1>
+            <p style="color: rgba(255,255,255,0.9); text-align: center; margin: 10px 0 0 0;">Test Email</p>
+        </div>
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; border-top: none;">
+            <h2 style="color: #065f46; margin-top: 0;">Email Configuration Successful!</h2>
+            <p>If you received this email, your email configuration is working correctly.</p>
+
+            <div style="background: white; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                <h3 style="margin-top: 0; color: #374151;">Configuration Details:</h3>
+                <p style="margin: 5px 0;"><strong>SMTP Host:</strong> {smtp_host}</p>
+                <p style="margin: 5px 0;"><strong>SMTP Port:</strong> {smtp_port}</p>
+                <p style="margin: 5px 0;"><strong>From Email:</strong> {from_email}</p>
+                <p style="margin: 5px 0;"><strong>TLS:</strong> {use_tls}</p>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px;">This is an automated test email from NexInvo system.</p>
+        </div>
+    </div>
+</body>
+</html>
+        '''.format(
+            smtp_host=system_settings.smtp_host,
+            smtp_port=system_settings.smtp_port,
+            from_email=from_email,
+            use_tls='Enabled' if system_settings.use_tls else 'Disabled'
+        )
+
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=from_email,
+            recipient_list=[recipient_email],
+            html_message=html_message,
+            fail_silently=False,
+            connection=connection,
+        )
+
+        return Response({
+            'message': f'Test email sent successfully to {recipient_email}',
+            'recipient': recipient_email
+        })
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Test email failed: {str(e)}")
+        return Response(
+            {'error': f'Failed to send test email: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

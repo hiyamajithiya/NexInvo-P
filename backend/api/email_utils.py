@@ -1,7 +1,7 @@
 """
 Email utility functions for sending automated notifications
 """
-from django.core.mail import send_mail
+from django.core.mail import send_mail, get_connection
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -9,6 +9,80 @@ from django.utils.crypto import get_random_string
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def get_system_email_settings():
+    """
+    Get system email settings from database.
+    Returns tuple: (connection, from_email) or (None, None) if not configured
+    """
+    try:
+        from .models import SystemEmailSettings
+        system_settings = SystemEmailSettings.objects.first()
+
+        if system_settings and system_settings.smtp_host and system_settings.smtp_username:
+            connection = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=system_settings.smtp_host,
+                port=system_settings.smtp_port,
+                username=system_settings.smtp_username,
+                password=system_settings.smtp_password,
+                use_tls=system_settings.use_tls,
+                fail_silently=False,
+            )
+            from_email = system_settings.from_email or system_settings.smtp_username
+            logger.info(f"Using system email settings: {system_settings.smtp_host}")
+            return connection, from_email
+    except Exception as e:
+        logger.warning(f"Could not load system email settings: {str(e)}")
+
+    return None, None
+
+
+def send_email_with_system_settings(subject, plain_message, html_message, recipient_list):
+    """
+    Send email using system email settings if available, otherwise use Django settings.
+
+    Args:
+        subject: Email subject
+        plain_message: Plain text message
+        html_message: HTML message
+        recipient_list: List of recipient email addresses
+
+    Returns:
+        Boolean indicating success
+    """
+    connection, from_email = get_system_email_settings()
+
+    if connection and from_email:
+        # Use system email settings
+        try:
+            send_mail(
+                subject=subject,
+                message=plain_message,
+                from_email=from_email,
+                recipient_list=recipient_list,
+                html_message=html_message,
+                fail_silently=False,
+                connection=connection,
+            )
+            logger.info(f"Email sent using system settings to: {recipient_list}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send email using system settings: {str(e)}")
+            raise
+    else:
+        # Fallback to Django settings
+        logger.info("Using Django default email settings")
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_list,
+            html_message=html_message,
+            fail_silently=False,
+        )
+        return True
 
 
 def generate_temporary_password(length=12):
@@ -67,7 +141,7 @@ def send_welcome_email_to_user(user, organization=None, temporary_password=None)
                         <p><strong>Organization:</strong> {organization.name}</p>
                     </div>
 
-                    <p style="color: #ef4444; font-weight: bold;">⚠️ Please change your password after your first login for security purposes.</p>
+                    <p style="color: #ef4444; font-weight: bold;">Important: Please change your password after your first login for security purposes.</p>
 
                     <div style="margin: 30px 0;">
                         <a href="{context['login_url']}"
@@ -137,12 +211,12 @@ def send_welcome_email_to_user(user, organization=None, temporary_password=None)
 
                     <h3 style="color: #1e3a8a;">Key Features:</h3>
                     <ul>
-                        <li>📄 Professional Invoice Generation</li>
-                        <li>💰 Payment Tracking & Management</li>
-                        <li>👥 Client Management</li>
-                        <li>📊 Reports & Analytics</li>
-                        <li>🏢 Multi-Organization Support</li>
-                        <li>⚙️ Customizable Settings</li>
+                        <li>Professional Invoice Generation</li>
+                        <li>Payment Tracking & Management</li>
+                        <li>Client Management</li>
+                        <li>Reports & Analytics</li>
+                        <li>Multi-Organization Support</li>
+                        <li>Customizable Settings</li>
                     </ul>
 
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
@@ -162,13 +236,11 @@ def send_welcome_email_to_user(user, organization=None, temporary_password=None)
 
         plain_message = strip_tags(html_message)
 
-        send_mail(
+        send_email_with_system_settings(
             subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
+            plain_message=plain_message,
             html_message=html_message,
-            fail_silently=False,
+            recipient_list=[user.email],
         )
 
         logger.info(f"Welcome email sent to {user.email}")
@@ -235,13 +307,11 @@ def send_user_added_notification_to_owner(owner_user, new_user, organization):
 
         plain_message = strip_tags(html_message)
 
-        send_mail(
+        send_email_with_system_settings(
             subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[owner_user.email],
+            plain_message=plain_message,
             html_message=html_message,
-            fail_silently=False,
+            recipient_list=[owner_user.email],
         )
 
         logger.info(f"User added notification sent to {owner_user.email}")
@@ -322,13 +392,11 @@ def send_organization_registration_email(user, organization):
 
         plain_message = strip_tags(html_message)
 
-        send_mail(
+        send_email_with_system_settings(
             subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=superadmin_emails,
+            plain_message=plain_message,
             html_message=html_message,
-            fail_silently=False,
+            recipient_list=superadmin_emails,
         )
 
         logger.info(f"Organization registration notification sent to superadmins")
@@ -438,13 +506,11 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
 
         plain_message = strip_tags(html_message)
 
-        send_mail(
+        send_email_with_system_settings(
             subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=superadmin_emails,
+            plain_message=plain_message,
             html_message=html_message,
-            fail_silently=False,
+            recipient_list=superadmin_emails,
         )
 
         logger.info(f"Upgrade request notification sent to superadmins for organization: {upgrade_request.organization.name}")

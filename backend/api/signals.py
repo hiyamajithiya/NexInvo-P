@@ -27,43 +27,27 @@ def send_welcome_email_on_user_creation(sender, instance, created, **kwargs):
         logger.info(f"Welcome email triggered for new user: {instance.username}")
 
 
-@receiver(post_save, sender=Organization)
-def send_notification_on_organization_creation(sender, instance, created, **kwargs):
-    """
-    Send notification to superadmin when a new organization is created
-    """
-    if created:
-        # Get the creator/owner of the organization
-        try:
-            # Find the first membership (owner) for this organization
-            owner_membership = OrganizationMembership.objects.filter(
-                organization=instance,
-                role='owner'
-            ).first()
-
-            if owner_membership:
-                # Send notification to superadmin
-                send_organization_registration_email(owner_membership.user, instance)
-                logger.info(f"Organization registration notification sent for: {instance.name}")
-        except Exception as e:
-            logger.error(f"Error sending organization registration notification: {str(e)}")
-
-
 @receiver(post_save, sender=OrganizationMembership)
-def send_notification_on_user_added_to_organization(sender, instance, created, **kwargs):
+def send_notification_on_membership_created(sender, instance, created, **kwargs):
     """
     Send notifications when a user is added to an organization:
-    1. Welcome email to the new user (only for non-owners)
-    2. Notification to organization owner
+    1. For owners: Send notification to superadmin about new organization registration
+    2. For non-owners: Send welcome email to new user and notification to org owner
     """
     if created and instance.is_active:
         organization = instance.organization
         new_user = instance.user
 
-        # Don't send emails for the owner (they already got a welcome email when they registered)
+        # For owners - send notification to superadmin about new organization registration
         if instance.role == 'owner':
+            try:
+                send_organization_registration_email(new_user, organization)
+                logger.info(f"Organization registration notification sent to superadmin for: {organization.name}")
+            except Exception as e:
+                logger.error(f"Error sending organization registration notification: {str(e)}")
             return
 
+        # For non-owners - send welcome email and notify org owner
         try:
             # 1. Send welcome email to new user with organization context
             # Check if there's a temporary password stored in the instance

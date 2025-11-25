@@ -88,6 +88,9 @@ const SuperAdminDashboard = ({ onLogout }) => {
     from_email: ''
   });
   const [savingEmail, setSavingEmail] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailRecipient, setTestEmailRecipient] = useState('');
+  const [showTestEmailDialog, setShowTestEmailDialog] = useState(false);
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
 
   // Search states
@@ -174,6 +177,9 @@ const SuperAdminDashboard = ({ onLogout }) => {
     if (activeMenu === 'users') {
       loadUsers();
     }
+    if (activeMenu === 'settings') {
+      loadEmailConfig();
+    }
   }, [activeMenu]);
 
   const loadData = async () => {
@@ -222,6 +228,26 @@ const SuperAdminDashboard = ({ onLogout }) => {
       setSubscriptionPlans(response.data);
     } catch (error) {
       console.error('Error loading subscription plans:', error);
+    }
+  };
+
+  const loadEmailConfig = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(`${API_BASE_URL}/superadmin/email-config/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Map backend field names to frontend field names
+      setEmailConfig({
+        host: response.data.smtp_host || '',
+        port: response.data.smtp_port || '',
+        username: response.data.smtp_username || '',
+        password: response.data.smtp_password || '',
+        use_tls: response.data.use_tls !== undefined ? response.data.use_tls : true,
+        from_email: response.data.from_email || ''
+      });
+    } catch (error) {
+      console.error('Error loading email config:', error);
     }
   };
 
@@ -1377,6 +1403,31 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const handleSendTestEmail = async () => {
+    if (!testEmailRecipient) {
+      showSnackbar('Please enter a recipient email address', 'error');
+      return;
+    }
+    setSendingTestEmail(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.post(
+        `${API_BASE_URL}/superadmin/email-config/test/`,
+        { recipient_email: testEmailRecipient },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar(response.data.message || 'Test email sent successfully!', 'success');
+      setShowTestEmailDialog(false);
+      setTestEmailRecipient('');
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      const errorMsg = error.response?.data?.error || 'Failed to send test email';
+      showSnackbar(errorMsg, 'error');
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   const renderSettingsContent = () => {
     return (
       <>
@@ -1389,18 +1440,36 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 Configure SMTP settings for sending emails (password reset, notifications, etc.)
               </Typography>
             </Box>
-            <Button
-              variant="contained"
-              onClick={handleSaveEmailConfig}
-              disabled={savingEmail}
-              sx={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                textTransform: 'none',
-                fontWeight: 'bold'
-              }}
-            >
-              {savingEmail ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save Configuration'}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={() => setShowTestEmailDialog(true)}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 'bold',
+                  borderColor: '#6366f1',
+                  color: '#6366f1',
+                  '&:hover': {
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(99, 102, 241, 0.04)'
+                  }
+                }}
+              >
+                Send Test Email
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSaveEmailConfig}
+                disabled={savingEmail}
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  textTransform: 'none',
+                  fontWeight: 'bold'
+                }}
+              >
+                {savingEmail ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save Configuration'}
+              </Button>
+            </Box>
           </Box>
 
           <Grid container spacing={3}>
@@ -2158,6 +2227,55 @@ const SuperAdminDashboard = ({ onLogout }) => {
         <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
           <Button onClick={() => setUserOrgsDialog(false)} sx={{ textTransform: 'none' }}>
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Test Email Dialog */}
+      <Dialog
+        open={showTestEmailDialog}
+        onClose={() => setShowTestEmailDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
+          Send Test Email
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, mt: 2 }}>
+          <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>
+            Enter the recipient email address to send a test email and verify your SMTP configuration.
+          </Typography>
+          <TextField
+            fullWidth
+            label="Recipient Email"
+            type="email"
+            value={testEmailRecipient}
+            onChange={(e) => setTestEmailRecipient(e.target.value)}
+            placeholder="test@example.com"
+            helperText="The email address where the test email will be sent"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button
+            onClick={() => {
+              setShowTestEmailDialog(false);
+              setTestEmailRecipient('');
+            }}
+            sx={{ textTransform: 'none', color: '#6b7280' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSendTestEmail}
+            disabled={sendingTestEmail || !testEmailRecipient}
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              textTransform: 'none',
+              fontWeight: 'bold'
+            }}
+          >
+            {sendingTestEmail ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Send Test Email'}
           </Button>
         </DialogActions>
       </Dialog>
