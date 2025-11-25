@@ -1193,8 +1193,55 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 # Already converted, just update status
                 invoice.status = 'paid'
                 invoice.save()
+        elif invoice.invoice_type == 'tax':
+            # Payment against Tax Invoice - Create Receipt but NO automatic email
+            with transaction.atomic():
+                # Generate Receipt Number
+                invoice_settings = InvoiceSettings.objects.get(organization=self.request.organization)
+                receipt_prefix = invoice_settings.receiptPrefix or 'RCPT-'
+
+                # Get the last receipt number for this organization
+                last_receipt = Receipt.objects.filter(
+                    organization=self.request.organization
+                ).order_by('-created_at').first()
+
+                if last_receipt and last_receipt.receipt_number.startswith(receipt_prefix):
+                    try:
+                        last_number = int(last_receipt.receipt_number.replace(receipt_prefix, ''))
+                        next_number = last_number + 1
+                    except ValueError:
+                        next_number = invoice_settings.receiptStartingNumber
+                else:
+                    next_number = invoice_settings.receiptStartingNumber
+
+                receipt_number = f"{receipt_prefix}{next_number}"
+
+                # Create Receipt for Tax Invoice payment
+                Receipt.objects.create(
+                    organization=self.request.organization,
+                    created_by=self.request.user,
+                    payment=payment,
+                    invoice=invoice,
+                    receipt_number=receipt_number,
+                    receipt_date=payment.payment_date,
+                    amount_received=payment.amount,
+                    payment_method=payment.payment_method,
+                    received_from=invoice.client.name,
+                    towards=f"Payment against invoice {invoice.invoice_number}",
+                    notes=payment.notes
+                )
+
+                # Update invoice status
+                if total_paid >= invoice.total_amount:
+                    invoice.status = 'paid'
+                elif total_paid > 0 and invoice.status == 'draft':
+                    invoice.status = 'sent'
+                invoice.save()
+
+            # NO automatic email for Tax Invoice payments
+            # User can manually download or email the receipt from the Receipts section
         else:
-            # Update invoice status for non-proforma or partially paid invoices
+            # Update invoice status for other invoice types
             if total_paid >= invoice.total_amount:
                 invoice.status = 'paid'
             elif total_paid > 0 and invoice.status == 'draft':
