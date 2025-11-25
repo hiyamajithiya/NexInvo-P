@@ -1,44 +1,46 @@
 /* ============================================
-   NexInvo - Unified Theme System
-   Color Palette: Teal & Navy Professional
+   NexInvo - DocMold Theme System
+   Color Palette: Modern Indigo/Purple Professional
    ============================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 :root {
-  /* Primary Colors - Teal Theme */
-  --primary-50: #f0fdfa;
-  --primary-100: #ccfbf1;
-  --primary-200: #99f6e4;
-  --primary-300: #5eead4;
-  --primary-400: #2dd4bf;
-  --primary-500: #14b8a6;  /* Main Primary */
-  --primary-600: #0d9488;
-  --primary-700: #0f766e;
-  --primary-800: #115e59;
-  --primary-900: #134e4a;
+  /* Primary Colors - Indigo/Purple Theme */
+  --primary-50: #eef2ff;
+  --primary-100: #e0e7ff;
+  --primary-200: #c7d2fe;
+  --primary-300: #a5b4fc;
+  --primary-400: #818cf8;
+  --primary-500: #6366f1;  /* Main Primary */
+  --primary-600: #4f46e5;
+  --primary-700: #4338ca;
+  --primary-800: #3730a3;
+  --primary-900: #312e81;
 
-  /* Secondary Colors - Navy/Slate */
-  --secondary-50: #f8fafc;
-  --secondary-100: #f1f5f9;
-  --secondary-200: #e2e8f0;
-  --secondary-300: #cbd5e1;
-  --secondary-400: #94a3b8;
-  --secondary-500: #64748b;
-  --secondary-600: #475569;
-  --secondary-700: #334155;  /* Dark Backgrounds */
-  --secondary-800: #1e293b;
-  --secondary-900: #0f172a;  /* Darkest */
+  /* Secondary Colors - Purple */
+  --secondary-50: #faf5ff;
+  --secondary-100: #f3e8ff;
+  --secondary-200: #e9d5ff;
+  --secondary-300: #d8b4fe;
+  --secondary-400: #c084fc;
+  --secondary-500: #a855f7;
+  --secondary-600: #9333ea;
+  --secondary-700: #7c3aed;
+  --secondary-800: #6b21a8;
+  --secondary-900: #581c87;
 
-  /* Accent Colors */
-  --accent-blue: #3b82f6;
+  /* Accent Purple */
   --accent-purple: #8b5cf6;
-  --accent-pink: #ec4899;
+  --accent-violet: #7c3aed;
+  --accent-fuchsia: #a855f7;
 
   /* Status Colors */
   --success-light: #d1fae5;
   --success: #10b981;
   --success-dark: #065f46;
 
-  --warning-light: #fed7aa;
+  --warning-light: #fef3c7;
   --warning: #f59e0b;
   --warning-dark: #92400e;
 
@@ -53,8 +55,8 @@
   /* Neutral Colors */
   --white: #ffffff;
   --black: #000000;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
+  --gray-50: #fafafa;
+  --gray-100: #f5f5f5;
   --gray-200: #e5e7eb;
   --gray-300: #d1d5db;
   --gray-400: #9ca3af;
@@ -64,27 +66,48 @@
   --gray-800: #1f2937;
   --gray-900: #111827;
 
+  /* Text Colors */
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  /* Background Colors */
+  --bg-default: #fafbff;
+  --bg-paper: #ffffff;
+  --bg-elevated: rgba(255, 255, 255, 0.98);
+
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
-  --gradient-secondary: linear-gradient(135deg, #334155 0%, #1e293b 100%);
-  --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  --gradient-error: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-secondary: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --gradient-sidebar: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-button: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-button-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --gradient-accent: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  --gradient-card: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+
+  /* Glassmorphism */
+  --glass-light: rgba(255, 255, 255, 0.98);
+  --glass-medium: rgba(255, 255, 255, 0.9);
+  --glass-dark: rgba(255, 255, 255, 0.8);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --shadow-strong: 0 20px 40px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 20px 40px rgba(0,0,0,0.08);
 
-  /* Teal Glow Shadow */
-  --shadow-primary: 0 4px 15px rgba(20, 184, 166, 0.3);
-  --shadow-primary-lg: 0 8px 25px rgba(20, 184, 166, 0.4);
+  /* Primary Glow Shadow */
+  --shadow-primary: 0 4px 15px rgba(99, 102, 241, 0.3);
+  --shadow-primary-lg: 0 6px 20px rgba(99, 102, 241, 0.4);
+  --shadow-colored: 0 4px 15px rgba(99, 102, 241, 0.3);
+  --shadow-colored-hover: 0 6px 20px rgba(99, 102, 241, 0.4);
 
   /* Typography */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
   --font-mono: 'Courier New', Consolas, Monaco, monospace;
 
   /* Spacing */
@@ -100,13 +123,14 @@
   --radius-md: 0.5rem;      /* 8px */
   --radius-lg: 0.75rem;     /* 12px */
   --radius-xl: 1rem;        /* 16px */
-  --radius-2xl: 1.5rem;     /* 24px */
+  --radius-2xl: 1.25rem;    /* 20px */
+  --radius-3xl: 1.5rem;     /* 24px */
   --radius-full: 9999px;
 
   /* Transitions */
   --transition-fast: 150ms ease-in-out;
-  --transition-base: 250ms ease-in-out;
-  --transition-slow: 350ms ease-in-out;
+  --transition-base: 300ms ease-in-out;
+  --transition-slow: 500ms ease-in-out;
 }
 
 /* ============================================
@@ -120,8 +144,8 @@
 
 body {
   font-family: var(--font-family);
-  background-color: var(--gray-50);
-  color: var(--gray-900);
+  background-color: var(--bg-default);
+  color: var(--text-primary);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -130,8 +154,8 @@ body {
 /* ============================================
    Utility Classes
    ============================================ */
-.text-primary { color: var(--primary-600); }
-.text-secondary { color: var(--secondary-600); }
+.text-primary { color: var(--primary-500); }
+.text-secondary { color: var(--text-secondary); }
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-error { color: var(--error); }
@@ -141,8 +165,69 @@ body {
 
 .bg-primary { background: var(--gradient-primary); }
 .bg-secondary { background: var(--gradient-secondary); }
+.bg-sidebar { background: var(--gradient-sidebar); }
 .bg-white { background-color: var(--white); }
 .bg-gray { background-color: var(--gray-100); }
+.bg-default { background-color: var(--bg-default); }
+
+/* Gradient Text Effect */
+.gradient-text {
+  background: var(--gradient-primary);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Glassmorphism Card */
+.glass-card {
+  background: var(--glass-light);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: var(--shadow-strong);
+  border-radius: var(--radius-3xl);
+}
+
+/* Gradient Button */
+.btn-gradient {
+  background: var(--gradient-button);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-colored);
+}
+
+.btn-gradient:hover {
+  background: var(--gradient-button-hover);
+  box-shadow: var(--shadow-colored-hover);
+  transform: translateY(-2px);
+}
+
+.btn-gradient:active {
+  transform: translateY(0);
+}
+
+.btn-gradient:disabled {
+  background: var(--gray-300);
+  color: var(--gray-400);
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+
+/* Card Hover Effect */
+.hover-lift {
+  transition: all var(--transition-base);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+}
 
 /* Ensure text is always readable */
 .text-on-primary,
@@ -153,5 +238,21 @@ body {
 }
 
 .text-on-light {
-  color: var(--gray-900) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Sidebar gradient background */
+.sidebar-gradient {
+  background: var(--gradient-sidebar);
+}
+
+/* Primary button styles */
+.btn-primary {
+  background: var(--gradient-primary);
+  box-shadow: var(--shadow-primary);
+}
+
+.btn-primary:hover {
+  background: var(--gradient-button-hover);
+  box-shadow: var(--shadow-primary-lg);
 }

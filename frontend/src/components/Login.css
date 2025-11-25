@@ -1,4 +1,4 @@
-/* Two-Panel Login Layout - Teal Theme */
+/* Two-Panel Login Layout - DocMold Indigo/Purple Theme */
 
 .login-split-container {
   display: flex;
@@ -318,7 +318,7 @@
 .form-group input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
   background-color: var(--white);
 }
 

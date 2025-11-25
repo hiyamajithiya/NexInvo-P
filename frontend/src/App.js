@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import theme from './theme';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { OrganizationProvider } from './contexts/OrganizationContext';
+import './theme.css';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -85,17 +89,20 @@ function App() {
   }
 
   return (
-    <div className="App">
-      {!isAuthenticated ? (
-        <Login onLogin={handleLogin} />
-      ) : isSuperAdmin ? (
-        <SuperAdminDashboard onLogout={handleLogout} />
-      ) : (
-        <OrganizationProvider>
-          <Dashboard user={user} onLogout={handleLogout} />
-        </OrganizationProvider>
-      )}
-    </div>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div className="App">
+        {!isAuthenticated ? (
+          <Login onLogin={handleLogin} />
+        ) : isSuperAdmin ? (
+          <SuperAdminDashboard onLogout={handleLogout} />
+        ) : (
+          <OrganizationProvider>
+            <Dashboard user={user} onLogout={handleLogout} />
+          </OrganizationProvider>
+        )}
+      </div>
+    </ThemeProvider>
   );
 }
 
