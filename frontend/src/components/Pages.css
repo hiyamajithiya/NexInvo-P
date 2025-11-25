@@ -102,7 +102,7 @@
 .search-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .filter-select {
@@ -119,7 +119,7 @@
 .filter-select:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 /* Content Card */
@@ -260,13 +260,13 @@
 .report-card:hover {
   border-color: var(--primary-500);
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(20, 184, 166, 0.15);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
 }
 
 .report-card.active {
   border-color: var(--primary-500);
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.05) 0%, rgba(20, 184, 166, 0.1) 100%);
-  box-shadow: 0 8px 24px rgba(20, 184, 166, 0.2);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.1) 100%);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
 }
 
 .report-icon {
@@ -447,7 +447,7 @@
 .form-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 textarea.form-input {
@@ -626,7 +626,7 @@ textarea.form-input {
 .table-input:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
 }
 
 .text-center {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import {
   Box,
   Paper,
@@ -28,11 +28,9 @@ import {
   Star as StarIcon,
   CalendarToday as CalendarIcon,
   LocalOffer as CouponIcon,
-  AttachMoney as MoneyIcon,
+  CurrencyRupee as RupeeIcon,
   Upgrade as UpgradeIcon,
 } from '@mui/icons-material';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 const MySubscription = ({ onNavigate }) => {
   const [subscription, setSubscription] = useState(null);
@@ -48,10 +46,7 @@ const MySubscription = ({ onNavigate }) => {
   const loadSubscription = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/subscriptions/my-subscription/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/subscriptions/my_subscription/');
       setSubscription(response.data);
     } catch (error) {
       if (error.response?.status === 404) {
@@ -68,12 +63,7 @@ const MySubscription = ({ onNavigate }) => {
   const handleCancelSubscription = async () => {
     setCancelling(true);
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.post(
-        `${API_BASE_URL}/subscriptions/${subscription.id}/cancel/`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post(`/subscriptions/${subscription.id}/cancel/`);
       showSnackbar('Subscription cancelled successfully', 'success');
       setOpenCancelDialog(false);
       loadSubscription();
@@ -160,7 +150,7 @@ const MySubscription = ({ onNavigate }) => {
             startIcon={<UpgradeIcon />}
             onClick={() => onNavigate && onNavigate('pricing')}
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
               textTransform: 'none',
               fontWeight: 'bold',
               px: 4,
@@ -178,7 +168,7 @@ const MySubscription = ({ onNavigate }) => {
   return (
     <Box>
       {/* Header */}
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <Paper sx={{ p: 3, borderRadius: 3, mb: 3, background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white', mb: 1 }}>
@@ -191,10 +181,12 @@ const MySubscription = ({ onNavigate }) => {
           <Chip
             label={statusConfig.label.toUpperCase()}
             sx={{
-              bgcolor: 'white',
+              bgcolor: statusConfig.bg,
               color: statusConfig.color,
               fontWeight: 'bold',
               px: 2,
+              border: '2px solid white',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             }}
           />
         </Box>
@@ -330,7 +322,7 @@ const MySubscription = ({ onNavigate }) => {
           {/* Payment Info */}
           <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 3 }}>
-              <MoneyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+              <RupeeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
               Payment Info
             </Typography>
 
@@ -344,7 +336,7 @@ const MySubscription = ({ onNavigate }) => {
             </Box>
 
             {subscription.last_payment_date && (
-              <Box sx={{ mb: 2 }}>
+              <Box>
                 <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>
                   Last Payment
                 </Typography>
@@ -353,30 +345,6 @@ const MySubscription = ({ onNavigate }) => {
                 </Typography>
               </Box>
             )}
-
-            {subscription.auto_renew && subscription.next_billing_date && (
-              <Box>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>
-                  Next Billing Date
-                </Typography>
-                <Typography variant="body1" sx={{ fontWeight: 600, color: '#111827' }}>
-                  {new Date(subscription.next_billing_date).toLocaleDateString('en-IN')}
-                </Typography>
-              </Box>
-            )}
-
-            <Divider sx={{ my: 2 }} />
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {subscription.auto_renew ? (
-                <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
-              ) : (
-                <CancelIcon sx={{ color: '#ef4444', fontSize: 20 }} />
-              )}
-              <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                Auto-renewal is {subscription.auto_renew ? 'enabled' : 'disabled'}
-              </Typography>
-            </Box>
           </Paper>
 
           {/* Coupon Info */}

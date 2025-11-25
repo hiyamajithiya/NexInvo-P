@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -89,6 +89,81 @@ const SuperAdminDashboard = ({ onLogout }) => {
   });
   const [savingEmail, setSavingEmail] = useState(false);
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+
+  // Search states
+  const [orgSearchTerm, setOrgSearchTerm] = useState('');
+  const [orgStatusFilter, setOrgStatusFilter] = useState('all');
+  const [orgPlanFilter, setOrgPlanFilter] = useState('all');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [userRoleFilter, setUserRoleFilter] = useState('all');
+
+  // Filtered data
+  const filteredOrganizations = organizations.filter(org => {
+    const matchesSearch = org.name.toLowerCase().includes(orgSearchTerm.toLowerCase()) ||
+                          org.slug?.toLowerCase().includes(orgSearchTerm.toLowerCase());
+    const matchesStatus = orgStatusFilter === 'all' ||
+                          (orgStatusFilter === 'active' && org.is_active) ||
+                          (orgStatusFilter === 'inactive' && !org.is_active);
+    const matchesPlan = orgPlanFilter === 'all' || org.plan === orgPlanFilter;
+    return matchesSearch && matchesStatus && matchesPlan;
+  });
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                          user.email?.toLowerCase().includes(userSearchTerm.toLowerCase());
+    const matchesStatus = userStatusFilter === 'all' ||
+                          (userStatusFilter === 'active' && user.is_active) ||
+                          (userStatusFilter === 'inactive' && !user.is_active);
+    const matchesRole = userRoleFilter === 'all' ||
+                        (userRoleFilter === 'superadmin' && user.is_superuser) ||
+                        (userRoleFilter === 'admin' && user.role === 'admin' && !user.is_superuser) ||
+                        (userRoleFilter === 'user' && user.role !== 'admin' && !user.is_superuser);
+    return matchesSearch && matchesStatus && matchesRole;
+  });
+
+  // Ref for dropdown auto-hide timeout
+  const dropdownTimeoutRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Auto-hide dropdown after 5 seconds of inactivity
+  const resetDropdownTimer = useCallback(() => {
+    if (dropdownTimeoutRef.current) {
+      clearTimeout(dropdownTimeoutRef.current);
+    }
+    dropdownTimeoutRef.current = setTimeout(() => {
+      setShowUserDropdown(false);
+    }, 5000); // 5 seconds
+  }, []);
+
+  // Handle dropdown visibility and timer
+  useEffect(() => {
+    if (showUserDropdown) {
+      resetDropdownTimer();
+    }
+    return () => {
+      if (dropdownTimeoutRef.current) {
+        clearTimeout(dropdownTimeoutRef.current);
+      }
+    };
+  }, [showUserDropdown, resetDropdownTimer]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
 
   useEffect(() => {
     loadData();
@@ -521,7 +596,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
       <Paper sx={{ p: 3, borderRadius: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>
-            All Organizations
+            All Organizations ({filteredOrganizations.length})
           </Typography>
           <Button variant="contained" sx={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -530,6 +605,61 @@ const SuperAdminDashboard = ({ onLogout }) => {
             Export Data
           </Button>
         </Box>
+
+        {/* Search and Filter Section */}
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+          <TextField
+            placeholder="Search by name or slug..."
+            value={orgSearchTerm}
+            onChange={(e) => setOrgSearchTerm(e.target.value)}
+            size="small"
+            sx={{ minWidth: 250, flex: 1 }}
+            InputProps={{
+              startAdornment: <Box sx={{ mr: 1, color: '#9ca3af' }}>🔍</Box>
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={orgStatusFilter}
+              label="Status"
+              onChange={(e) => setOrgStatusFilter(e.target.value)}
+            >
+              <MenuItem value="all">All Status</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="inactive">Inactive</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Plan</InputLabel>
+            <Select
+              value={orgPlanFilter}
+              label="Plan"
+              onChange={(e) => setOrgPlanFilter(e.target.value)}
+            >
+              <MenuItem value="all">All Plans</MenuItem>
+              <MenuItem value="free">Free</MenuItem>
+              <MenuItem value="basic">Basic</MenuItem>
+              <MenuItem value="professional">Professional</MenuItem>
+              <MenuItem value="enterprise">Enterprise</MenuItem>
+            </Select>
+          </FormControl>
+          {(orgSearchTerm || orgStatusFilter !== 'all' || orgPlanFilter !== 'all') && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setOrgSearchTerm('');
+                setOrgStatusFilter('all');
+                setOrgPlanFilter('all');
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              Clear Filters
+            </Button>
+          )}
+        </Box>
+
         <TableContainer>
           <Table>
             <TableHead>
@@ -543,7 +673,15 @@ const SuperAdminDashboard = ({ onLogout }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {organizations.map((org) => (
+              {filteredOrganizations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography sx={{ color: '#6b7280' }}>
+                      {organizations.length === 0 ? 'No organizations found' : 'No organizations match your search criteria'}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : filteredOrganizations.map((org) => (
                 <TableRow key={org.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -720,7 +858,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
         {/* Users Table */}
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>All System Users</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>All System Users ({filteredUsers.length})</Typography>
             <Button
               variant="contained"
               sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textTransform: 'none' }}
@@ -729,6 +867,60 @@ const SuperAdminDashboard = ({ onLogout }) => {
               Add New User
             </Button>
           </Box>
+
+          {/* Search and Filter Section */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            <TextField
+              placeholder="Search by username or email..."
+              value={userSearchTerm}
+              onChange={(e) => setUserSearchTerm(e.target.value)}
+              size="small"
+              sx={{ minWidth: 250, flex: 1 }}
+              InputProps={{
+                startAdornment: <Box sx={{ mr: 1, color: '#9ca3af' }}>🔍</Box>
+              }}
+            />
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={userStatusFilter}
+                label="Status"
+                onChange={(e) => setUserStatusFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="inactive">Inactive</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Role</InputLabel>
+              <Select
+                value={userRoleFilter}
+                label="Role"
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Roles</MenuItem>
+                <MenuItem value="superadmin">Super Admin</MenuItem>
+                <MenuItem value="admin">Org Admin</MenuItem>
+                <MenuItem value="user">Regular User</MenuItem>
+              </Select>
+            </FormControl>
+            {(userSearchTerm || userStatusFilter !== 'all' || userRoleFilter !== 'all') && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setUserSearchTerm('');
+                  setUserStatusFilter('all');
+                  setUserRoleFilter('all');
+                }}
+                sx={{ textTransform: 'none' }}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </Box>
+
           {loadingUsers ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : (
@@ -746,7 +938,15 @@ const SuperAdminDashboard = ({ onLogout }) => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {users.map((user) => (
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography sx={{ color: '#6b7280' }}>
+                          {users.length === 0 ? 'No users found' : 'No users match your search criteria'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredUsers.map((user) => (
                     <TableRow key={user.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1563,11 +1763,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
             <p className="page-subtitle">Welcome back, Super Administrator</p>
           </div>
           <div className="header-right">
-            <div className="search-box">
-              <input type="text" placeholder="Search..." />
-              <span className="search-icon">🔍</span>
-            </div>
-            <div className="user-menu">
+            <div className="user-menu" ref={dropdownRef}>
               <div
                 className="user-avatar"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
@@ -1576,7 +1772,11 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 SA
               </div>
               {showUserDropdown && (
-                <div className="user-dropdown">
+                <div
+                  className="user-dropdown"
+                  onMouseEnter={resetDropdownTimer}
+                  onMouseMove={resetDropdownTimer}
+                >
                   <div className="user-dropdown-header">
                     <div className="user-dropdown-name">Super Admin</div>
                   </div>

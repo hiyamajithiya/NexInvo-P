@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { dashboardAPI, settingsAPI } from '../services/api';
 import './Dashboard.css';
 import Invoices from './Invoices';
@@ -24,6 +24,49 @@ function Dashboard({ user, onLogout }) {
   });
   const [companyLogo, setCompanyLogo] = useState(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  // Ref for dropdown auto-hide timeout
+  const dropdownTimeoutRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Auto-hide dropdown after 5 seconds of inactivity
+  const resetDropdownTimer = useCallback(() => {
+    if (dropdownTimeoutRef.current) {
+      clearTimeout(dropdownTimeoutRef.current);
+    }
+    dropdownTimeoutRef.current = setTimeout(() => {
+      setShowUserDropdown(false);
+    }, 5000); // 5 seconds
+  }, []);
+
+  // Handle dropdown visibility and timer
+  useEffect(() => {
+    if (showUserDropdown) {
+      resetDropdownTimer();
+    }
+    return () => {
+      if (dropdownTimeoutRef.current) {
+        clearTimeout(dropdownTimeoutRef.current);
+      }
+    };
+  }, [showUserDropdown, resetDropdownTimer]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
 
   useEffect(() => {
     if (activeMenu === 'dashboard') {
@@ -420,7 +463,7 @@ function Dashboard({ user, onLogout }) {
             <div style={{ marginRight: '20px' }}>
               <OrganizationSwitcher />
             </div>
-            <div className="user-menu">
+            <div className="user-menu" ref={dropdownRef}>
               <div
                 className="user-avatar"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
@@ -429,7 +472,11 @@ function Dashboard({ user, onLogout }) {
                 {(user?.username || 'A')[0].toUpperCase()}
               </div>
               {showUserDropdown && (
-                <div className="user-dropdown">
+                <div
+                  className="user-dropdown"
+                  onMouseEnter={resetDropdownTimer}
+                  onMouseMove={resetDropdownTimer}
+                >
                   <div className="user-dropdown-header">
                     <div className="user-dropdown-name">{user?.username || 'User'}</div>
                   </div>

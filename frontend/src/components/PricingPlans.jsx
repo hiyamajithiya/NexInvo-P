@@ -173,7 +173,7 @@ const PricingPlans = ({ onNavigate }) => {
   return (
     <Box>
       {/* Header */}
-      <Paper sx={{ p: 4, borderRadius: 3, mb: 4, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <Paper sx={{ p: 4, borderRadius: 3, mb: 4, textAlign: 'center', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}>
         <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'white', mb: 2 }}>
           Choose Your Plan
         </Typography>
@@ -202,20 +202,21 @@ const PricingPlans = ({ onNavigate }) => {
               <Box
                 sx={{
                   position: 'absolute',
-                  top: -12,
+                  top: -14,
                   right: 20,
-                  bgcolor: '#8b5cf6',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                   color: 'white',
                   px: 2,
-                  py: 0.5,
+                  py: 0.75,
                   borderRadius: 2,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 0.5,
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
                 }}
               >
-                <StarIcon fontSize="small" />
-                <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                <StarIcon sx={{ fontSize: 16 }} />
+                <Typography variant="caption" sx={{ fontWeight: 'bold', fontSize: '0.75rem', letterSpacing: '0.5px' }}>
                   POPULAR
                 </Typography>
               </Box>
@@ -271,14 +272,22 @@ const PricingPlans = ({ onNavigate }) => {
                   </ListItemIcon>
                   <ListItemText primary={`${plan.max_storage_gb} GB storage`} />
                 </ListItem>
-                {plan.features && plan.features.map((feature, idx) => (
-                  <ListItem key={idx} sx={{ px: 0 }}>
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
-                    </ListItemIcon>
-                    <ListItemText primary={feature} />
-                  </ListItem>
-                ))}
+                {plan.features && plan.features
+                  .filter(feature => {
+                    // Filter out features that duplicate the hardcoded ones above
+                    const lowerFeature = feature.toLowerCase();
+                    return !lowerFeature.includes('invoice') &&
+                           !lowerFeature.includes('user') &&
+                           !lowerFeature.includes('storage');
+                  })
+                  .map((feature, idx) => (
+                    <ListItem key={idx} sx={{ px: 0 }}>
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                      </ListItemIcon>
+                      <ListItemText primary={feature} />
+                    </ListItem>
+                  ))}
               </List>
             </CardContent>
 
@@ -292,7 +301,7 @@ const PricingPlans = ({ onNavigate }) => {
                   fontWeight: 'bold',
                   textTransform: 'none',
                   ...(plan.highlight ? {
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                   } : {}),
                 }}
               >
@@ -405,7 +414,7 @@ const PricingPlans = ({ onNavigate }) => {
             onClick={handleSubscribe}
             disabled={subscribing}
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
               textTransform: 'none',
               minWidth: '140px',
             }}
