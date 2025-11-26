@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI } from '../services/api';
+import { invoiceAPI, clientAPI, paymentAPI } from '../services/api';
 import './Pages.css';
 
 function Reports() {
@@ -10,6 +10,7 @@ function Reports() {
   // Data states
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
+  const [payments, setPayments] = useState([]);
 
   const reports = [
     { id: 1, name: 'Revenue Report', icon: '📊', description: 'Monthly and yearly revenue analysis' },
@@ -17,6 +18,7 @@ function Reports() {
     { id: 3, name: 'GST Summary', icon: '🧾', description: 'GST collected and payable summary' },
     { id: 4, name: 'Client-wise Report', icon: '👥', description: 'Revenue breakdown by client' },
     { id: 5, name: 'Payment Report', icon: '💰', description: 'Payment collection history' },
+    { id: 6, name: 'TDS Summary', icon: '📋', description: 'TDS deducted by clients summary' },
   ];
 
   useEffect(() => {
@@ -26,13 +28,15 @@ function Reports() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [invoicesResponse, clientsResponse] = await Promise.all([
+      const [invoicesResponse, clientsResponse, paymentsResponse] = await Promise.all([
         invoiceAPI.getAll(),
-        clientAPI.getAll()
+        clientAPI.getAll(),
+        paymentAPI.getAll()
       ]);
 
       setInvoices(invoicesResponse.data.results || invoicesResponse.data || []);
       setClients(clientsResponse.data.results || clientsResponse.data || []);
+      setPayments(paymentsResponse.data.results || paymentsResponse.data || []);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
@@ -69,6 +73,35 @@ function Reports() {
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), 0, 1);
       filtered = filtered.filter(inv => new Date(inv.invoice_date) >= firstDay);
+    }
+
+    return filtered;
+  };
+
+  const getFilteredPayments = () => {
+    let filtered = [...payments];
+
+    if (dateFilter === 'this_month') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      filtered = filtered.filter(p => new Date(p.payment_date) >= firstDay);
+    } else if (dateFilter === 'last_month') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+      filtered = filtered.filter(p => {
+        const date = new Date(p.payment_date);
+        return date >= firstDay && date <= lastDay;
+      });
+    } else if (dateFilter === 'this_quarter') {
+      const now = new Date();
+      const quarter = Math.floor(now.getMonth() / 3);
+      const firstDay = new Date(now.getFullYear(), quarter * 3, 1);
+      filtered = filtered.filter(p => new Date(p.payment_date) >= firstDay);
+    } else if (dateFilter === 'this_year') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), 0, 1);
+      filtered = filtered.filter(p => new Date(p.payment_date) >= firstDay);
     }
 
     return filtered;
@@ -136,6 +169,34 @@ function Reports() {
             client: getClientName(invoice.client),
             amount: parseFloat(invoice.total_amount || 0)
           }));
+
+      case 6: // TDS Summary
+        const filteredPayments = getFilteredPayments();
+        const paymentsWithTDS = filteredPayments.filter(p => parseFloat(p.tds_amount || 0) > 0);
+
+        if (paymentsWithTDS.length === 0) {
+          return [];
+        }
+
+        // Client-wise TDS summary
+        const tdsStats = {};
+        paymentsWithTDS.forEach(payment => {
+          const clientName = payment.client_name || 'Unknown';
+          if (!tdsStats[clientName]) {
+            tdsStats[clientName] = {
+              client: clientName,
+              totalInvoiceAmount: 0,
+              totalTDS: 0,
+              totalReceived: 0,
+              paymentCount: 0
+            };
+          }
+          tdsStats[clientName].totalInvoiceAmount += parseFloat(payment.amount || 0);
+          tdsStats[clientName].totalTDS += parseFloat(payment.tds_amount || 0);
+          tdsStats[clientName].totalReceived += parseFloat(payment.amount_received || 0);
+          tdsStats[clientName].paymentCount++;
+        });
+        return Object.values(tdsStats);
 
       default:
         return [];
@@ -251,46 +312,112 @@ function Reports() {
                   <p className="empty-description">Start creating invoices to see report data</p>
                 </div>
               ) : (
-                <div className="data-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        {Object.keys(reportData[0]).map((key) => (
-                          <th key={key}>
-                            {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportData.map((row, index) => (
-                        <tr key={index}>
-                          {Object.entries(row).map(([key, value], idx) => (
-                            <td key={idx}>
-                              {key === 'amount' || key === 'total' || key === 'taxable' || key === 'gst' ? (
-                                <strong>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
-                              ) : key === 'status' ? (
-                                <span className={`status-badge status-${value}`}>
-                                  {value.toUpperCase()}
-                                </span>
-                              ) : key === 'daysOverdue' ? (
-                                <span style={{
-                                  color: value > 30 ? '#dc2626' : value > 15 ? '#f59e0b' : '#6b7280'
-                                }}>
-                                  {value} days
-                                </span>
-                              ) : key === 'date' ? (
-                                new Date(value).toLocaleDateString('en-IN')
-                              ) : (
-                                value
-                              )}
-                            </td>
+                <>
+                  {/* TDS Summary Total Card */}
+                  {selectedReport.id === 6 && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '20px',
+                      marginBottom: '20px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '200px',
+                        border: '1px solid #bae6fd'
+                      }}>
+                        <div style={{ color: '#0369a1', fontSize: '13px', marginBottom: '4px' }}>Total Invoice Amount</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#0c4a6e' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalInvoiceAmount, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '200px',
+                        border: '1px solid #fcd34d'
+                      }}>
+                        <div style={{ color: '#92400e', fontSize: '13px', marginBottom: '4px' }}>Total TDS Deducted</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#78350f' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalTDS, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '200px',
+                        border: '1px solid #6ee7b7'
+                      }}>
+                        <div style={{ color: '#047857', fontSize: '13px', marginBottom: '4px' }}>Total Received</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#064e3b' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalReceived, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '200px',
+                        border: '1px solid #c4b5fd'
+                      }}>
+                        <div style={{ color: '#6d28d9', fontSize: '13px', marginBottom: '4px' }}>Total Payments</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#4c1d95' }}>
+                          {reportData.reduce((sum, r) => sum + r.paymentCount, 0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="data-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          {Object.keys(reportData[0]).map((key) => (
+                            <th key={key}>
+                              {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {reportData.map((row, index) => (
+                          <tr key={index}>
+                            {Object.entries(row).map(([key, value], idx) => (
+                              <td key={idx}>
+                                {key === 'amount' || key === 'total' || key === 'taxable' || key === 'gst' || key === 'totalInvoiceAmount' || key === 'totalReceived' ? (
+                                  <strong>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
+                                ) : key === 'totalTDS' ? (
+                                  <strong style={{ color: '#b45309' }}>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
+                                ) : key === 'status' ? (
+                                  <span className={`status-badge status-${value}`}>
+                                    {value.toUpperCase()}
+                                  </span>
+                                ) : key === 'daysOverdue' ? (
+                                  <span style={{
+                                    color: value > 30 ? '#dc2626' : value > 15 ? '#f59e0b' : '#6b7280'
+                                  }}>
+                                    {value} days
+                                  </span>
+                                ) : key === 'date' ? (
+                                  new Date(value).toLocaleDateString('en-IN')
+                                ) : (
+                                  value
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>

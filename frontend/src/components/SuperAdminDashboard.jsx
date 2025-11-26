@@ -47,7 +47,10 @@ import {
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
   AttachMoney as AttachMoneyIcon,
+  Notifications as NotificationsIcon,
+  NotificationsActive as NotificationsActiveIcon,
 } from '@mui/icons-material';
+import { superadminAPI, subscriptionAPI } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import SubscriptionPlans from './SubscriptionPlans';
 import CouponManagement from './CouponManagement';
@@ -92,6 +95,20 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [showTestEmailDialog, setShowTestEmailDialog] = useState(false);
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+
+  // Upgrade requests state
+  const [upgradeRequests, setUpgradeRequests] = useState([]);
+  const [loadingUpgradeRequests, setLoadingUpgradeRequests] = useState(false);
+  const [approveDialog, setApproveDialog] = useState({ open: false, request: null });
+  const [rejectDialog, setRejectDialog] = useState({ open: false, request: null });
+  const [adminNotes, setAdminNotes] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
 
   // Search states
   const [orgSearchTerm, setOrgSearchTerm] = useState('');
@@ -171,6 +188,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
   useEffect(() => {
     loadData();
     loadSubscriptionPlans();
+    loadNotifications();
+    // Poll for notification count every 30 seconds
+    const notificationInterval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(notificationInterval);
   }, []);
 
   useEffect(() => {
@@ -179,6 +200,9 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
     if (activeMenu === 'settings') {
       loadEmailConfig();
+    }
+    if (activeMenu === 'upgrade-requests') {
+      loadUpgradeRequests();
     }
   }, [activeMenu]);
 
@@ -248,6 +272,111 @@ const SuperAdminDashboard = ({ onLogout }) => {
       });
     } catch (error) {
       console.error('Error loading email config:', error);
+    }
+  };
+
+  const loadNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const response = await superadminAPI.getNotifications({ limit: 50 });
+      setNotifications(response.data.notifications || []);
+      setUnreadNotificationCount(response.data.unread_count || 0);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await superadminAPI.getUnreadCount();
+      setUnreadNotificationCount(response.data.unread_count || 0);
+    } catch (error) {
+      console.error('Error loading unread count:', error);
+    }
+  };
+
+  const handleMarkNotificationAsRead = async (notificationId) => {
+    try {
+      await superadminAPI.markAsRead(notificationId);
+      setNotifications(prev =>
+        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+      );
+      setUnreadNotificationCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleMarkAllNotificationsAsRead = async () => {
+    try {
+      await superadminAPI.markAllAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadNotificationCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      await superadminAPI.deleteNotification(notificationId);
+      const notification = notifications.find(n => n.id === notificationId);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      if (notification && !notification.is_read) {
+        setUnreadNotificationCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
+  };
+
+  const loadUpgradeRequests = async () => {
+    setLoadingUpgradeRequests(true);
+    try {
+      const response = await subscriptionAPI.getUpgradeRequests();
+      setUpgradeRequests(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error loading upgrade requests:', error);
+    } finally {
+      setLoadingUpgradeRequests(false);
+    }
+  };
+
+  const handleApproveRequest = async () => {
+    if (!approveDialog.request) return;
+    try {
+      await subscriptionAPI.approveUpgradeRequest(approveDialog.request.id, {
+        admin_notes: adminNotes,
+        payment_reference: paymentReference
+      });
+      showSnackbar('Upgrade request approved successfully', 'success');
+      setApproveDialog({ open: false, request: null });
+      setAdminNotes('');
+      setPaymentReference('');
+      loadUpgradeRequests();
+      loadNotifications();
+    } catch (error) {
+      console.error('Error approving request:', error);
+      showSnackbar('Failed to approve request', 'error');
+    }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!rejectDialog.request) return;
+    try {
+      await subscriptionAPI.rejectUpgradeRequest(rejectDialog.request.id, {
+        admin_notes: adminNotes
+      });
+      showSnackbar('Upgrade request rejected', 'success');
+      setRejectDialog({ open: false, request: null });
+      setAdminNotes('');
+      loadUpgradeRequests();
+      loadNotifications();
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+      showSnackbar('Failed to reject request', 'error');
     }
   };
 
@@ -418,6 +547,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
       case 'billing': return 'Billing & Subscriptions';
       case 'subscription-plans': return 'Subscription Plans';
       case 'coupons': return 'Coupon Management';
+      case 'upgrade-requests': return 'Upgrade Requests';
       case 'settings': return 'System Settings';
       default: return 'Super Admin Portal';
     }
@@ -1707,6 +1837,200 @@ const SuperAdminDashboard = ({ onLogout }) => {
     );
   };
 
+  const renderUpgradeRequestsContent = () => {
+    const pendingRequests = upgradeRequests.filter(r => r.status === 'pending');
+    const processedRequests = upgradeRequests.filter(r => r.status !== 'pending');
+
+    return (
+      <>
+        {/* Notifications Panel */}
+        {notifications.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>Recent Notifications</Typography>
+              {unreadNotificationCount > 0 && (
+                <Button size="small" onClick={handleMarkAllNotificationsAsRead}>
+                  Mark All as Read
+                </Button>
+              )}
+            </div>
+            <Paper sx={{ p: 0, borderRadius: 3, overflow: 'hidden' }}>
+              {notifications.slice(0, 5).map((notification) => (
+                <Box
+                  key={notification.id}
+                  sx={{
+                    p: 2,
+                    borderBottom: '1px solid #e5e7eb',
+                    bgcolor: notification.is_read ? 'white' : '#fef3c7',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    '&:last-child': { borderBottom: 'none' }
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#111827' }}>
+                      {notification.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
+                      {notification.message}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#9ca3af', mt: 1, display: 'block' }}>
+                      {new Date(notification.created_at).toLocaleString()}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {!notification.is_read && (
+                      <Button size="small" onClick={() => handleMarkNotificationAsRead(notification.id)}>
+                        Mark Read
+                      </Button>
+                    )}
+                    <IconButton size="small" onClick={() => handleDeleteNotification(notification.id)}>
+                      🗑️
+                    </IconButton>
+                  </Box>
+                </Box>
+              ))}
+            </Paper>
+          </div>
+        )}
+
+        {/* Pending Upgrade Requests */}
+        <div style={{ marginBottom: '24px' }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#dc2626' }}>
+            Pending Approval ({pendingRequests.length})
+          </Typography>
+          {loadingUpgradeRequests ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : pendingRequests.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+              <Typography sx={{ color: '#6b7280' }}>No pending upgrade requests</Typography>
+            </Paper>
+          ) : (
+            <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>Organization</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Requested By</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Current Plan</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Requested Plan</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Coupon</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pendingRequests.map((request) => (
+                      <TableRow key={request.id} hover>
+                        <TableCell>{request.organization_name}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{request.requested_by_name}</Typography>
+                          <Typography variant="caption" sx={{ color: '#6b7280' }}>{request.requested_by_email}</Typography>
+                        </TableCell>
+                        <TableCell>{request.current_plan_name || 'None'}</TableCell>
+                        <TableCell>
+                          <Chip label={request.requested_plan_name} color="primary" size="small" />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#059669' }}>₹{parseFloat(request.amount).toFixed(2)}</TableCell>
+                        <TableCell>{request.coupon_code || '-'}</TableCell>
+                        <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              variant="contained"
+                              color="success"
+                              size="small"
+                              onClick={() => {
+                                setApproveDialog({ open: true, request });
+                                setAdminNotes('');
+                                setPaymentReference('');
+                              }}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              onClick={() => {
+                                setRejectDialog({ open: true, request });
+                                setAdminNotes('');
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          )}
+        </div>
+
+        {/* Processed Requests History */}
+        <div>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            Request History ({processedRequests.length})
+          </Typography>
+          {processedRequests.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+              <Typography sx={{ color: '#6b7280' }}>No processed requests yet</Typography>
+            </Paper>
+          ) : (
+            <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>Organization</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Requested Plan</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Processed</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Notes</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {processedRequests.slice(0, 10).map((request) => (
+                      <TableRow key={request.id} hover>
+                        <TableCell>{request.organization_name}</TableCell>
+                        <TableCell>{request.requested_plan_name}</TableCell>
+                        <TableCell>₹{parseFloat(request.amount).toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={request.status.toUpperCase()}
+                            color={request.status === 'approved' ? 'success' : 'error'}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {request.approved_at ? new Date(request.approved_at).toLocaleDateString() : '-'}
+                        </TableCell>
+                        <TableCell sx={{ maxWidth: 200 }}>
+                          <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {request.admin_notes || '-'}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          )}
+        </div>
+      </>
+    );
+  };
+
   const renderContent = () => {
     switch (activeMenu) {
       case 'organizations':
@@ -1721,6 +2045,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
         return <SubscriptionPlans />;
       case 'coupons':
         return <CouponManagement />;
+      case 'upgrade-requests':
+        return renderUpgradeRequestsContent();
       case 'settings':
         return renderSettingsContent();
       default:
@@ -1804,6 +2130,33 @@ const SuperAdminDashboard = ({ onLogout }) => {
           >
             <span className="nav-icon">🎟️</span>
             <span className="nav-text">Coupons</span>
+          </a>
+          <a
+            href="#upgrade-requests"
+            className={`nav-item ${activeMenu === 'upgrade-requests' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('upgrade-requests'); }}
+            style={{ position: 'relative' }}
+          >
+            <span className="nav-icon">📬</span>
+            <span className="nav-text">Upgrade Requests</span>
+            {unreadNotificationCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: '#ef4444',
+                color: 'white',
+                borderRadius: '10px',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                minWidth: '20px',
+                textAlign: 'center'
+              }}>
+                {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+              </span>
+            )}
           </a>
           <a
             href="#settings"
@@ -2276,6 +2629,95 @@ const SuperAdminDashboard = ({ onLogout }) => {
             }}
           >
             {sendingTestEmail ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Send Test Email'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Approve Upgrade Request Dialog */}
+      <Dialog open={approveDialog.open} onClose={() => setApproveDialog({ open: false, request: null })} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>Approve Upgrade Request</DialogTitle>
+        <DialogContent>
+          {approveDialog.request && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Organization:</strong> {approveDialog.request.organization_name}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Requested Plan:</strong> {approveDialog.request.requested_plan_name}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Amount:</strong> ₹{parseFloat(approveDialog.request.amount).toFixed(2)}
+              </Typography>
+              {approveDialog.request.coupon_code && (
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  <strong>Coupon Applied:</strong> {approveDialog.request.coupon_code}
+                </Typography>
+              )}
+              <TextField
+                fullWidth
+                label="Payment Reference/Transaction ID"
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                sx={{ mb: 2 }}
+                placeholder="Enter payment transaction ID for verification"
+              />
+              <TextField
+                fullWidth
+                label="Admin Notes"
+                multiline
+                rows={3}
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Add any notes about this approval..."
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setApproveDialog({ open: false, request: null })}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleApproveRequest}
+          >
+            Confirm Approval
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reject Upgrade Request Dialog */}
+      <Dialog open={rejectDialog.open} onClose={() => setRejectDialog({ open: false, request: null })} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600, color: '#dc2626' }}>Reject Upgrade Request</DialogTitle>
+        <DialogContent>
+          {rejectDialog.request && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Organization:</strong> {rejectDialog.request.organization_name}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Requested Plan:</strong> {rejectDialog.request.requested_plan_name}
+              </Typography>
+              <TextField
+                fullWidth
+                label="Reason for Rejection"
+                multiline
+                rows={3}
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Please provide a reason for rejection..."
+                required
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setRejectDialog({ open: false, request: null })}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleRejectRequest}
+          >
+            Confirm Rejection
           </Button>
         </DialogActions>
       </Dialog>

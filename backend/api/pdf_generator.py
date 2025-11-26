@@ -155,8 +155,13 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
     # Invoice type display
     invoice_type_label = "TAX INVOICE" if invoice.invoice_type == 'tax' else "PROFORMA INVOICE"
 
+    # Get company designation text from format settings or use default
+    designation_text = "Professional Services"  # Default value
+    if format_settings and format_settings.company_designation_text:
+        designation_text = format_settings.company_designation_text
+
     right_header = [
-        Paragraph("CHARTERED ACCOUNTANT", right_header_style),
+        Paragraph(designation_text.upper(), right_header_style),
         Paragraph(invoice_type_label, invoice_label_style)
     ]
 
@@ -306,18 +311,44 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
             f"{item.total_amount:,.2f}"
         ])
 
-    # Grand Total row
+    # Calculate totals
     total_cgst = sum([float(row[3].replace(',', '')) for row in table_data[1:] if row[3] != '-'])
     total_sgst = sum([float(row[4].replace(',', '')) for row in table_data[1:] if row[4] != '-'])
     total_igst = sum([float(row[5].replace(',', '')) for row in table_data[1:] if row[5] != '-'])
 
+    # Subtotal row (before GST)
     table_data.append([
         '',
-        'GRAND TOTAL',
+        'Sub Total',
         f"{invoice.subtotal:,.2f}",
         f"{total_cgst:,.2f}" if total_cgst > 0 else "-",
         f"{total_sgst:,.2f}" if total_sgst > 0 else "-",
         f"{total_igst:,.2f}" if total_igst > 0 else "-",
+        f"{float(invoice.subtotal) + float(invoice.tax_amount):,.2f}"
+    ])
+
+    # Round Off row (only show if round_off is not zero)
+    round_off_value = float(invoice.round_off) if invoice.round_off else 0
+    if round_off_value != 0:
+        round_off_display = f"+{round_off_value:,.2f}" if round_off_value > 0 else f"{round_off_value:,.2f}"
+        table_data.append([
+            '',
+            'Round Off',
+            '',
+            '',
+            '',
+            '',
+            round_off_display
+        ])
+
+    # Grand Total row
+    table_data.append([
+        '',
+        'GRAND TOTAL',
+        '',
+        '',
+        '',
+        '',
         f"{invoice.total_amount:,.2f}"
     ])
 
@@ -332,8 +363,14 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         table_width * 0.14    # Amount (14%)
     ]
 
+    # Determine how many summary rows we have (Sub Total, Round Off (optional), Grand Total)
+    num_summary_rows = 2  # Sub Total + Grand Total
+    if round_off_value != 0:
+        num_summary_rows = 3  # Sub Total + Round Off + Grand Total
+
     items_table = Table(table_data, colWidths=col_widths)
-    items_table.setStyle(TableStyle([
+
+    table_style = [
         # Header row styling
         ('BACKGROUND', (0, 0), (-1, 0), HEADER_BG),
         ('TEXTCOLOR', (0, 0), (-1, 0), HEADER_TEXT),
@@ -342,15 +379,20 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
         ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
 
-        # Data rows styling
-        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -2), 7),
+        # Data rows styling (excluding summary rows)
+        ('FONTNAME', (0, 1), (-1, -num_summary_rows-1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -num_summary_rows-1), 7),
         ('ALIGN', (0, 1), (0, -1), 'CENTER'),  # S.No center
         ('ALIGN', (1, 1), (1, -1), 'LEFT'),    # Description left
         ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),  # Numbers right
         ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'),
 
-        # Grand Total row styling
+        # Sub Total row styling (light background)
+        ('BACKGROUND', (0, -num_summary_rows), (-1, -num_summary_rows), colors.HexColor('#f3f4f6')),
+        ('FONTNAME', (0, -num_summary_rows), (-1, -num_summary_rows), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -num_summary_rows), (-1, -num_summary_rows), 8),
+
+        # Grand Total row styling (darker background)
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e5e7eb')),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, -1), (-1, -1), 9),
@@ -364,7 +406,17 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
+    ]
+
+    # Add Round Off row styling if present
+    if round_off_value != 0:
+        table_style.extend([
+            ('FONTNAME', (0, -2), (-1, -2), 'Helvetica'),
+            ('FONTSIZE', (0, -2), (-1, -2), 7),
+            ('TEXTCOLOR', (6, -2), (6, -2), colors.HexColor('#059669') if round_off_value > 0 else colors.HexColor('#dc2626')),
+        ])
+
+    items_table.setStyle(TableStyle(table_style))
 
     elements.append(items_table)
     elements.append(Spacer(1, 5*mm))
@@ -616,14 +668,30 @@ def generate_receipt_pdf(receipt, company_settings):
     elements.append(Paragraph(f"{receipt.received_from}", normal_style))
     elements.append(Spacer(1, 10))
 
-    # Payment Details
-    payment_data = [
-        ['Description', 'Amount'],
-        [receipt.towards, f"₹ {receipt.amount_received:,.2f}"]
-    ]
+    # Payment Details - with TDS breakdown
+    tds_amount = float(receipt.tds_amount) if receipt.tds_amount else 0
+    total_amount = float(receipt.total_amount) if receipt.total_amount else float(receipt.amount_received)
+    amount_received = float(receipt.amount_received)
+
+    # If total_amount is 0, calculate it (backward compatibility)
+    if total_amount == 0:
+        total_amount = amount_received + tds_amount
+
+    payment_data = [['Description', 'Amount']]
+
+    if tds_amount > 0:
+        # Show breakdown: Total Payment, TDS Deducted, Amount Received
+        payment_data.append([receipt.towards, f"₹ {total_amount:,.2f}"])
+        payment_data.append(['Less: TDS Deducted', f"₹ {tds_amount:,.2f}"])
+        payment_data.append(['Amount Received', f"₹ {amount_received:,.2f}"])
+    else:
+        # No TDS - simple receipt
+        payment_data.append([receipt.towards, f"₹ {amount_received:,.2f}"])
 
     payment_table = Table(payment_data, colWidths=[doc.width * 0.7, doc.width * 0.3])
-    payment_table.setStyle(TableStyle([
+
+    # Build table style
+    table_style_list = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -633,21 +701,36 @@ def generate_receipt_pdf(receipt, company_settings):
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
         ('TOPPADDING', (0, 0), (-1, 0), 12),
         ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
         ('FONTSIZE', (0, 1), (-1, -1), 11),
         ('TOPPADDING', (0, 1), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-    ]))
+    ]
+
+    if tds_amount > 0:
+        # Highlight TDS row and Amount Received row
+        table_style_list.extend([
+            ('BACKGROUND', (0, 1), (-1, 1), colors.white),  # Total payment row
+            ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#fff3cd')),  # TDS row (yellow tint)
+            ('TEXTCOLOR', (0, 2), (-1, 2), colors.HexColor('#856404')),  # TDS text color
+            ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#d4edda')),  # Amount received row (green tint)
+            ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'),  # Bold for amount received
+        ])
+    else:
+        table_style_list.append(('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]))
+
+    payment_table.setStyle(TableStyle(table_style_list))
     elements.append(payment_table)
     elements.append(Spacer(1, 15))
 
-    # Amount in Words
-    amount_words = number_to_words(receipt.amount_received)
-    elements.append(Paragraph(f"<b>Amount in Words:</b> {amount_words}", normal_style))
+    # Amount in Words - show the amount received (what actually came in)
+    amount_words = number_to_words(amount_received)
+    elements.append(Paragraph(f"<b>Amount Received in Words:</b> {amount_words}", normal_style))
+    if tds_amount > 0:
+        elements.append(Paragraph(f"<b>Total Payment (Including TDS):</b> ₹ {total_amount:,.2f}", normal_style))
     elements.append(Spacer(1, 15))
 
-    # Payment Method
-    elements.append(Paragraph(f"<b>Payment Method:</b> {receipt.get_payment_method_display()}", normal_style))
+    # Payment Method - use payment's method which has choices defined
+    elements.append(Paragraph(f"<b>Payment Method:</b> {receipt.payment.get_payment_method_display()}", normal_style))
     if receipt.payment.reference_number:
         elements.append(Paragraph(f"<b>Reference Number:</b> {receipt.payment.reference_number}", normal_style))
     elements.append(Spacer(1, 20))

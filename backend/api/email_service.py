@@ -219,7 +219,7 @@ Please find attached:
 Payment Details:
 - Amount Received: ₹{receipt.amount_received:,.2f}
 - Payment Date: {receipt.receipt_date.strftime('%d %B %Y')}
-- Payment Method: {receipt.get_payment_method_display()}
+- Payment Method: {receipt.payment.get_payment_method_display()}
 
 If you have any questions, please don't hesitate to contact us.
 

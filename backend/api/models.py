@@ -214,6 +214,7 @@ class Invoice(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    round_off = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     payment_term = models.ForeignKey('PaymentTerm', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
     payment_terms = models.TextField(blank=True)  # Kept for backwards compatibility
@@ -332,7 +333,9 @@ class Payment(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='payments')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_payments')
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, help_text='Total payment amount (received + TDS)')
+    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='TDS deducted amount')
+    amount_received = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Actual amount received in bank/cash')
     payment_date = models.DateField()
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='cash')
     reference_number = models.CharField(max_length=100, blank=True)
@@ -345,6 +348,12 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment {self.amount} for {self.invoice.invoice_number}"
+
+    def save(self, *args, **kwargs):
+        # If amount_received is not set, calculate it from amount - tds_amount
+        if self.amount_received == 0 and self.amount > 0:
+            self.amount_received = self.amount - self.tds_amount
+        super().save(*args, **kwargs)
 
 
 class Receipt(models.Model):
@@ -360,7 +369,9 @@ class Receipt(models.Model):
     # Receipt details
     receipt_number = models.CharField(max_length=50, unique=True)
     receipt_date = models.DateField()
-    amount_received = models.DecimalField(max_digits=12, decimal_places=2)
+    amount_received = models.DecimalField(max_digits=12, decimal_places=2, help_text='Actual amount received (after TDS)')
+    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='TDS deducted amount')
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Total payment (received + TDS)')
     payment_method = models.CharField(max_length=20)
 
     # Additional info
@@ -467,7 +478,7 @@ class InvoiceFormatSettings(models.Model):
     show_logo = models.BooleanField(default=True)
     logo_position = models.CharField(max_length=10, choices=[('left', 'Left'), ('center', 'Center'), ('right', 'Right')], default='left')
     show_company_designation = models.BooleanField(default=True)
-    company_designation_text = models.CharField(max_length=100, default='CHARTERED ACCOUNTANT')
+    company_designation_text = models.CharField(max_length=100, default='Professional Services')
     header_color = models.CharField(max_length=7, default='#1e3a8a')  # Hex color
 
     # Company Info Display
@@ -768,6 +779,59 @@ class Subscription(models.Model):
             delta = self.end_date - date.today()
 
         return max(0, delta.days)
+
+
+class SuperAdminNotification(models.Model):
+    """
+    In-app notifications for superadmin.
+    Used to notify about upgrade requests, new registrations, etc.
+    """
+    NOTIFICATION_TYPE_CHOICES = [
+        ('upgrade_request', 'Subscription Upgrade Request'),
+        ('new_registration', 'New Organization Registration'),
+        ('payment_received', 'Payment Received'),
+        ('subscription_expiring', 'Subscription Expiring'),
+        ('other', 'Other'),
+    ]
+
+    notification_type = models.CharField(max_length=30, choices=NOTIFICATION_TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+
+    # Related objects (optional)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE,
+                                    null=True, blank=True, related_name='superadmin_notifications')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL,
+                            null=True, blank=True, related_name='triggered_notifications',
+                            help_text="User who triggered this notification")
+
+    # Reference to related object (generic)
+    related_object_type = models.CharField(max_length=50, blank=True,
+                                          help_text="e.g., 'upgrade_request', 'subscription'")
+    related_object_id = models.IntegerField(null=True, blank=True,
+                                           help_text="ID of the related object")
+
+    # Status
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    read_by = models.ForeignKey(User, on_delete=models.SET_NULL,
+                               null=True, blank=True, related_name='read_notifications')
+
+    # Action URL (optional - for quick navigation)
+    action_url = models.CharField(max_length=255, blank=True,
+                                 help_text="URL/route to navigate to for action")
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Super Admin Notification"
+        verbose_name_plural = "Super Admin Notifications"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.notification_type}: {self.title}"
 
 
 class SubscriptionUpgradeRequest(models.Model):

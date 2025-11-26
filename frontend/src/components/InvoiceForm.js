@@ -178,7 +178,11 @@ function InvoiceForm({ onBack, invoice }) {
       total += item.totalAmount;
     });
 
-    return { subtotal, taxAmount, total };
+    // Calculate round off (round to nearest rupee)
+    const roundedTotal = Math.round(total);
+    const roundOff = roundedTotal - total;
+
+    return { subtotal, taxAmount, total, roundOff, roundedTotal };
   };
 
   const handleSaveInvoice = async () => {
@@ -203,7 +207,8 @@ function InvoiceForm({ onBack, invoice }) {
         notes: invoiceData.notes,
         subtotal: totals.subtotal,
         tax_amount: totals.taxAmount,
-        total_amount: totals.total,
+        round_off: totals.roundOff,
+        total_amount: totals.roundedTotal,
         items: invoiceData.items.map(item => ({
           description: item.description,
           hsn_sac: item.hsnSac,
@@ -255,7 +260,8 @@ function InvoiceForm({ onBack, invoice }) {
         notes: invoiceData.notes,
         subtotal: totals.subtotal,
         tax_amount: totals.taxAmount,
-        total_amount: totals.total,
+        round_off: totals.roundOff,
+        total_amount: totals.roundedTotal,
         items: invoiceData.items.map(item => ({
           description: item.description,
           hsn_sac: item.hsnSac,
@@ -385,6 +391,7 @@ function InvoiceForm({ onBack, invoice }) {
                     <th style={{width: '100px'}}>GST %</th>
                     <th style={{width: '150px'}}>Amount (₹)</th>
                     <th style={{width: '150px', textAlign: 'center'}}>Total (₹)</th>
+                    <th style={{width: '50px', textAlign: 'center'}}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -427,6 +434,27 @@ function InvoiceForm({ onBack, invoice }) {
                         />
                       </td>
                       <td className="text-right">₹{item.totalAmount.toFixed(2)}</td>
+                      <td className="text-center">
+                        {invoiceData.items.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-icon-small btn-delete-item"
+                            onClick={() => removeItem(index)}
+                            title="Remove Item"
+                            style={{
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              fontSize: '14px'
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -445,9 +473,15 @@ function InvoiceForm({ onBack, invoice }) {
                 <span className="totals-label">GST Amount:</span>
                 <span className="totals-value">₹{totals.taxAmount.toFixed(2)}</span>
               </div>
+              <div className="totals-row">
+                <span className="totals-label">Round Off:</span>
+                <span className="totals-value" style={{ color: totals.roundOff >= 0 ? '#059669' : '#dc2626' }}>
+                  {totals.roundOff >= 0 ? '+' : ''}₹{totals.roundOff.toFixed(2)}
+                </span>
+              </div>
               <div className="totals-row total">
                 <span className="totals-label">Total Amount:</span>
-                <span className="totals-value">₹{totals.total.toFixed(2)}</span>
+                <span className="totals-value">₹{totals.roundedTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>

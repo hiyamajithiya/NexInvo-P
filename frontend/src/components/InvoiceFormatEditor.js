@@ -8,12 +8,29 @@ function InvoiceFormatEditor() {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('header');
 
+  // Common designation options
+  const designationOptions = [
+    'Professional Services',
+    'Chartered Accountant',
+    'Tax Consultant',
+    'Company Secretary',
+    'Cost Accountant',
+    'Advocate',
+    'Architect',
+    'Interior Designer',
+    'Consultant',
+    'Software Services',
+    'IT Services',
+    'Marketing Services',
+    'Custom'
+  ];
+
   const [formatSettings, setFormatSettings] = useState({
     // Header
     show_logo: true,
     logo_position: 'left',
     show_company_designation: true,
-    company_designation_text: 'CHARTERED ACCOUNTANT',
+    company_designation_text: 'Professional Services',
     header_color: '#1e3a8a',
 
     // Company Info
@@ -117,7 +134,7 @@ function InvoiceFormatEditor() {
         show_logo: true,
         logo_position: 'left',
         show_company_designation: true,
-        company_designation_text: 'CHARTERED ACCOUNTANT',
+        company_designation_text: 'Professional Services',
         header_color: '#1e3a8a',
         show_company_name: true,
         show_trading_name: true,
@@ -268,14 +285,38 @@ function InvoiceFormatEditor() {
 
               {formatSettings.show_company_designation && (
                 <div className="form-field">
-                  <label>Designation Text</label>
-                  <input
-                    type="text"
-                    value={formatSettings.company_designation_text}
-                    onChange={(e) => handleChange('company_designation_text', e.target.value)}
+                  <label>Designation / Business Type</label>
+                  <select
+                    value={designationOptions.includes(formatSettings.company_designation_text) ? formatSettings.company_designation_text : 'Custom'}
+                    onChange={(e) => {
+                      if (e.target.value === 'Custom') {
+                        // Keep current custom value or set empty
+                        if (designationOptions.includes(formatSettings.company_designation_text)) {
+                          handleChange('company_designation_text', '');
+                        }
+                      } else {
+                        handleChange('company_designation_text', e.target.value);
+                      }
+                    }}
                     className="form-input"
-                    placeholder="e.g., CHARTERED ACCOUNTANT"
-                  />
+                  >
+                    {designationOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  {!designationOptions.includes(formatSettings.company_designation_text) && (
+                    <input
+                      type="text"
+                      value={formatSettings.company_designation_text}
+                      onChange={(e) => handleChange('company_designation_text', e.target.value)}
+                      className="form-input"
+                      placeholder="Enter your custom designation"
+                      style={{ marginTop: '8px' }}
+                    />
+                  )}
+                  <small style={{ color: '#666', marginTop: '4px', display: 'block' }}>
+                    This appears on the top-right of your invoice (e.g., "CHARTERED ACCOUNTANT")
+                  </small>
                 </div>
               )}
 

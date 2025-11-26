@@ -96,6 +96,10 @@ export const settingsAPI = {
   testEmail: () => api.post('/settings/email/test/'),
   getInvoiceFormatSettings: () => api.get('/settings/invoice-format/'),
   updateInvoiceFormatSettings: (data) => api.put('/settings/invoice-format/', data),
+  exportData: (format, type) => api.get('/export/', {
+    params: { format, type },
+    responseType: 'blob'
+  }),
 };
 
 // Invoice APIs
@@ -165,6 +169,14 @@ export const paymentAPI = {
   delete: (id) => api.delete(`/payments/${id}/`),
 };
 
+// Receipt APIs
+export const receiptAPI = {
+  getAll: (params) => api.get('/receipts/', { params }),
+  getById: (id) => api.get(`/receipts/${id}/`),
+  download: (id) => api.get(`/receipts/${id}/download/`, { responseType: 'blob' }),
+  resendEmail: (id) => api.post(`/receipts/${id}/resend_email/`),
+};
+
 // Dashboard APIs
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats/'),
@@ -175,6 +187,9 @@ export const profileAPI = {
   getProfile: () => api.get('/profile/'),
   updateProfile: (data) => api.put('/profile/', data),
   changePassword: (data) => api.post('/profile/change-password/', data),
+  // DPDP Act compliance - Right to Erasure and Data Portability
+  deleteAccount: (data) => api.post('/profile/delete-account/', data),
+  exportPersonalData: () => api.get('/profile/export-data/', { responseType: 'blob' }),
 };
 
 // User Management APIs
@@ -184,6 +199,32 @@ export const userAPI = {
   create: (data) => api.post('/users/', data),
   update: (id, data) => api.put(`/users/${id}/`, data),
   delete: (id) => api.delete(`/users/${id}/`),
+};
+
+// SuperAdmin APIs
+export const superadminAPI = {
+  getStats: () => api.get('/superadmin/stats/'),
+  getEmailConfig: () => api.get('/superadmin/email-config/'),
+  updateEmailConfig: (data) => api.post('/superadmin/email-config/', data),
+  testEmail: (data) => api.post('/superadmin/email-config/test/', data),
+  // Notifications
+  getNotifications: (params) => api.get('/superadmin/notifications/', { params }),
+  getUnreadCount: () => api.get('/superadmin/notifications/unread-count/'),
+  markAsRead: (id) => api.post(`/superadmin/notifications/${id}/mark-read/`),
+  markAllAsRead: () => api.post('/superadmin/notifications/mark-all-read/'),
+  deleteNotification: (id) => api.delete(`/superadmin/notifications/${id}/delete/`),
+};
+
+// Subscription APIs
+export const subscriptionAPI = {
+  getPlans: () => api.get('/subscription-plans/'),
+  getCurrentSubscription: () => api.get('/subscriptions/'),
+  getMySubscription: () => api.get('/subscriptions/my_subscription/'),
+  validateCoupon: (code, planId) => api.post('/coupons/validate/', { code, plan_id: planId }),
+  createUpgradeRequest: (data) => api.post('/subscription-upgrade-requests/', data),
+  getUpgradeRequests: (params) => api.get('/subscription-upgrade-requests/', { params }),
+  approveUpgradeRequest: (id, data) => api.post(`/subscription-upgrade-requests/${id}/approve/`, data),
+  rejectUpgradeRequest: (id, data) => api.post(`/subscription-upgrade-requests/${id}/reject/`, data),
 };
 
 export default api;

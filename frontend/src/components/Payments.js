@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI, paymentAPI } from '../services/api';
+import { invoiceAPI, clientAPI, paymentAPI, receiptAPI } from '../services/api';
 import './Pages.css';
 
 function Payments() {
@@ -7,6 +7,7 @@ function Payments() {
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [modeFilter, setModeFilter] = useState('all');
@@ -18,6 +19,8 @@ function Payments() {
     invoice: '',
     payment_date: new Date().toISOString().split('T')[0],
     amount: 0,
+    tds_amount: 0,
+    amount_received: 0,
     payment_method: 'bank_transfer',
     reference_number: '',
     notes: ''
@@ -47,6 +50,8 @@ function Payments() {
       invoice: '',
       payment_date: new Date().toISOString().split('T')[0],
       amount: 0,
+      tds_amount: 0,
+      amount_received: 0,
       payment_method: 'bank_transfer',
       reference_number: '',
       notes: ''
@@ -63,10 +68,51 @@ function Payments() {
       const selectedInvoice = invoices.find(inv => inv.id === parseInt(value));
       if (selectedInvoice) {
         updatedPayment.amount = parseFloat(selectedInvoice.total_amount) || 0;
+        updatedPayment.tds_amount = 0;
+        updatedPayment.amount_received = parseFloat(selectedInvoice.total_amount) || 0;
       }
     }
 
+    // When TDS is entered, recalculate amount_received
+    if (field === 'tds_amount') {
+      const tds = parseFloat(value) || 0;
+      updatedPayment.amount_received = parseFloat(updatedPayment.amount) - tds;
+    }
+
+    // When total amount changes, recalculate amount_received
+    if (field === 'amount') {
+      const total = parseFloat(value) || 0;
+      const tds = parseFloat(updatedPayment.tds_amount) || 0;
+      updatedPayment.amount_received = total - tds;
+    }
+
     setCurrentPayment(updatedPayment);
+  };
+
+  const handleDownloadReceipt = async (receiptId) => {
+    if (!receiptId) {
+      setError('No receipt available for this payment');
+      return;
+    }
+
+    setDownloadingReceipt(receiptId);
+    try {
+      const response = await receiptAPI.download(receiptId);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `receipt-${receiptId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading receipt:', err);
+      setError('Failed to download receipt');
+    } finally {
+      setDownloadingReceipt(null);
+    }
   };
 
   const handleSavePayment = async () => {
@@ -110,7 +156,11 @@ function Payments() {
   };
 
   const handleEditPayment = (payment) => {
-    setCurrentPayment(payment);
+    setCurrentPayment({
+      ...payment,
+      tds_amount: payment.tds_amount || 0,
+      amount_received: payment.amount_received || (payment.amount - (payment.tds_amount || 0))
+    });
     setShowForm(true);
     setError('');
   };
@@ -128,16 +178,18 @@ function Payments() {
     }
   };
 
-  const filteredPayments = payments.filter(payment => {
-    const matchesSearch = payment.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         payment.client_name?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredPayments = payments
+    .filter(payment => {
+      const matchesSearch = payment.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           payment.client_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesMode = modeFilter === 'all' || payment.payment_method === modeFilter;
+      const matchesMode = modeFilter === 'all' || payment.payment_method === modeFilter;
 
-    const matchesDate = !dateFilter || payment.payment_date === dateFilter;
+      const matchesDate = !dateFilter || payment.payment_date === dateFilter;
 
-    return matchesSearch && matchesMode && matchesDate;
-  });
+      return matchesSearch && matchesMode && matchesDate;
+    })
+    .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date)); // Sort by date, recent first
 
   return (
     <div className="page-content">
@@ -182,7 +234,7 @@ function Payments() {
                   <option value="">-- Select Invoice --</option>
                   {invoices.map((invoice) => (
                     <option key={invoice.id} value={invoice.id}>
-                      {invoice.invoice_number} - ₹{parseFloat(invoice.total_amount || 0).toFixed(2)}
+                      {invoice.invoice_number} - {invoice.client_name} - ₹{parseFloat(invoice.total_amount || 0).toFixed(2)}
                     </option>
                   ))}
                 </select>
@@ -211,7 +263,7 @@ function Payments() {
                 </select>
               </div>
               <div className="form-field">
-                <label>Amount *</label>
+                <label>Invoice Amount (Total Payment) *</label>
                 <input
                   type="number"
                   className="form-input"
@@ -220,6 +272,31 @@ function Payments() {
                   min="0"
                   step="0.01"
                 />
+                <small style={{color: '#666', fontSize: '11px'}}>Total amount including TDS</small>
+              </div>
+              <div className="form-field">
+                <label>TDS Deducted</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={currentPayment.tds_amount}
+                  onChange={(e) => handlePaymentChange('tds_amount', e.target.value)}
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                />
+                <small style={{color: '#666', fontSize: '11px'}}>TDS amount deducted by client (if any)</small>
+              </div>
+              <div className="form-field">
+                <label>Amount Received in Bank</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={currentPayment.amount_received}
+                  readOnly
+                  style={{backgroundColor: '#f5f5f5'}}
+                />
+                <small style={{color: '#666', fontSize: '11px'}}>Auto-calculated: Total - TDS</small>
               </div>
               <div className="form-field">
                 <label>Reference Number</label>
@@ -312,7 +389,9 @@ function Payments() {
                       <th>Client</th>
                       <th>Date</th>
                       <th>Payment Method</th>
-                      <th>Amount</th>
+                      <th>Total Amount</th>
+                      <th>TDS</th>
+                      <th>Received</th>
                       <th>Reference</th>
                       <th>Actions</th>
                     </tr>
@@ -330,8 +409,24 @@ function Payments() {
                           </span>
                         </td>
                         <td><strong>₹{parseFloat(payment.amount).toFixed(2)}</strong></td>
+                        <td style={{color: parseFloat(payment.tds_amount) > 0 ? '#b45309' : '#999'}}>
+                          {parseFloat(payment.tds_amount) > 0 ? `₹${parseFloat(payment.tds_amount).toFixed(2)}` : '-'}
+                        </td>
+                        <td style={{color: '#059669', fontWeight: '500'}}>
+                          ₹{parseFloat(payment.amount_received || (payment.amount - (payment.tds_amount || 0))).toFixed(2)}
+                        </td>
                         <td>{payment.reference_number || '-'}</td>
                         <td>
+                          {payment.receipt_id && (
+                            <button
+                              className="btn-icon-small"
+                              onClick={() => handleDownloadReceipt(payment.receipt_id)}
+                              title="Download Receipt"
+                              disabled={downloadingReceipt === payment.receipt_id}
+                            >
+                              {downloadingReceipt === payment.receipt_id ? '⏳' : '📄'}
+                            </button>
+                          )}
                           <button
                             className="btn-icon-small"
                             onClick={() => handleEditPayment(payment)}

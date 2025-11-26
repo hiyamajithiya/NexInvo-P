@@ -5,7 +5,7 @@ from .models import (
     Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
     Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings,
     InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon,
-    CouponUsage, Subscription, SubscriptionUpgradeRequest
+    CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification
 )
 
 
@@ -105,7 +105,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = ['id', 'client', 'client_name', 'invoice_number', 'invoice_type',
-                  'invoice_date', 'status', 'subtotal', 'tax_amount', 'total_amount',
+                  'invoice_date', 'status', 'subtotal', 'tax_amount', 'round_off', 'total_amount',
                   'payment_term', 'payment_term_name', 'payment_term_description',
                   'payment_terms', 'notes', 'parent_proforma', 'is_emailed', 'emailed_at',
                   'items', 'created_at', 'updated_at']
@@ -131,10 +131,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
             InvoiceItem.objects.create(invoice=invoice, **item_data)
 
-        # Recalculate invoice totals
+        # Recalculate invoice totals with rounding
         invoice.subtotal = sum(item.taxable_amount for item in invoice.items.all())
         invoice.tax_amount = sum(item.total_amount - item.taxable_amount for item in invoice.items.all())
-        invoice.total_amount = invoice.subtotal + invoice.tax_amount
+
+        # Calculate total before rounding
+        total_before_round = invoice.subtotal + invoice.tax_amount
+
+        # Round to nearest rupee
+        rounded_total = round(total_before_round)
+        invoice.round_off = Decimal(str(rounded_total)) - total_before_round
+        invoice.total_amount = Decimal(str(rounded_total))
         invoice.save()
 
         return invoice
@@ -166,10 +173,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
                 InvoiceItem.objects.create(invoice=instance, **item_data)
 
-            # Recalculate invoice totals
+            # Recalculate invoice totals with rounding
             instance.subtotal = sum(item.taxable_amount for item in instance.items.all())
             instance.tax_amount = sum(item.total_amount - item.taxable_amount for item in instance.items.all())
-            instance.total_amount = instance.subtotal + instance.tax_amount
+
+            # Calculate total before rounding
+            total_before_round = instance.subtotal + instance.tax_amount
+
+            # Round to nearest rupee
+            rounded_total = round(total_before_round)
+            instance.round_off = Decimal(str(rounded_total)) - total_before_round
+            instance.total_amount = Decimal(str(rounded_total))
             instance.save()
 
         return instance
@@ -178,13 +192,20 @@ class InvoiceSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True)
     client_name = serializers.CharField(source='invoice.client.name', read_only=True)
+    receipt_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
         fields = ['id', 'invoice', 'invoice_number', 'client_name', 'amount',
-                  'payment_date', 'payment_method', 'reference_number', 'notes',
-                  'created_at', 'updated_at']
-        read_only_fields = ['id', 'invoice_number', 'client_name', 'created_at', 'updated_at']
+                  'tds_amount', 'amount_received', 'payment_date', 'payment_method',
+                  'reference_number', 'notes', 'receipt_id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'invoice_number', 'client_name', 'receipt_id', 'created_at', 'updated_at']
+
+    def get_receipt_id(self, obj):
+        """Get the receipt ID if one exists for this payment"""
+        if hasattr(obj, 'receipt') and obj.receipt:
+            return obj.receipt.id
+        return None
 
 
 class ReceiptSerializer(serializers.ModelSerializer):
@@ -195,9 +216,9 @@ class ReceiptSerializer(serializers.ModelSerializer):
     class Meta:
         model = Receipt
         fields = ['id', 'payment', 'invoice', 'invoice_number', 'client_name',
-                  'receipt_number', 'receipt_date', 'amount_received', 'payment_method',
-                  'received_from', 'towards', 'notes', 'payment_reference',
-                  'created_at', 'updated_at']
+                  'receipt_number', 'receipt_date', 'amount_received', 'tds_amount',
+                  'total_amount', 'payment_method', 'received_from', 'towards', 'notes',
+                  'payment_reference', 'created_at', 'updated_at']
         read_only_fields = ['id', 'receipt_number', 'invoice_number', 'client_name',
                             'payment_reference', 'created_at', 'updated_at']
 
@@ -470,11 +491,34 @@ class SubscriptionUpgradeRequestSerializer(serializers.ModelSerializer):
             'amount', 'status', 'user_notes', 'admin_notes', 'approved_by',
             'approved_by_email', 'approved_at', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'requested_by', 'approved_by', 'approved_at',
+        read_only_fields = ['id', 'organization', 'current_plan', 'amount', 'status',
+                           'requested_by', 'approved_by', 'approved_at',
                            'created_at', 'updated_at']
 
     def get_requested_by_name(self, obj):
         """Get requested by user's full name"""
         if obj.requested_by:
             return obj.requested_by.get_full_name() or obj.requested_by.username
+        return None
+
+
+class SuperAdminNotificationSerializer(serializers.ModelSerializer):
+    """Serializer for superadmin notifications"""
+    organization_name = serializers.CharField(source='organization.name', read_only=True, allow_null=True)
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.EmailField(source='user.email', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SuperAdminNotification
+        fields = [
+            'id', 'notification_type', 'title', 'message', 'organization',
+            'organization_name', 'user', 'user_name', 'user_email',
+            'related_object_type', 'related_object_id', 'is_read', 'read_at',
+            'read_by', 'action_url', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_user_name(self, obj):
+        if obj.user:
+            return obj.user.get_full_name() or obj.user.username
         return None

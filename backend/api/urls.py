@@ -21,6 +21,7 @@ urlpatterns = [
     # Invoice-specific endpoints must come before router to avoid conflicts
     path('invoices/import/', views.import_invoices, name='import-invoices'),
     path('invoices/import-template/', views.download_import_template, name='download-import-template'),
+    path('export/', views.export_data, name='export-data'),
 
     # Router URLs
     path('', include(router.urls)),
@@ -35,6 +36,15 @@ urlpatterns = [
     path('superadmin/stats/', views.superadmin_stats, name='superadmin-stats'),
     path('superadmin/email-config/', views.superadmin_email_config_view, name='superadmin-email-config'),
     path('superadmin/email-config/test/', views.superadmin_test_email_view, name='superadmin-test-email'),
+    # SuperAdmin Notifications
+    path('superadmin/notifications/', views.superadmin_notifications_list, name='superadmin-notifications'),
+    path('superadmin/notifications/unread-count/', views.superadmin_notifications_unread_count, name='superadmin-notifications-unread-count'),
+    path('superadmin/notifications/<int:notification_id>/mark-read/', views.superadmin_notification_mark_read, name='superadmin-notification-mark-read'),
+    path('superadmin/notifications/mark-all-read/', views.superadmin_notifications_mark_all_read, name='superadmin-notifications-mark-all-read'),
+    path('superadmin/notifications/<int:notification_id>/delete/', views.superadmin_notification_delete, name='superadmin-notification-delete'),
     path('profile/', views.user_profile_view, name='user-profile'),
     path('profile/change-password/', views.change_password_view, name='change-password'),
+    # DPDP Act compliance endpoints
+    path('profile/delete-account/', views.delete_account_view, name='delete-account'),
+    path('profile/export-data/', views.export_personal_data_view, name='export-personal-data'),
 ]

@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from datetime import timedelta
-from api.models import Invoice, InvoiceSettings, EmailSettings
+from api.models import Invoice, InvoiceSettings, EmailSettings, CompanySettings
 from api.pdf_generator import generate_invoice_pdf
 import io
 
@@ -14,21 +14,30 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('Starting payment reminder process...')
 
-        # Get all users with active reminders
-        users_with_reminders = InvoiceSettings.objects.filter(
+        # Get all organizations with active reminders
+        orgs_with_reminders = InvoiceSettings.objects.filter(
             enablePaymentReminders=True
         )
 
         total_sent = 0
         total_skipped = 0
 
-        for invoice_settings in users_with_reminders:
-            user = invoice_settings.user
+        for invoice_settings in orgs_with_reminders:
+            # Skip if no organization is linked (legacy data)
+            if not invoice_settings.organization_id:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'Skipping InvoiceSettings {invoice_settings.id} - no organization linked'
+                    )
+                )
+                continue
+
+            organization = invoice_settings.organization
             frequency_days = invoice_settings.reminderFrequencyDays
 
-            # Get unpaid proforma invoices for this user
+            # Get unpaid proforma invoices for this organization
             unpaid_proformas = Invoice.objects.filter(
-                user=user,
+                organization=organization,
                 invoice_type='proforma',
                 status__in=['draft', 'sent']  # Not paid or cancelled
             ).exclude(
@@ -55,7 +64,7 @@ class Command(BaseCommand):
                 if should_send:
                     try:
                         # Send reminder email
-                        self.send_reminder_email(invoice, invoice_settings, user)
+                        self.send_reminder_email(invoice, invoice_settings, organization)
 
                         # Update invoice reminder tracking
                         invoice.last_reminder_sent = timezone.now()
@@ -65,13 +74,13 @@ class Command(BaseCommand):
                         total_sent += 1
                         self.stdout.write(
                             self.style.SUCCESS(
-                                f'✓ Sent reminder for {invoice.invoice_number} to {invoice.client.email}'
+                                f'[OK] Sent reminder for {invoice.invoice_number} to {invoice.client.email}'
                             )
                         )
                     except Exception as e:
                         self.stdout.write(
                             self.style.ERROR(
-                                f'✗ Failed to send reminder for {invoice.invoice_number}: {str(e)}'
+                                f'[FAILED] Failed to send reminder for {invoice.invoice_number}: {str(e)}'
                             )
                         )
                 else:
@@ -83,14 +92,20 @@ class Command(BaseCommand):
             )
         )
 
-    def send_reminder_email(self, invoice, invoice_settings, user):
+    def send_reminder_email(self, invoice, invoice_settings, organization):
         """Send payment reminder email with invoice PDF attachment"""
 
         # Get email settings
         try:
-            email_settings = EmailSettings.objects.get(organization=invoice.organization)
+            email_settings = EmailSettings.objects.get(organization=organization)
         except EmailSettings.DoesNotExist:
             email_settings = None
+
+        # Get company settings for PDF generation
+        try:
+            company_settings = CompanySettings.objects.get(organization=organization)
+        except CompanySettings.DoesNotExist:
+            company_settings = None
 
         # Prepare email subject with placeholders
         subject = invoice_settings.reminderEmailSubject.format(
@@ -121,16 +136,18 @@ class Command(BaseCommand):
             from_email = settings.DEFAULT_FROM_EMAIL
 
         # Generate PDF attachment
-        try:
-            pdf_buffer = generate_invoice_pdf(invoice)
-            pdf_content = pdf_buffer.getvalue()
-        except Exception as e:
-            self.stdout.write(
-                self.style.WARNING(
-                    f'Warning: Could not generate PDF for {invoice.invoice_number}: {str(e)}'
+        pdf_content = None
+        if company_settings:
+            try:
+                pdf_buffer = generate_invoice_pdf(invoice, company_settings)
+                # pdf_buffer is a BytesIO object, get the bytes
+                pdf_content = pdf_buffer.getvalue()
+            except Exception as e:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'Warning: Could not generate PDF for {invoice.invoice_number}: {str(e)}'
+                    )
                 )
-            )
-            pdf_content = None
 
         # Send email
         from django.core.mail import EmailMessage
@@ -141,6 +158,8 @@ class Command(BaseCommand):
             from_email=from_email,
             to=[recipient_email],
         )
+        # Set encoding to UTF-8 for proper Unicode support (rupee symbol, etc.)
+        email.encoding = 'utf-8'
 
         if pdf_content:
             email.attach(

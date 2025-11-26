@@ -446,20 +446,42 @@ function Settings() {
     setCurrentUser({ name: '', email: '', role: 'user', password: '' });
   };
 
-  // Backup & Data Handlers
-  const handleExportData = (format) => {
-    alert(`Exporting data in ${format} format...`);
-  };
+  // Export Data Handler
+  const [exporting, setExporting] = useState(false);
 
-  const handleBackupNow = () => {
-    if (window.confirm('Create a backup of all data now?')) {
-      alert('Backup created successfully!');
-    }
-  };
+  const handleExportData = async (format, dataType = 'all') => {
+    setExporting(true);
+    setError('');
+    try {
+      const response = await settingsAPI.exportData(format.toLowerCase(), dataType);
 
-  const handleRestoreBackup = () => {
-    if (window.confirm('This will restore data from a backup. Continue?')) {
-      alert('Restore functionality will be implemented');
+      // Create blob and download
+      const blob = new Blob([response.data], {
+        type: format.toLowerCase() === 'excel'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv'
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      const extension = format.toLowerCase() === 'excel' ? 'xlsx' : 'csv';
+      link.download = `nexinvo_${dataType}_export_${timestamp}.${extension}`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Export error:', err);
+      setError(err.response?.data?.error || 'Failed to export data. Please try again.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -1304,93 +1326,119 @@ function Settings() {
 
             {activeTab === 'backup' && (
               <div className="settings-section">
-                <h2 className="section-title">Backup & Data Management</h2>
+                <h2 className="section-title">Export Data</h2>
+                <p style={{color: '#6b7280', marginBottom: '24px'}}>
+                  Export your organization's data for backup or analysis purposes
+                </p>
 
-                <div style={{marginBottom: '32px'}}>
-                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#1f2937'}}>
-                    Export Data
+                {/* Export All Data */}
+                <div style={{marginBottom: '32px', padding: '24px', background: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: '#0369a1'}}>
+                    Export All Data
                   </h3>
-                  <p style={{color: '#6b7280', marginBottom: '16px'}}>
-                    Export your data in various formats for backup or analysis
+                  <p style={{color: '#0c4a6e', marginBottom: '16px', fontSize: '14px'}}>
+                    Download all invoices, clients, and payments in a single file with multiple sheets
                   </p>
                   <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
-                    <button className="btn-create" onClick={() => handleExportData('Excel')}>
+                    <button
+                      className="btn-create"
+                      onClick={() => handleExportData('excel', 'all')}
+                      disabled={exporting}
+                    >
                       <span className="btn-icon">📊</span>
-                      Export to Excel
+                      {exporting ? 'Exporting...' : 'Export to Excel'}
                     </button>
-                    <button className="btn-secondary" onClick={() => handleExportData('CSV')}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleExportData('csv', 'all')}
+                      disabled={exporting}
+                    >
                       <span className="btn-icon">📄</span>
-                      Export to CSV
-                    </button>
-                    <button className="btn-secondary" onClick={() => handleExportData('PDF')}>
-                      <span className="btn-icon">📕</span>
-                      Export to PDF
-                    </button>
-                    <button className="btn-secondary" onClick={() => handleExportData('JSON')}>
-                      <span className="btn-icon">💾</span>
-                      Export to JSON
+                      {exporting ? 'Exporting...' : 'Export to CSV'}
                     </button>
                   </div>
                 </div>
 
-                <div style={{marginBottom: '32px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
-                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#1f2937'}}>
-                    Database Backup
+                {/* Export Invoices Only */}
+                <div style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#1f2937'}}>
+                    Export Invoices
                   </h3>
-                  <p style={{color: '#6b7280', marginBottom: '16px'}}>
-                    Create a complete backup of your database including all invoices, clients, and settings
+                  <p style={{color: '#6b7280', marginBottom: '16px', fontSize: '14px'}}>
+                    Download only invoice data including invoice number, client, amounts, and status
                   </p>
-                  <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-                    <button className="btn-create" onClick={handleBackupNow}>
-                      <span className="btn-icon">💾</span>
-                      Create Backup Now
+                  <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleExportData('excel', 'invoices')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
+                    >
+                      Excel
                     </button>
-                    <span style={{color: '#6b7280', fontSize: '14px'}}>
-                      Last backup: Never
-                    </span>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleExportData('csv', 'invoices')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
+                    >
+                      CSV
+                    </button>
                   </div>
                 </div>
 
-                <div style={{marginBottom: '32px', padding: '24px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: '12px'}}>
-                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                    <span>⚠️</span>
-                    Restore from Backup
+                {/* Export Clients Only */}
+                <div style={{marginBottom: '24px', padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#1f2937'}}>
+                    Export Clients
                   </h3>
-                  <p style={{color: '#78350f', marginBottom: '16px'}}>
-                    Restore your database from a previous backup. Warning: This will replace all current data!
+                  <p style={{color: '#6b7280', marginBottom: '16px', fontSize: '14px'}}>
+                    Download client directory with contact information and billing details
                   </p>
-                  <button className="btn-secondary" onClick={handleRestoreBackup} style={{background: '#fbbf24', color: '#92400e'}}>
-                    <span className="btn-icon">🔄</span>
-                    Restore Backup
-                  </button>
-                </div>
-
-                <div style={{padding: '24px', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: '12px'}}>
-                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                    <span>🗑️</span>
-                    Danger Zone
-                  </h3>
-                  <p style={{color: '#7f1d1d', marginBottom: '16px'}}>
-                    These actions are irreversible. Please proceed with caution.
-                  </p>
-                  <div style={{display: 'flex', gap: '12px', flexDirection: 'column'}}>
+                  <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
                     <button
                       className="btn-secondary"
-                      onClick={() => alert('Clear cache functionality')}
-                      style={{width: 'fit-content', background: '#fee2e2', color: '#991b1b', border: '1px solid #ef4444'}}
+                      onClick={() => handleExportData('excel', 'clients')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
                     >
-                      Clear Cache
+                      Excel
                     </button>
                     <button
                       className="btn-secondary"
-                      onClick={() => {
-                        if (window.confirm('Are you sure you want to delete all data? This cannot be undone!')) {
-                          alert('Delete all data functionality');
-                        }
-                      }}
-                      style={{width: 'fit-content', background: '#ef4444', color: 'white', border: 'none'}}
+                      onClick={() => handleExportData('csv', 'clients')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
                     >
-                      Delete All Data
+                      CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Export Payments Only */}
+                <div style={{padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                  <h3 style={{fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#1f2937'}}>
+                    Export Payments
+                  </h3>
+                  <p style={{color: '#6b7280', marginBottom: '16px', fontSize: '14px'}}>
+                    Download payment records with amounts, dates, and payment methods
+                  </p>
+                  <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleExportData('excel', 'payments')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
+                    >
+                      Excel
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleExportData('csv', 'payments')}
+                      disabled={exporting}
+                      style={{fontSize: '14px', padding: '8px 16px'}}
+                    >
+                      CSV
                     </button>
                   </div>
                 </div>
