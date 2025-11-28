@@ -258,6 +258,33 @@
   pointer-events: none;
 }
 
+/* Help Icon Button */
+.help-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--gradient-primary);
+  border: none;
+  color: var(--white);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-md);
+}
+
+.help-icon-btn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-primary);
+}
+
+.help-icon-btn:active {
+  transform: scale(0.95);
+}
+
 .user-menu {
   position: relative;
   display: flex;

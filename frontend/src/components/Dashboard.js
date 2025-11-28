@@ -12,9 +12,12 @@ import OrganizationSwitcher from './OrganizationSwitcher';
 import OrganizationSettings from '../pages/OrganizationSettings';
 import PricingPlans from './PricingPlans';
 import MySubscription from './MySubscription';
+import HelpCenter from './HelpCenter';
+import OnboardingWizard from './OnboardingWizard';
 
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [stats, setStats] = useState({
     totalInvoices: 0,
     revenue: 0,
@@ -75,6 +78,14 @@ function Dashboard({ user, onLogout }) {
     loadCompanyLogo();
   }, [activeMenu]);
 
+  // Check if onboarding should be shown (first-time users)
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem('onboarding_completed');
+    if (!onboardingCompleted) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
   const loadStats = async () => {
     try {
       const response = await dashboardAPI.getStats();
@@ -115,6 +126,8 @@ function Dashboard({ user, onLogout }) {
         return <PricingPlans onNavigate={setActiveMenu} />;
       case 'subscription':
         return <MySubscription onNavigate={setActiveMenu} />;
+      case 'help':
+        return <HelpCenter />;
       case 'profile':
         return <Profile onLogout={onLogout} />;
       default:
@@ -324,6 +337,7 @@ function Dashboard({ user, onLogout }) {
       case 'organization': return 'Organization Settings';
       case 'pricing': return 'Subscription Plans';
       case 'subscription': return 'My Subscription';
+      case 'help': return 'Help Center';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
     }
@@ -331,6 +345,14 @@ function Dashboard({ user, onLogout }) {
 
   return (
     <div className="dashboard-layout">
+      {/* Onboarding Wizard for first-time users */}
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={() => setShowOnboarding(false)}
+          onNavigate={setActiveMenu}
+        />
+      )}
+
       {/* Sidebar Navigation */}
       <aside className="sidebar">
         <div className="sidebar-header">
@@ -437,6 +459,14 @@ function Dashboard({ user, onLogout }) {
             <span className="nav-icon">💳</span>
             <span className="nav-text">Upgrade Plan</span>
           </a>
+          <a
+            href="#help"
+            className={`nav-item ${activeMenu === 'help' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('help'); }}
+          >
+            <span className="nav-icon">❓</span>
+            <span className="nav-text">Help & Guide</span>
+          </a>
         </nav>
 
         <div className="sidebar-footer">
@@ -460,6 +490,13 @@ function Dashboard({ user, onLogout }) {
               <input type="text" placeholder="Search..." />
               <span className="search-icon">🔍</span>
             </div>
+            <button
+              className="help-icon-btn"
+              onClick={() => setActiveMenu('help')}
+              title="Help & Guide"
+            >
+              <span>?</span>
+            </button>
             <div style={{ marginRight: '20px' }}>
               <OrganizationSwitcher />
             </div>

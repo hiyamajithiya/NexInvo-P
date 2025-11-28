@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { settingsAPI, paymentTermAPI, userAPI } from '../services/api';
 import InvoiceFormatEditor from './InvoiceFormatEditor';
+import Tooltip, { InfoBox } from './Tooltip';
 import './Pages.css';
 
 function Settings() {
@@ -449,6 +450,14 @@ function Settings() {
   // Export Data Handler
   const [exporting, setExporting] = useState(false);
 
+  // Tally Export State
+  const [tallyExportParams, setTallyExportParams] = useState({
+    startDate: '',
+    endDate: '',
+    invoiceType: 'tax'
+  });
+  const [showTallyRequirements, setShowTallyRequirements] = useState(false);
+
   const handleExportData = async (format, dataType = 'all') => {
     setExporting(true);
     setError('');
@@ -480,6 +489,90 @@ function Settings() {
     } catch (err) {
       console.error('Export error:', err);
       setError(err.response?.data?.error || 'Failed to export data. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Tally XML Export Handler
+  const handleTallyExport = async () => {
+    setExporting(true);
+    setError('');
+    try {
+      const params = {
+        start_date: tallyExportParams.startDate || undefined,
+        end_date: tallyExportParams.endDate || undefined,
+        invoice_type: tallyExportParams.invoiceType
+      };
+
+      const response = await settingsAPI.exportTallyXML(params);
+
+      // Create blob and download
+      const blob = new Blob([response.data], { type: 'application/xml' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.download = `tally_sales_import_${timestamp}.xml`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Tally Export error:', err);
+      if (err.response?.status === 404) {
+        setError('No invoices found for the selected criteria. Please check your date range and invoice type.');
+      } else {
+        setError(err.response?.data?.error || 'Failed to export Tally XML. Please try again.');
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Tally Excel Export Handler
+  const handleTallyExcelExport = async () => {
+    setExporting(true);
+    setError('');
+    try {
+      const params = {
+        start_date: tallyExportParams.startDate || undefined,
+        end_date: tallyExportParams.endDate || undefined,
+        invoice_type: tallyExportParams.invoiceType
+      };
+
+      const response = await settingsAPI.exportTallyExcel(params);
+
+      // Create blob and download
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.download = `tally_sales_import_${timestamp}.xlsx`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Tally Excel Export error:', err);
+      if (err.response?.status === 404) {
+        setError('No invoices found for the selected criteria. Please check your date range and invoice type.');
+      } else {
+        setError(err.response?.data?.error || 'Failed to export Tally Excel. Please try again.');
+      }
     } finally {
       setExporting(false);
     }
@@ -557,9 +650,15 @@ function Settings() {
             {activeTab === 'company' && (
               <div className="settings-section">
                 <h2 className="section-title">Company Information</h2>
+                <InfoBox type="info" title="Quick Tip">
+                  Complete your company information to generate professional invoices. Your company name, address, and GST details will appear on all invoices.
+                </InfoBox>
                 <div className="form-grid">
                   <div className="form-field">
-                    <label>Company Name *</label>
+                    <label>
+                      Company Name *
+                      <Tooltip text="Your registered company name as per GST certificate or incorporation documents" icon position="right" />
+                    </label>
                     <input
                       type="text"
                       value={companyInfo.companyName}
@@ -568,7 +667,10 @@ function Settings() {
                     />
                   </div>
                   <div className="form-field">
-                    <label>Trading Name</label>
+                    <label>
+                      Trading Name
+                      <Tooltip text="Brand or trade name if different from registered company name" icon position="right" />
+                    </label>
                     <input
                       type="text"
                       value={companyInfo.tradingName}
@@ -613,7 +715,10 @@ function Settings() {
                     />
                   </div>
                   <div className="form-field">
-                    <label>State Code</label>
+                    <label>
+                      State Code
+                      <Tooltip text="2-digit state code as per GST (e.g., 24 for Gujarat, 27 for Maharashtra). First 2 digits of your GSTIN." icon position="right" />
+                    </label>
                     <input
                       type="text"
                       value={companyInfo.stateCode}
@@ -623,7 +728,10 @@ function Settings() {
                     />
                   </div>
                   <div className="form-field">
-                    <label>GSTIN</label>
+                    <label>
+                      GSTIN
+                      <Tooltip text="15-character GST Identification Number. Format: 2 digits state code + 10 digits PAN + 1 digit entity + 1 check digit + Z" icon position="right" />
+                    </label>
                     <input
                       type="text"
                       value={companyInfo.gstin}
@@ -645,7 +753,10 @@ function Settings() {
                     </small>
                   </div>
                   <div className="form-field">
-                    <label>PAN</label>
+                    <label>
+                      PAN
+                      <Tooltip text="10-character Permanent Account Number. Format: 5 letters + 4 digits + 1 letter" icon position="right" />
+                    </label>
                     <input
                       type="text"
                       value={companyInfo.pan}
@@ -768,6 +879,9 @@ function Settings() {
             {activeTab === 'invoice' && (
               <div className="settings-section">
                 <h2 className="section-title">Invoice Numbering Settings</h2>
+                <InfoBox type="tip" title="Invoice Numbering">
+                  Set up separate prefixes for Tax Invoices and Proforma Invoices. Each type maintains its own sequence number automatically.
+                </InfoBox>
 
                 {/* Tax Invoice Settings */}
                 <div style={{marginBottom: '32px', padding: '20px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
@@ -776,7 +890,10 @@ function Settings() {
                   </h3>
                   <div className="form-grid">
                     <div className="form-field">
-                      <label>Tax Invoice Prefix</label>
+                      <label>
+                        Tax Invoice Prefix
+                        <Tooltip text="Prefix added before invoice numbers. Common formats: INV-, TAX-, TI-, or include year like INV-2024-" icon position="right" />
+                      </label>
                       <input
                         type="text"
                         value={invoiceSettings.invoicePrefix}
@@ -1063,6 +1180,9 @@ function Settings() {
             {activeTab === 'email' && (
               <div className="settings-section">
                 <h2 className="section-title">Email Settings</h2>
+                <InfoBox type="warning" title="Important">
+                  Configure SMTP settings to send invoices directly to clients via email. For Gmail, you need to create an App Password.
+                </InfoBox>
 
                 {/* Configuration Instructions */}
                 <div style={{
@@ -1416,7 +1536,7 @@ function Settings() {
                 </div>
 
                 {/* Export Payments Only */}
-                <div style={{padding: '24px', background: '#f8f9fa', borderRadius: '12px'}}>
+                <div style={{padding: '24px', background: '#f8f9fa', borderRadius: '12px', marginBottom: '32px'}}>
                   <h3 style={{fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#1f2937'}}>
                     Export Payments
                   </h3>
@@ -1441,6 +1561,330 @@ function Settings() {
                       CSV
                     </button>
                   </div>
+                </div>
+
+                {/* Tally Prime XML Export */}
+                <h2 className="section-title" style={{marginTop: '32px', marginBottom: '16px'}}>
+                  Export to Tally Prime
+                </h2>
+                <p style={{color: '#6b7280', marginBottom: '24px'}}>
+                  Export your invoices in XML format compatible with Tally Prime for direct import
+                </p>
+
+                {/* Pre-Requirements Box */}
+                <div style={{
+                  marginBottom: '24px',
+                  padding: '20px',
+                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '12px'
+                }}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px'}}>
+                    <span style={{fontSize: '24px'}}>⚠️</span>
+                    <h3 style={{margin: 0, color: '#92400e', fontSize: '16px', fontWeight: '600'}}>
+                      Pre-Requirements for Tally Import
+                    </h3>
+                    <button
+                      onClick={() => setShowTallyRequirements(!showTallyRequirements)}
+                      style={{
+                        marginLeft: 'auto',
+                        background: '#f59e0b',
+                        color: 'white',
+                        border: 'none',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      {showTallyRequirements ? 'Hide Details' : 'Show Details'}
+                    </button>
+                  </div>
+
+                  <p style={{color: '#78350f', fontSize: '14px', margin: 0, lineHeight: '1.6'}}>
+                    Before importing the XML file into Tally Prime, ensure the following masters are created in Tally.
+                  </p>
+
+                  {showTallyRequirements && (
+                    <div style={{marginTop: '16px', background: 'rgba(255,255,255,0.7)', padding: '16px', borderRadius: '8px'}}>
+                      <h4 style={{color: '#92400e', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                        1. Ledgers to Create in Tally (Gateway of Tally → Create → Ledger)
+                      </h4>
+                      <table style={{width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '13px'}}>
+                        <thead>
+                          <tr style={{background: '#fef3c7'}}>
+                            <th style={{padding: '8px', textAlign: 'left', border: '1px solid #fbbf24'}}>Ledger Name</th>
+                            <th style={{padding: '8px', textAlign: 'left', border: '1px solid #fbbf24'}}>Under Group</th>
+                            <th style={{padding: '8px', textAlign: 'left', border: '1px solid #fbbf24'}}>Purpose</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>Sales</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Sales Accounts</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>For sales revenue</td>
+                          </tr>
+                          <tr style={{background: '#fffbeb'}}>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>CGST @9%</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Duties & Taxes</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Central GST (intra-state)</td>
+                          </tr>
+                          <tr>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>SGST @9%</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Duties & Taxes</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>State GST (intra-state)</td>
+                          </tr>
+                          <tr style={{background: '#fffbeb'}}>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>IGST @18%</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Duties & Taxes</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Integrated GST (inter-state)</td>
+                          </tr>
+                          <tr>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>Round Off</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Indirect Expenses</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>For rounding adjustments</td>
+                          </tr>
+                          <tr style={{background: '#fffbeb'}}>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}><strong>[Client Names]</strong></td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Sundry Debtors</td>
+                            <td style={{padding: '8px', border: '1px solid #fbbf24'}}>Your customers</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <h4 style={{color: '#92400e', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                        2. GST Ledger Configuration
+                      </h4>
+                      <ul style={{color: '#78350f', fontSize: '13px', marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.8'}}>
+                        <li>Set <strong>Type of Ledger</strong> = "Central Tax" for CGST ledgers</li>
+                        <li>Set <strong>Type of Ledger</strong> = "State Tax" for SGST ledgers</li>
+                        <li>Set <strong>Type of Ledger</strong> = "Integrated Tax" for IGST ledgers</li>
+                        <li>Create separate ledgers for each GST rate (e.g., CGST @2.5%, CGST @6%, CGST @9%)</li>
+                      </ul>
+
+                      <h4 style={{color: '#92400e', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                        3. Stock Items (Optional - for inventory tracking)
+                      </h4>
+                      <ul style={{color: '#78350f', fontSize: '13px', marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.8'}}>
+                        <li>Create stock items matching invoice item descriptions</li>
+                        <li>Create a godown named "Main Location"</li>
+                        <li>Set HSN/SAC codes in stock items</li>
+                      </ul>
+
+                      <h4 style={{color: '#92400e', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                        4. Import Steps in Tally Prime
+                      </h4>
+                      <ol style={{color: '#78350f', fontSize: '13px', paddingLeft: '20px', lineHeight: '2'}}>
+                        <li>Open your company in Tally Prime</li>
+                        <li>Go to <strong>Gateway of Tally → Import</strong></li>
+                        <li>Select <strong>Transactions (Vouchers)</strong></li>
+                        <li>Browse and select the downloaded XML file</li>
+                        <li>Press Enter to import</li>
+                        <li>Review imported vouchers in Day Book</li>
+                      </ol>
+
+                      <div style={{
+                        marginTop: '16px',
+                        padding: '12px',
+                        background: '#fef2f2',
+                        border: '1px solid #ef4444',
+                        borderRadius: '6px'
+                      }}>
+                        <p style={{color: '#991b1b', fontSize: '13px', margin: 0, fontWeight: '500'}}>
+                          ⚠️ Important: If any ledger or stock item doesn't exist in Tally, the import will fail.
+                          Create all required masters before importing.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tally Export Form */}
+                <div style={{
+                  padding: '24px',
+                  background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+                  border: '1px solid #8b5cf6',
+                  borderRadius: '12px'
+                }}>
+                  <h3 style={{fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#5b21b6'}}>
+                    Export Sales Invoices to Tally Prime
+                  </h3>
+
+                  <div className="form-grid" style={{marginBottom: '20px'}}>
+                    <div className="form-field">
+                      <label style={{color: '#5b21b6', fontWeight: '500'}}>Start Date</label>
+                      <input
+                        type="date"
+                        value={tallyExportParams.startDate}
+                        onChange={(e) => setTallyExportParams({...tallyExportParams, startDate: e.target.value})}
+                        className="form-input"
+                        style={{background: 'white'}}
+                      />
+                      <small style={{color: '#7c3aed', fontSize: '12px'}}>Leave blank for all invoices</small>
+                    </div>
+                    <div className="form-field">
+                      <label style={{color: '#5b21b6', fontWeight: '500'}}>End Date</label>
+                      <input
+                        type="date"
+                        value={tallyExportParams.endDate}
+                        onChange={(e) => setTallyExportParams({...tallyExportParams, endDate: e.target.value})}
+                        className="form-input"
+                        style={{background: 'white'}}
+                      />
+                      <small style={{color: '#7c3aed', fontSize: '12px'}}>Leave blank for all invoices</small>
+                    </div>
+                    <div className="form-field">
+                      <label style={{color: '#5b21b6', fontWeight: '500'}}>Invoice Type</label>
+                      <select
+                        value={tallyExportParams.invoiceType}
+                        onChange={(e) => setTallyExportParams({...tallyExportParams, invoiceType: e.target.value})}
+                        className="form-input"
+                        style={{background: 'white'}}
+                      >
+                        <option value="tax">Tax Invoices Only</option>
+                        <option value="proforma">Proforma Invoices Only</option>
+                        <option value="all">All Invoices</option>
+                      </select>
+                      <small style={{color: '#7c3aed', fontSize: '12px'}}>Select invoice type to export</small>
+                    </div>
+                  </div>
+
+                  <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px'}}>
+                    <button
+                      className="btn-create"
+                      onClick={handleTallyExport}
+                      disabled={exporting}
+                      style={{
+                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                        fontSize: '15px',
+                        padding: '12px 24px'
+                      }}
+                    >
+                      <span className="btn-icon">📥</span>
+                      {exporting ? 'Exporting...' : 'Download XML'}
+                    </button>
+                    <button
+                      className="btn-create"
+                      onClick={handleTallyExcelExport}
+                      disabled={exporting}
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        fontSize: '15px',
+                        padding: '12px 24px'
+                      }}
+                    >
+                      <span className="btn-icon">📊</span>
+                      {exporting ? 'Exporting...' : 'Download Excel'}
+                    </button>
+                  </div>
+                  <p style={{color: '#6b7280', fontSize: '13px', margin: 0}}>
+                    Only "Sent" and "Paid" invoices will be exported. XML is for direct import, Excel includes multiple sheets with import instructions.
+                  </p>
+                </div>
+
+                {/* Excel Import Guide */}
+                <div style={{
+                  marginTop: '24px',
+                  padding: '20px',
+                  background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                  border: '1px solid #10b981',
+                  borderRadius: '12px'
+                }}>
+                  <h4 style={{color: '#065f46', marginBottom: '16px', fontSize: '16px', fontWeight: '600'}}>
+                    📊 Excel Import Guide for Tally Prime
+                  </h4>
+                  <p style={{color: '#047857', fontSize: '14px', marginBottom: '16px'}}>
+                    The Excel file contains 6 sheets to help you import data into Tally Prime:
+                  </p>
+
+                  <div style={{background: 'rgba(255,255,255,0.7)', padding: '16px', borderRadius: '8px', marginBottom: '16px'}}>
+                    <h5 style={{color: '#065f46', marginBottom: '10px', fontSize: '14px', fontWeight: '600'}}>Excel Sheets Included:</h5>
+                    <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '13px'}}>
+                      <thead>
+                        <tr style={{background: '#d1fae5'}}>
+                          <th style={{padding: '8px', textAlign: 'left', border: '1px solid #10b981'}}>Sheet Name</th>
+                          <th style={{padding: '8px', textAlign: 'left', border: '1px solid #10b981'}}>Purpose</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>Sales Vouchers</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>Main voucher data for import</td>
+                        </tr>
+                        <tr style={{background: '#ecfdf5'}}>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>Item Details</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>Line-item breakdown with HSN/SAC</td>
+                        </tr>
+                        <tr>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>Party Ledgers</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>Customer details to create in Tally</td>
+                        </tr>
+                        <tr style={{background: '#ecfdf5'}}>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>GST Summary</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>Tax breakdown by GST rate</td>
+                        </tr>
+                        <tr>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>Import Instructions</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>Step-by-step guide</td>
+                        </tr>
+                        <tr style={{background: '#ecfdf5'}}>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}><strong>Ledgers Required</strong></td>
+                          <td style={{padding: '8px', border: '1px solid #10b981'}}>List of ledgers to create first</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <h5 style={{color: '#065f46', marginBottom: '10px', fontSize: '14px', fontWeight: '600'}}>Steps to Import Excel into Tally Prime:</h5>
+                  <ol style={{color: '#047857', fontSize: '13px', paddingLeft: '20px', lineHeight: '2', marginBottom: '16px'}}>
+                    <li><strong>Create Masters First:</strong> Use "Party Ledgers" & "Ledgers Required" sheets to create ledgers in Tally</li>
+                    <li><strong>Open Tally Prime:</strong> Go to <strong>Gateway of Tally → Import → Data</strong></li>
+                    <li><strong>Select Import Type:</strong> Choose <strong>"Import from Excel"</strong></li>
+                    <li><strong>Browse Excel File:</strong> Select the downloaded Excel file</li>
+                    <li><strong>Select Sheet:</strong> Choose <strong>"Sales Vouchers"</strong> sheet</li>
+                    <li><strong>Map Columns:</strong> Tally will auto-map, verify mappings:
+                      <ul style={{marginTop: '8px', marginLeft: '16px'}}>
+                        <li>Voucher Date → Date column</li>
+                        <li>Voucher Number → Voucher Number column</li>
+                        <li>Party Ledger → Party Ledger Name column</li>
+                        <li>Amount → Net Amount column</li>
+                      </ul>
+                    </li>
+                    <li><strong>Import:</strong> Click Import and review in Day Book</li>
+                  </ol>
+
+                  <div style={{
+                    padding: '12px',
+                    background: '#fef3c7',
+                    border: '1px solid #f59e0b',
+                    borderRadius: '6px'
+                  }}>
+                    <p style={{color: '#92400e', fontSize: '13px', margin: 0, fontWeight: '500'}}>
+                      💡 Tip: If you face issues with Excel import, use the XML file instead. XML provides direct import without column mapping.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tally Export Info */}
+                <div style={{
+                  marginTop: '24px',
+                  padding: '16px',
+                  background: '#f0f9ff',
+                  border: '1px solid #0ea5e9',
+                  borderRadius: '8px'
+                }}>
+                  <h4 style={{color: '#0369a1', marginBottom: '12px', fontSize: '14px', fontWeight: '600'}}>
+                    What's Included in Both Exports?
+                  </h4>
+                  <ul style={{color: '#0c4a6e', fontSize: '13px', margin: 0, paddingLeft: '20px', lineHeight: '1.8'}}>
+                    <li>Invoice number, date, and reference</li>
+                    <li>Customer/Party details (name, state, place of supply)</li>
+                    <li>Item-wise details with HSN/SAC codes</li>
+                    <li>GST breakdown (CGST/SGST for intra-state, IGST for inter-state)</li>
+                    <li>Round-off adjustments</li>
+                    <li>Bill-wise allocation for receivables tracking</li>
+                  </ul>
                 </div>
               </div>
             )}
