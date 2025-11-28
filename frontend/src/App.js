@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { OrganizationProvider } from './contexts/OrganizationContext';
+import versionCheckService from './services/versionCheck';
 import './theme.css';
 import './App.css';
 
@@ -26,6 +27,12 @@ function App() {
     } else {
       setLoading(false);
     }
+  }, []);
+
+  // Start version checking for auto-refresh on updates
+  useEffect(() => {
+    versionCheckService.start();
+    return () => versionCheckService.stop();
   }, []);
 
   const checkUserStatus = async (token) => {

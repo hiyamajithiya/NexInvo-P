@@ -17,10 +17,14 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "node scripts/update-version.js patch && react-scripts build",
+    "build:no-version": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "build:prod": "REACT_APP_API_URL=https://www.nexinvo.chinmaytechnosoft.com/api react-scripts build"
+    "version:patch": "node scripts/update-version.js patch",
+    "version:minor": "node scripts/update-version.js minor",
+    "version:major": "node scripts/update-version.js major",
+    "build:prod": "node scripts/update-version.js patch && set REACT_APP_API_URL=https://www.nexinvo.chinmaytechnosoft.com/api && react-scripts build"
   },
   "eslintConfig": {
     "extends": [
