@@ -85,6 +85,9 @@ function App() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('current_org_id');
+    // Clear onboarding state so next user sees wizard from start
+    localStorage.removeItem('onboarding_wizard_seen');
+    localStorage.removeItem('onboarding_completed');
   };
 
   if (loading) {

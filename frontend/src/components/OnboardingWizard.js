@@ -108,6 +108,7 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [stepsCompleted, setStepsCompleted] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isFirstTimeUser, setIsFirstTimeUser] = useState(true);
 
   // Check actual completion status from backend
   const checkStepsCompletion = useCallback(async () => {
@@ -182,19 +183,31 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
 
       setStepsCompleted(completionStatus);
 
-      // Find first incomplete required step
-      const firstIncompleteIndex = ONBOARDING_STEPS.findIndex(
-        step => step.isRequired && !completionStatus[step.checkKey]
-      );
+      // Check if this is a first-time user (never seen wizard before)
+      const hasSeenWizard = localStorage.getItem('onboarding_wizard_seen');
+      const isFirstTime = !hasSeenWizard;
+      setIsFirstTimeUser(isFirstTime);
 
-      if (firstIncompleteIndex !== -1) {
-        setCurrentStep(firstIncompleteIndex);
-      } else if (allRequiredComplete) {
-        // All required steps complete - mark onboarding as done
-        localStorage.setItem('onboarding_completed', 'true');
-        localStorage.setItem('onboarding_completed_date', new Date().toISOString());
-        setIsVisible(false);
-        if (onComplete) onComplete();
+      if (isFirstTime) {
+        // First time user - always start from step 0 (Welcome)
+        setCurrentStep(0);
+        // Mark that user has seen the wizard
+        localStorage.setItem('onboarding_wizard_seen', 'true');
+      } else {
+        // Returning user - find first incomplete required step
+        const firstIncompleteIndex = ONBOARDING_STEPS.findIndex(
+          step => step.isRequired && !completionStatus[step.checkKey]
+        );
+
+        if (firstIncompleteIndex !== -1) {
+          setCurrentStep(firstIncompleteIndex);
+        } else if (allRequiredComplete) {
+          // All required steps complete - mark onboarding as done
+          localStorage.setItem('onboarding_completed', 'true');
+          localStorage.setItem('onboarding_completed_date', new Date().toISOString());
+          setIsVisible(false);
+          if (onComplete) onComplete();
+        }
       }
 
     } catch (error) {
