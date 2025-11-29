@@ -75,26 +75,6 @@ class Migration(migrations.Migration):
                 blank=True, db_column="smtp_password", max_length=500
             ),
         ),
-        migrations.AddField(
-            model_name="client",
-            name="code",
-            field=models.CharField(blank=True, max_length=50),
-        ),
-        migrations.AddField(
-            model_name="client",
-            name="date_of_birth",
-            field=models.DateField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name="client",
-            name="date_of_incorporation",
-            field=models.DateField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name="client",
-            name="mobile",
-            field=models.CharField(blank=True, max_length=20),
-        ),
         migrations.AlterField(
             model_name="client",
             name="organization",
