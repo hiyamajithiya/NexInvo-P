@@ -82,6 +82,17 @@ class NumberedCanvas(canvas.Canvas):
         )
 
 
+def format_address_for_pdf(address):
+    """
+    Convert address with newlines to HTML format for PDF rendering.
+    Replaces newlines with <br/> tags for proper line breaks in PDF.
+    """
+    if not address:
+        return ''
+    # Replace different types of newlines with <br/>
+    return address.replace('\r\n', '<br/>').replace('\n', '<br/>').replace('\r', '<br/>')
+
+
 def generate_invoice_pdf(invoice, company_settings, format_settings=None):
     """
     Generate invoice PDF matching the specified format
@@ -203,9 +214,12 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
     company_display = company_settings.tradingName if company_settings.tradingName else company_settings.companyName
 
     # Left side - Company info
+    # Format address to preserve line breaks entered by user
+    company_address_formatted = format_address_for_pdf(company_settings.address)
+
     company_info = [
         Paragraph(f"<b>{company_display or 'Company Name'}</b>", bold_style),
-        Paragraph(f"{company_settings.address or ''}", info_style),
+        Paragraph(f"{company_address_formatted}", info_style),
         Paragraph(f"{company_settings.city or ''}, {company_settings.state or ''} - {company_settings.pinCode or ''}", info_style),
         Paragraph(f"<b>GSTIN:</b> {company_settings.gstin or 'N/A'}", info_style),
         Paragraph(f"<b>PAN:</b> {company_settings.pan or 'N/A'}", info_style),
@@ -251,10 +265,13 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         leading=11
     )
 
+    # Format client address to preserve line breaks entered by user
+    client_address_formatted = format_address_for_pdf(invoice.client.address)
+
     bill_to_content = [
         Paragraph(f"<b>Bill To:</b>", bill_to_style),
         Paragraph(f"{invoice.client.name}", info_style),
-        Paragraph(f"{invoice.client.address or ''}", info_style),
+        Paragraph(f"{client_address_formatted}", info_style),
         Paragraph(f"{invoice.client.city or ''}, {invoice.client.state or ''} - {invoice.client.pinCode or ''}", info_style),
         Paragraph(f"<b>GSTIN:</b> {invoice.client.gstin or 'N/A'}", info_style),
     ]
@@ -640,10 +657,13 @@ def generate_receipt_pdf(receipt, company_settings):
     elements.append(Spacer(1, 20))
 
     # Company Info and Receipt Details Side by Side
+    # Format address to preserve line breaks
+    receipt_company_address = format_address_for_pdf(company_settings.address)
+
     company_data = [
         [
             Paragraph(f"<b>{company_settings.companyName}</b><br/>"
-                     f"{company_settings.address}<br/>"
+                     f"{receipt_company_address}<br/>"
                      f"{company_settings.city}, {company_settings.state} - {company_settings.pinCode}<br/>"
                      f"GSTIN: {company_settings.gstin}<br/>"
                      f"Phone: {company_settings.phone}<br/>"

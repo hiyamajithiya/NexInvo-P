@@ -2,12 +2,11 @@
 
 .login-split-container {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
   height: 100vh;
   background: var(--white);
-  overflow-x: hidden;
-  overflow-y: hidden;
+  overflow: hidden;
   position: relative;
 }
 
@@ -16,9 +15,9 @@
    ======================================== */
 .login-features-panel {
   flex: 1;
-  min-width: 50%;
+  min-width: 55%;
   background: var(--gradient-primary);
-  padding: 30px 40px;
+  padding: 40px 60px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,26 +55,26 @@
 .features-content {
   position: relative;
   z-index: 20;
-  max-width: 700px;
+  max-width: 800px;
   width: 100%;
 }
 
 /* Brand Header */
 .features-header {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
 }
 
 .brand-logo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 
 .brand-icon {
-  font-size: 36px;
-  width: 56px;
-  height: 56px;
+  font-size: 48px;
+  width: 72px;
+  height: 72px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-xl);
   display: flex;
@@ -86,7 +85,7 @@
 }
 
 .brand-name {
-  font-size: 36px;
+  font-size: 48px;
   font-weight: 900;
   color: var(--white);
   margin: 0;
@@ -95,7 +94,7 @@
 }
 
 .brand-tagline {
-  font-size: 15px;
+  font-size: 18px;
   color: rgba(255, 255, 255, 0.95);
   font-weight: 500;
   margin: 0;
@@ -107,15 +106,15 @@
 .features-list {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 28px;
 }
 
 .feature-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
+  gap: 16px;
+  padding: 20px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
@@ -149,9 +148,9 @@
 }
 
 .feature-icon {
-  font-size: 22px;
-  width: 40px;
-  height: 40px;
+  font-size: 28px;
+  width: 52px;
+  height: 52px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
   display: flex;
@@ -165,30 +164,30 @@
 }
 
 .feature-title {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--white);
-  margin: 0 0 3px 0;
+  margin: 0 0 6px 0;
   letter-spacing: -0.2px;
 }
 
 .feature-description {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Features Footer */
 .features-footer {
   text-align: center;
-  padding-top: 16px;
+  padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .company-credit {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
   margin: 0;
   letter-spacing: 0.5px;
@@ -198,20 +197,20 @@
    RIGHT PANEL - LOGIN FORM
    ======================================== */
 .login-form-panel {
-  flex: 0 0 480px;
+  flex: 0 0 420px;
   background: var(--white);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 30px 40px;
+  padding: 30px 35px;
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
 }
 
 .login-card {
   width: 100%;
-  max-width: 440px;
+  max-width: 380px;
   animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   z-index: 20;
