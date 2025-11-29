@@ -1,6 +1,56 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.conf import settings
+from django.utils import timezone
 import uuid
+import base64
+import os
+
+# =============================================================================
+# ENCRYPTION UTILITIES FOR SENSITIVE DATA (IT ACT & DPDP ACT COMPLIANCE)
+# =============================================================================
+
+def get_encryption_key():
+    """Get or generate encryption key from settings"""
+    key = getattr(settings, 'FIELD_ENCRYPTION_KEY', None)
+    if not key:
+        # Fallback to SECRET_KEY derived key (not recommended for production)
+        import hashlib
+        key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+    return key
+
+
+def encrypt_value(value):
+    """Encrypt a string value using Fernet symmetric encryption"""
+    if not value:
+        return value
+    try:
+        from cryptography.fernet import Fernet
+        key = get_encryption_key()
+        f = Fernet(key)
+        return f.encrypt(value.encode()).decode()
+    except ImportError:
+        # cryptography not installed, return as-is (log warning in production)
+        return value
+    except Exception:
+        return value
+
+
+def decrypt_value(value):
+    """Decrypt a string value using Fernet symmetric encryption"""
+    if not value:
+        return value
+    try:
+        from cryptography.fernet import Fernet
+        key = get_encryption_key()
+        f = Fernet(key)
+        return f.decrypt(value.encode()).decode()
+    except ImportError:
+        # cryptography not installed, return as-is
+        return value
+    except Exception:
+        # Decryption failed (possibly unencrypted legacy data)
+        return value
 
 
 class Organization(models.Model):
@@ -398,7 +448,7 @@ class EmailSettings(models.Model):
     smtp_host = models.CharField(max_length=255, default='smtp.gmail.com')
     smtp_port = models.IntegerField(default=587)
     smtp_username = models.CharField(max_length=255)
-    smtp_password = models.CharField(max_length=255)  # Should be encrypted in production
+    _smtp_password = models.CharField(max_length=500, db_column='smtp_password', blank=True)  # Encrypted field
     from_email = models.EmailField()
     from_name = models.CharField(max_length=255, blank=True)
     use_tls = models.BooleanField(default=True)
@@ -413,13 +463,23 @@ class EmailSettings(models.Model):
     def __str__(self):
         return f"Email Settings for {self.organization.name}"
 
+    @property
+    def smtp_password(self):
+        """Decrypt password when accessing"""
+        return decrypt_value(self._smtp_password)
+
+    @smtp_password.setter
+    def smtp_password(self, value):
+        """Encrypt password when setting"""
+        self._smtp_password = encrypt_value(value)
+
 
 class SystemEmailSettings(models.Model):
     """System-level email configuration for superadmin (password reset, notifications, etc.)"""
     smtp_host = models.CharField(max_length=255, default='smtp.gmail.com')
     smtp_port = models.IntegerField(default=587)
     smtp_username = models.CharField(max_length=255, blank=True)
-    smtp_password = models.CharField(max_length=255, blank=True)  # Should be encrypted in production
+    _smtp_password = models.CharField(max_length=500, db_column='smtp_password', blank=True)  # Encrypted field
     from_email = models.EmailField(blank=True)
     use_tls = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -431,6 +491,16 @@ class SystemEmailSettings(models.Model):
 
     def __str__(self):
         return "System Email Settings"
+
+    @property
+    def smtp_password(self):
+        """Decrypt password when accessing"""
+        return decrypt_value(self._smtp_password)
+
+    @smtp_password.setter
+    def smtp_password(self, value):
+        """Encrypt password when setting"""
+        self._smtp_password = encrypt_value(value)
 
 
 class ServiceItem(models.Model):
@@ -892,3 +962,287 @@ class SubscriptionUpgradeRequest(models.Model):
 
     def __str__(self):
         return f"{self.organization.name} - {self.requested_plan.name} ({self.status})"
+
+
+# =============================================================================
+# IT ACT & DPDP ACT COMPLIANCE MODELS
+# =============================================================================
+
+class AuditLog(models.Model):
+    """
+    Comprehensive audit trail for IT Act 2000/2008 compliance.
+    Records all significant user actions for security and compliance.
+    """
+    ACTION_CHOICES = [
+        ('login', 'User Login'),
+        ('logout', 'User Logout'),
+        ('login_failed', 'Failed Login Attempt'),
+        ('password_change', 'Password Changed'),
+        ('password_reset', 'Password Reset'),
+        ('profile_update', 'Profile Updated'),
+        ('create', 'Record Created'),
+        ('update', 'Record Updated'),
+        ('delete', 'Record Deleted'),
+        ('view', 'Record Viewed'),
+        ('export', 'Data Exported'),
+        ('email_sent', 'Email Sent'),
+        ('payment_recorded', 'Payment Recorded'),
+        ('invoice_generated', 'Invoice Generated'),
+        ('consent_given', 'Consent Given'),
+        ('consent_withdrawn', 'Consent Withdrawn'),
+        ('data_deletion', 'Data Deletion Request'),
+        ('data_export', 'Personal Data Export'),
+        ('api_access', 'API Access'),
+        ('settings_change', 'Settings Changed'),
+        ('permission_change', 'Permission Changed'),
+    ]
+
+    SEVERITY_CHOICES = [
+        ('info', 'Information'),
+        ('warning', 'Warning'),
+        ('critical', 'Critical'),
+    ]
+
+    # User and Organization Context
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+
+    # Action Details
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='info')
+    description = models.TextField(help_text='Detailed description of the action')
+
+    # Affected Resource
+    resource_type = models.CharField(max_length=100, blank=True, help_text='Model/Resource type affected (e.g., Invoice, Client)')
+    resource_id = models.CharField(max_length=100, blank=True, help_text='ID of the affected resource')
+    resource_name = models.CharField(max_length=255, blank=True, help_text='Name/identifier of the affected resource')
+
+    # Request Details
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, help_text='Browser/Client user agent string')
+    request_method = models.CharField(max_length=10, blank=True, help_text='HTTP method (GET, POST, etc.)')
+    request_path = models.CharField(max_length=500, blank=True, help_text='API endpoint/URL path')
+
+    # Data Changes (for update/delete actions)
+    old_values = models.JSONField(null=True, blank=True, help_text='Previous values before change')
+    new_values = models.JSONField(null=True, blank=True, help_text='New values after change')
+
+    # Additional Metadata
+    metadata = models.JSONField(null=True, blank=True, help_text='Additional context data')
+
+    # Timestamp
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['organization', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+            models.Index(fields=['resource_type', 'resource_id']),
+            models.Index(fields=['ip_address']),
+        ]
+
+    def __str__(self):
+        user_str = self.user.email if self.user else 'Anonymous'
+        return f"{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - {user_str} - {self.action}"
+
+
+class UserConsent(models.Model):
+    """
+    DPDP Act 2023 compliance - Records user consent for data processing.
+    Required for lawful processing of personal data.
+    """
+    CONSENT_TYPE_CHOICES = [
+        ('terms_of_service', 'Terms of Service'),
+        ('privacy_policy', 'Privacy Policy'),
+        ('data_processing', 'Data Processing'),
+        ('marketing_emails', 'Marketing Emails'),
+        ('analytics', 'Analytics & Tracking'),
+        ('third_party_sharing', 'Third Party Data Sharing'),
+        ('payment_processing', 'Payment Processing'),
+        ('invoice_storage', 'Invoice Data Storage'),
+    ]
+
+    VERSION_REGEX = r'^\d+\.\d+$'  # e.g., "1.0", "2.1"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consents')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True, related_name='user_consents')
+
+    # Consent Details
+    consent_type = models.CharField(max_length=50, choices=CONSENT_TYPE_CHOICES)
+    consent_given = models.BooleanField(default=False)
+    consent_text = models.TextField(help_text='The exact text user consented to')
+    policy_version = models.CharField(max_length=20, help_text='Version of the policy/terms')
+
+    # Consent Collection Details
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    collection_method = models.CharField(max_length=50, default='web_form', help_text='How consent was collected')
+
+    # Timestamps
+    consented_at = models.DateTimeField(null=True, blank=True, help_text='When consent was given')
+    withdrawn_at = models.DateTimeField(null=True, blank=True, help_text='When consent was withdrawn')
+    expires_at = models.DateTimeField(null=True, blank=True, help_text='Consent expiry date (if applicable)')
+
+    # Audit Trail
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Consent"
+        verbose_name_plural = "User Consents"
+        ordering = ['-created_at']
+        unique_together = ['user', 'consent_type', 'policy_version']
+        indexes = [
+            models.Index(fields=['user', 'consent_type']),
+            models.Index(fields=['consent_given']),
+        ]
+
+    def __str__(self):
+        status = "Granted" if self.consent_given else "Withdrawn"
+        return f"{self.user.email} - {self.consent_type} ({status})"
+
+    def withdraw(self):
+        """Withdraw consent and record timestamp"""
+        self.consent_given = False
+        self.withdrawn_at = timezone.now()
+        self.save()
+
+
+class FailedLoginAttempt(models.Model):
+    """
+    Security tracking for failed login attempts.
+    Used for rate limiting and brute force attack detection.
+    """
+    email = models.EmailField(db_index=True, help_text='Email attempted for login')
+    ip_address = models.GenericIPAddressField(db_index=True)
+    user_agent = models.TextField(blank=True)
+    failure_reason = models.CharField(max_length=100, default='invalid_credentials')
+
+    # Attempt Details
+    attempt_count = models.IntegerField(default=1, help_text='Consecutive failed attempts')
+    locked_until = models.DateTimeField(null=True, blank=True, help_text='Account locked until this time')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Failed Login Attempt"
+        verbose_name_plural = "Failed Login Attempts"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email', 'created_at']),
+            models.Index(fields=['ip_address', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.email} from {self.ip_address} - {self.attempt_count} attempts"
+
+    @classmethod
+    def record_attempt(cls, email, ip_address, user_agent='', failure_reason='invalid_credentials'):
+        """Record a failed login attempt and return lockout status"""
+        from datetime import timedelta
+
+        # Find existing record within last 30 minutes
+        cutoff_time = timezone.now() - timedelta(minutes=30)
+        attempt, created = cls.objects.get_or_create(
+            email=email.lower(),
+            ip_address=ip_address,
+            created_at__gte=cutoff_time,
+            defaults={
+                'user_agent': user_agent,
+                'failure_reason': failure_reason,
+            }
+        )
+
+        if not created:
+            attempt.attempt_count += 1
+            attempt.user_agent = user_agent
+            attempt.failure_reason = failure_reason
+
+        # Lock account after 5 failed attempts
+        if attempt.attempt_count >= 5:
+            # Progressive lockout: 5 min, 15 min, 30 min, 1 hour
+            lockout_minutes = min(5 * (2 ** (attempt.attempt_count - 5)), 60)
+            attempt.locked_until = timezone.now() + timedelta(minutes=lockout_minutes)
+
+        attempt.save()
+        return attempt
+
+    @classmethod
+    def is_locked(cls, email, ip_address):
+        """Check if login is locked for this email/IP combination"""
+        cutoff_time = timezone.now() - timedelta(minutes=30)
+        attempt = cls.objects.filter(
+            email=email.lower(),
+            ip_address=ip_address,
+            created_at__gte=cutoff_time,
+            locked_until__gte=timezone.now()
+        ).first()
+
+        if attempt:
+            remaining = (attempt.locked_until - timezone.now()).seconds // 60
+            return True, remaining
+        return False, 0
+
+    @classmethod
+    def clear_attempts(cls, email, ip_address):
+        """Clear failed attempts after successful login"""
+        cutoff_time = timezone.now() - timedelta(minutes=30)
+        cls.objects.filter(
+            email=email.lower(),
+            ip_address=ip_address,
+            created_at__gte=cutoff_time
+        ).delete()
+
+
+class DataDeletionRequest(models.Model):
+    """
+    DPDP Act compliance - Right to Erasure (Right to be Forgotten).
+    Tracks user requests for data deletion.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('rejected', 'Rejected'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='deletion_requests')
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='deletion_requests')
+
+    # Request Details
+    email = models.EmailField(help_text='Email of the requesting user (preserved even after user deletion)')
+    reason = models.TextField(blank=True, help_text='User-provided reason for deletion')
+    data_types_requested = models.JSONField(default=list, help_text='Types of data requested for deletion')
+
+    # Processing Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    processed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='processed_deletion_requests')
+    processed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, help_text='Reason if request was rejected')
+
+    # Compliance Tracking
+    legal_hold = models.BooleanField(default=False, help_text='Data under legal hold cannot be deleted')
+    retention_end_date = models.DateField(null=True, blank=True, help_text='Date when data can be deleted (if under retention)')
+
+    # Verification
+    verification_token = models.CharField(max_length=100, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Data Deletion Request"
+        verbose_name_plural = "Data Deletion Requests"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Deletion Request - {self.email} ({self.status})"

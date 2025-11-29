@@ -92,6 +92,21 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    # =============================================================================
+    # RATE LIMITING FOR SECURITY (IT ACT COMPLIANCE - BRUTE FORCE PROTECTION)
+    # =============================================================================
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',       # Anonymous users: 100 requests per hour
+        'user': '1000/hour',      # Authenticated users: 1000 requests per hour
+        'login': '5/minute',      # Login attempts: 5 per minute (brute force protection)
+        'password_reset': '3/hour',  # Password reset: 3 per hour
+        'registration': '10/hour',   # Registration: 10 per hour
+        'export': '10/hour',         # Data export: 10 per hour
+    },
 }
 
 # JWT settings
@@ -311,7 +326,24 @@ LOGGING = {
 # Data retention period for financial records (8 years as per Indian tax laws)
 DATA_RETENTION_YEARS = 8
 
+# Field-level encryption key for sensitive data (SMTP passwords, etc.)
+# IMPORTANT: In production, set this via environment variable FIELD_ENCRYPTION_KEY
+# Generate a new key using: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', None)
+
 # Grievance Officer Contact (Required under DPDP Act)
 GRIEVANCE_OFFICER_EMAIL = os.getenv('GRIEVANCE_OFFICER_EMAIL', 'chinmaytechsoft@gmail.com')
 PRIVACY_POLICY_URL = os.getenv('PRIVACY_POLICY_URL', '/privacy-policy')
 TERMS_OF_SERVICE_URL = os.getenv('TERMS_OF_SERVICE_URL', '/terms-of-service')
+
+# =============================================================================
+# AUDIT LOG SETTINGS
+# =============================================================================
+# Enable/disable audit logging
+AUDIT_LOG_ENABLED = os.getenv('AUDIT_LOG_ENABLED', 'True') == 'True'
+
+# Actions to exclude from audit logging (for performance)
+AUDIT_LOG_EXCLUDE_ACTIONS = ['view']  # Exclude high-frequency read operations
+
+# IP address header (use X-Forwarded-For if behind proxy)
+AUDIT_LOG_IP_HEADER = os.getenv('AUDIT_LOG_IP_HEADER', 'REMOTE_ADDR')
