@@ -209,8 +209,11 @@ else:
     # Console backend for development (prints emails to console)
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@nexinvo.com')
-SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support@nexinvo.com')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'chinmaytechsoft@gmail.com')
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'chinmaytechsoft@gmail.com')
+
+# Frontend URL for email links (update this for production)
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.nexinvo.chinmaytechnosoft.com')
 
 # App Configuration
 APP_VERSION = os.getenv('APP_VERSION', 'v1.0.0')

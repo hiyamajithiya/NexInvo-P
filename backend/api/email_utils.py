@@ -10,6 +10,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Get URLs and email from settings
+FRONTEND_URL = getattr(settings, 'FRONTEND_URL', 'https://www.nexinvo.chinmaytechnosoft.com')
+SUPPORT_EMAIL = getattr(settings, 'SUPPORT_EMAIL', 'chinmaytechsoft@gmail.com')
+
 
 def get_system_email_settings():
     """
@@ -114,8 +118,8 @@ def send_welcome_email_to_user(user, organization=None, temporary_password=None)
             'user': user,
             'organization': organization,
             'temporary_password': temporary_password,
-            'login_url': 'http://localhost:3000/login',  # Update with actual frontend URL
-            'support_email': 'support@nexinvo.com',
+            'login_url': f'{FRONTEND_URL}/login',
+            'support_email': SUPPORT_EMAIL,
         }
 
         # Create email body
@@ -285,7 +289,7 @@ def send_user_added_notification_to_owner(owner_user, new_user, organization):
                 <p>The user has been sent a welcome email with their login credentials.</p>
 
                 <div style="margin: 30px 0;">
-                    <a href="http://localhost:3000/organization"
+                    <a href="{FRONTEND_URL}/organization"
                        style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
                         View Organization Members
                     </a>
@@ -295,6 +299,7 @@ def send_user_added_notification_to_owner(owner_user, new_user, organization):
 
                 <p style="font-size: 12px; color: #666;">
                     This is an automated notification from NexInvo Invoice Management System.
+                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
                 </p>
 
                 <p style="font-size: 12px; color: #666;">
@@ -370,7 +375,7 @@ def send_organization_registration_email(user, organization):
                 </div>
 
                 <div style="margin: 30px 0;">
-                    <a href="http://localhost:3000/superadmin"
+                    <a href="{FRONTEND_URL}/superadmin"
                        style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
                         View in Admin Panel
                     </a>
@@ -380,6 +385,7 @@ def send_organization_registration_email(user, organization):
 
                 <p style="font-size: 12px; color: #666;">
                     This is an automated notification from NexInvo Invoice Management System.
+                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
                 </p>
 
                 <p style="font-size: 12px; color: #666;">
@@ -484,7 +490,7 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
                     <p style="margin-bottom: 15px; font-weight: bold; color: #1e3a8a;">
                         Please verify payment confirmation before approving this request.
                     </p>
-                    <a href="http://localhost:3000/superadmin"
+                    <a href="{FRONTEND_URL}/superadmin"
                        style="background-color: #1e3a8a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                         Review in Admin Panel
                     </a>
@@ -494,6 +500,7 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
 
                 <p style="font-size: 12px; color: #666;">
                     This is an automated notification from NexInvo Invoice Management System.
+                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
                 </p>
 
                 <p style="font-size: 12px; color: #666;">
