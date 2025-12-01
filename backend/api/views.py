@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification, BulkEmailTemplate, BulkEmailCampaign, BulkEmailRecipient)
 from .serializers import (
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
@@ -3588,3 +3588,477 @@ def superadmin_notification_delete(request, notification_id):
             {'error': 'Notification not found'},
             status=status.HTTP_404_NOT_FOUND
         )
+
+
+# =============================================================================
+# SUPER ADMIN BULK EMAIL MANAGEMENT
+# =============================================================================
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_templates(request):
+    """List all email templates or create a new one"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'GET':
+        templates = BulkEmailTemplate.objects.filter(is_active=True)
+        data = [{
+            'id': t.id,
+            'name': t.name,
+            'template_type': t.template_type,
+            'template_type_display': t.get_template_type_display(),
+            'subject': t.subject,
+            'body': t.body,
+            'available_placeholders': t.available_placeholders,
+            'created_at': t.created_at,
+        } for t in templates]
+        return Response(data)
+
+    elif request.method == 'POST':
+        template = BulkEmailTemplate.objects.create(
+            name=request.data.get('name', ''),
+            template_type=request.data.get('template_type', 'announcement'),
+            subject=request.data.get('subject', ''),
+            body=request.data.get('body', ''),
+            available_placeholders=request.data.get('available_placeholders', '{{user_name}}, {{organization_name}}, {{email}}'),
+            created_by=request.user
+        )
+        return Response({
+            'id': template.id,
+            'name': template.name,
+            'message': 'Template created successfully'
+        }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_template_detail(request, template_id):
+    """Get, update or delete a specific email template"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        template = BulkEmailTemplate.objects.get(id=template_id)
+    except BulkEmailTemplate.DoesNotExist:
+        return Response(
+            {'error': 'Template not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        return Response({
+            'id': template.id,
+            'name': template.name,
+            'template_type': template.template_type,
+            'template_type_display': template.get_template_type_display(),
+            'subject': template.subject,
+            'body': template.body,
+            'available_placeholders': template.available_placeholders,
+            'created_at': template.created_at,
+            'updated_at': template.updated_at,
+        })
+
+    elif request.method == 'PUT':
+        template.name = request.data.get('name', template.name)
+        template.template_type = request.data.get('template_type', template.template_type)
+        template.subject = request.data.get('subject', template.subject)
+        template.body = request.data.get('body', template.body)
+        template.available_placeholders = request.data.get('available_placeholders', template.available_placeholders)
+        template.save()
+        return Response({'message': 'Template updated successfully'})
+
+    elif request.method == 'DELETE':
+        template.is_active = False
+        template.save()
+        return Response({'message': 'Template deleted successfully'})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_campaigns(request):
+    """List all email campaigns or create a new one"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'GET':
+        campaigns = BulkEmailCampaign.objects.all().order_by('-created_at')
+        data = [{
+            'id': c.id,
+            'name': c.name,
+            'subject': c.subject,
+            'recipient_type': c.recipient_type,
+            'recipient_type_display': c.get_recipient_type_display(),
+            'status': c.status,
+            'status_display': c.get_status_display(),
+            'total_recipients': c.total_recipients,
+            'sent_count': c.sent_count,
+            'failed_count': c.failed_count,
+            'created_at': c.created_at,
+            'completed_at': c.completed_at,
+        } for c in campaigns]
+        return Response(data)
+
+    elif request.method == 'POST':
+        campaign = BulkEmailCampaign.objects.create(
+            name=request.data.get('name', ''),
+            subject=request.data.get('subject', ''),
+            body=request.data.get('body', ''),
+            recipient_type=request.data.get('recipient_type', 'all_users'),
+            created_by=request.user
+        )
+
+        # If template_id is provided, copy from template
+        template_id = request.data.get('template_id')
+        if template_id:
+            try:
+                template = BulkEmailTemplate.objects.get(id=template_id)
+                campaign.template = template
+                campaign.subject = template.subject
+                campaign.body = template.body
+                campaign.save()
+            except BulkEmailTemplate.DoesNotExist:
+                pass
+
+        return Response({
+            'id': campaign.id,
+            'name': campaign.name,
+            'message': 'Campaign created successfully'
+        }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_campaign_detail(request, campaign_id):
+    """Get, update or delete a specific email campaign"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        campaign = BulkEmailCampaign.objects.get(id=campaign_id)
+    except BulkEmailCampaign.DoesNotExist:
+        return Response(
+            {'error': 'Campaign not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        recipients = campaign.recipients.all()[:100]  # Limit to first 100
+        return Response({
+            'id': campaign.id,
+            'name': campaign.name,
+            'subject': campaign.subject,
+            'body': campaign.body,
+            'recipient_type': campaign.recipient_type,
+            'recipient_type_display': campaign.get_recipient_type_display(),
+            'status': campaign.status,
+            'status_display': campaign.get_status_display(),
+            'total_recipients': campaign.total_recipients,
+            'sent_count': campaign.sent_count,
+            'failed_count': campaign.failed_count,
+            'created_at': campaign.created_at,
+            'started_at': campaign.started_at,
+            'completed_at': campaign.completed_at,
+            'error_message': campaign.error_message,
+            'recipients': [{
+                'email': r.email,
+                'user_name': r.user_name,
+                'status': r.status,
+                'sent_at': r.sent_at,
+                'error_message': r.error_message
+            } for r in recipients]
+        })
+
+    elif request.method == 'PUT':
+        if campaign.status not in ['draft', 'failed']:
+            return Response(
+                {'error': 'Cannot edit campaign that is already sending or completed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        campaign.name = request.data.get('name', campaign.name)
+        campaign.subject = request.data.get('subject', campaign.subject)
+        campaign.body = request.data.get('body', campaign.body)
+        campaign.recipient_type = request.data.get('recipient_type', campaign.recipient_type)
+        campaign.save()
+        return Response({'message': 'Campaign updated successfully'})
+
+    elif request.method == 'DELETE':
+        if campaign.status == 'sending':
+            return Response(
+                {'error': 'Cannot delete campaign that is currently sending'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        campaign.delete()
+        return Response({'message': 'Campaign deleted successfully'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_preview_recipients(request):
+    """Preview recipients based on selected recipient type"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    recipient_type = request.query_params.get('recipient_type', 'all_users')
+    plan_id = request.query_params.get('plan_id')
+
+    users = User.objects.filter(is_superuser=False)
+
+    if recipient_type == 'all_users':
+        # All non-superuser users
+        pass
+    elif recipient_type == 'all_admins':
+        # Only organization owners and admins
+        admin_user_ids = OrganizationMembership.objects.filter(
+            role__in=['owner', 'admin'],
+            is_active=True
+        ).values_list('user_id', flat=True)
+        users = users.filter(id__in=admin_user_ids)
+    elif recipient_type == 'specific_plan':
+        if plan_id:
+            # Users whose organizations are on a specific plan
+            org_ids = Subscription.objects.filter(
+                plan_id=plan_id,
+                status__in=['active', 'trial']
+            ).values_list('organization_id', flat=True)
+            user_ids = OrganizationMembership.objects.filter(
+                organization_id__in=org_ids,
+                is_active=True
+            ).values_list('user_id', flat=True)
+            users = users.filter(id__in=user_ids)
+    elif recipient_type == 'active_users':
+        users = users.filter(is_active=True)
+    elif recipient_type == 'inactive_users':
+        users = users.filter(is_active=False)
+
+    # Get user details with organization info
+    recipients = []
+    for user in users[:100]:  # Limit preview to 100
+        membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
+        recipients.append({
+            'id': user.id,
+            'email': user.email,
+            'name': user.get_full_name() or user.username,
+            'organization': membership.organization.name if membership else 'N/A',
+            'is_active': user.is_active
+        })
+
+    return Response({
+        'total_count': users.count(),
+        'preview': recipients,
+        'showing': min(100, users.count())
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_send_campaign(request, campaign_id):
+    """Send a bulk email campaign"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        campaign = BulkEmailCampaign.objects.get(id=campaign_id)
+    except BulkEmailCampaign.DoesNotExist:
+        return Response(
+            {'error': 'Campaign not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if campaign.status not in ['draft', 'failed']:
+        return Response(
+            {'error': f'Campaign cannot be sent. Current status: {campaign.status}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Get system email settings
+    try:
+        system_email = SystemEmailSettings.objects.first()
+        if not system_email or not system_email.smtp_username:
+            return Response(
+                {'error': 'System email settings not configured. Please configure email settings first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    except SystemEmailSettings.DoesNotExist:
+        return Response(
+            {'error': 'System email settings not configured'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Get recipients based on recipient_type
+    users = User.objects.filter(is_superuser=False)
+    recipient_type = campaign.recipient_type
+
+    if recipient_type == 'all_admins':
+        admin_user_ids = OrganizationMembership.objects.filter(
+            role__in=['owner', 'admin'],
+            is_active=True
+        ).values_list('user_id', flat=True)
+        users = users.filter(id__in=admin_user_ids)
+    elif recipient_type == 'specific_plan' and campaign.target_plan:
+        org_ids = Subscription.objects.filter(
+            plan=campaign.target_plan,
+            status__in=['active', 'trial']
+        ).values_list('organization_id', flat=True)
+        user_ids = OrganizationMembership.objects.filter(
+            organization_id__in=org_ids,
+            is_active=True
+        ).values_list('user_id', flat=True)
+        users = users.filter(id__in=user_ids)
+    elif recipient_type == 'active_users':
+        users = users.filter(is_active=True)
+    elif recipient_type == 'inactive_users':
+        users = users.filter(is_active=False)
+
+    # Clear existing recipients and add new ones
+    campaign.recipients.all().delete()
+
+    recipients_to_create = []
+    for user in users:
+        membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
+        recipients_to_create.append(BulkEmailRecipient(
+            campaign=campaign,
+            user=user,
+            organization=membership.organization if membership else None,
+            email=user.email,
+            user_name=user.get_full_name() or user.username,
+            status='pending'
+        ))
+
+    BulkEmailRecipient.objects.bulk_create(recipients_to_create)
+
+    # Update campaign status
+    campaign.status = 'sending'
+    campaign.total_recipients = len(recipients_to_create)
+    campaign.started_at = timezone.now()
+    campaign.save()
+
+    # Send emails
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    sent_count = 0
+    failed_count = 0
+    error_messages = []
+
+    for recipient in campaign.recipients.filter(status='pending'):
+        try:
+            # Replace placeholders in body
+            body = campaign.body
+            body = body.replace('{{user_name}}', recipient.user_name)
+            body = body.replace('{{email}}', recipient.email)
+            if recipient.organization:
+                body = body.replace('{{organization_name}}', recipient.organization.name)
+            else:
+                body = body.replace('{{organization_name}}', 'N/A')
+
+            # Send email using system email settings
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = campaign.subject
+            msg['From'] = system_email.from_email or system_email.smtp_username
+            msg['To'] = recipient.email
+
+            # Add HTML content
+            html_part = MIMEText(body, 'html')
+            msg.attach(html_part)
+
+            # Connect and send
+            if system_email.use_tls:
+                server = smtplib.SMTP(system_email.smtp_host, system_email.smtp_port)
+                server.starttls()
+            else:
+                server = smtplib.SMTP_SSL(system_email.smtp_host, system_email.smtp_port)
+
+            server.login(system_email.smtp_username, system_email.smtp_password)
+            server.sendmail(msg['From'], [recipient.email], msg.as_string())
+            server.quit()
+
+            # Update recipient status
+            recipient.status = 'sent'
+            recipient.sent_at = timezone.now()
+            recipient.save()
+            sent_count += 1
+
+        except Exception as e:
+            recipient.status = 'failed'
+            recipient.error_message = str(e)[:500]
+            recipient.save()
+            failed_count += 1
+            error_messages.append(f"{recipient.email}: {str(e)[:100]}")
+
+    # Update campaign status
+    campaign.sent_count = sent_count
+    campaign.failed_count = failed_count
+    campaign.status = 'completed' if failed_count == 0 else 'completed'  # Still mark completed even with some failures
+    campaign.completed_at = timezone.now()
+    if error_messages:
+        campaign.error_message = '\n'.join(error_messages[:10])  # Store first 10 errors
+    campaign.save()
+
+    return Response({
+        'message': f'Campaign sent successfully',
+        'total_recipients': campaign.total_recipients,
+        'sent_count': sent_count,
+        'failed_count': failed_count,
+        'status': campaign.status
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_email_send_quick(request):
+    """Send a quick email without creating a campaign"""
+    if not request.user.is_superuser:
+        return Response(
+            {'error': 'Permission denied. Superadmin access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    subject = request.data.get('subject', '')
+    body = request.data.get('body', '')
+    recipient_type = request.data.get('recipient_type', 'all_users')
+
+    if not subject or not body:
+        return Response(
+            {'error': 'Subject and body are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Create a campaign and send immediately
+    campaign = BulkEmailCampaign.objects.create(
+        name=f"Quick Email - {subject[:50]}",
+        subject=subject,
+        body=body,
+        recipient_type=recipient_type,
+        created_by=request.user
+    )
+
+    # Reuse the send campaign logic
+    from django.test import RequestFactory
+    factory = RequestFactory()
+    fake_request = factory.post(f'/api/superadmin/bulk-email/campaigns/{campaign.id}/send/')
+    fake_request.user = request.user
+
+    return superadmin_email_send_campaign(fake_request, campaign.id)

@@ -1246,3 +1246,155 @@ class DataDeletionRequest(models.Model):
 
     def __str__(self):
         return f"Deletion Request - {self.email} ({self.status})"
+
+
+# =============================================================================
+# SUPER ADMIN BULK EMAIL MODELS
+# =============================================================================
+
+class BulkEmailTemplate(models.Model):
+    """
+    Pre-defined email templates for common announcements.
+    Super admin can create and reuse templates.
+    """
+    TEMPLATE_TYPE_CHOICES = [
+        ('announcement', 'General Announcement'),
+        ('plan_change', 'Plan/Pricing Change'),
+        ('new_feature', 'New Feature'),
+        ('maintenance', 'Scheduled Maintenance'),
+        ('security', 'Security Update'),
+        ('policy_update', 'Policy Update'),
+        ('custom', 'Custom'),
+    ]
+
+    name = models.CharField(max_length=255, help_text='Template name for reference')
+    template_type = models.CharField(max_length=50, choices=TEMPLATE_TYPE_CHOICES, default='announcement')
+    subject = models.CharField(max_length=255)
+    body = models.TextField(help_text='Email body - supports HTML')
+
+    # Placeholders info
+    available_placeholders = models.TextField(
+        blank=True,
+        default='{{user_name}}, {{organization_name}}, {{email}}',
+        help_text='Available placeholders that can be used in the template'
+    )
+
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_email_templates')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bulk Email Template"
+        verbose_name_plural = "Bulk Email Templates"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.template_type})"
+
+
+class BulkEmailCampaign(models.Model):
+    """
+    Tracks bulk email campaigns sent by super admin.
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sending', 'Sending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    RECIPIENT_TYPE_CHOICES = [
+        ('all_users', 'All Users'),
+        ('all_admins', 'All Organization Admins/Owners'),
+        ('specific_plan', 'Users on Specific Plan'),
+        ('active_users', 'Active Users Only'),
+        ('inactive_users', 'Inactive Users Only'),
+        ('custom', 'Custom Selection'),
+    ]
+
+    # Campaign Details
+    name = models.CharField(max_length=255, help_text='Campaign name for reference')
+    subject = models.CharField(max_length=255)
+    body = models.TextField(help_text='Email body - supports HTML')
+
+    # Template reference (optional)
+    template = models.ForeignKey(
+        BulkEmailTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaigns'
+    )
+
+    # Recipient Selection
+    recipient_type = models.CharField(max_length=50, choices=RECIPIENT_TYPE_CHOICES, default='all_users')
+    target_plan = models.ForeignKey(
+        'SubscriptionPlan',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text='If recipient_type is specific_plan'
+    )
+
+    # Status and Progress
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    total_recipients = models.IntegerField(default=0)
+    sent_count = models.IntegerField(default=0)
+    failed_count = models.IntegerField(default=0)
+
+    # Scheduling
+    scheduled_at = models.DateTimeField(null=True, blank=True, help_text='When to send the email')
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Error tracking
+    error_message = models.TextField(blank=True)
+
+    # Audit
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_email_campaigns')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Bulk Email Campaign"
+        verbose_name_plural = "Bulk Email Campaigns"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - {self.status} ({self.sent_count}/{self.total_recipients})"
+
+
+class BulkEmailRecipient(models.Model):
+    """
+    Tracks individual recipients and their email status for each campaign.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('bounced', 'Bounced'),
+    ]
+
+    campaign = models.ForeignKey(BulkEmailCampaign, on_delete=models.CASCADE, related_name='recipients')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Email details (stored separately in case user is deleted)
+    email = models.EmailField()
+    user_name = models.CharField(max_length=255, blank=True)
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Bulk Email Recipient"
+        verbose_name_plural = "Bulk Email Recipients"
+        ordering = ['-sent_at']
+
+    def __str__(self):
+        return f"{self.email} - {self.status}"

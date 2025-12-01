@@ -54,6 +54,7 @@ import { superadminAPI, subscriptionAPI } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import SubscriptionPlans from './SubscriptionPlans';
 import CouponManagement from './CouponManagement';
+import BulkEmailManager from './BulkEmailManager';
 import './Dashboard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -548,6 +549,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
       case 'subscription-plans': return 'Subscription Plans';
       case 'coupons': return 'Coupon Management';
       case 'upgrade-requests': return 'Upgrade Requests';
+      case 'bulk-email': return 'Bulk Email Manager';
       case 'settings': return 'System Settings';
       default: return 'Super Admin Portal';
     }
@@ -2047,6 +2049,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
         return <CouponManagement />;
       case 'upgrade-requests':
         return renderUpgradeRequestsContent();
+      case 'bulk-email':
+        return <BulkEmailManager />;
       case 'settings':
         return renderSettingsContent();
       default:
@@ -2157,6 +2161,14 @@ const SuperAdminDashboard = ({ onLogout }) => {
                 {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
               </span>
             )}
+          </a>
+          <a
+            href="#bulk-email"
+            className={`nav-item ${activeMenu === 'bulk-email' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('bulk-email'); }}
+          >
+            <span className="nav-icon">📧</span>
+            <span className="nav-text">Bulk Email</span>
           </a>
           <a
             href="#settings"

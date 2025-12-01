@@ -42,6 +42,14 @@ urlpatterns = [
     path('superadmin/notifications/<int:notification_id>/mark-read/', views.superadmin_notification_mark_read, name='superadmin-notification-mark-read'),
     path('superadmin/notifications/mark-all-read/', views.superadmin_notifications_mark_all_read, name='superadmin-notifications-mark-all-read'),
     path('superadmin/notifications/<int:notification_id>/delete/', views.superadmin_notification_delete, name='superadmin-notification-delete'),
+    # SuperAdmin Bulk Email
+    path('superadmin/bulk-email/templates/', views.superadmin_email_templates, name='superadmin-email-templates'),
+    path('superadmin/bulk-email/templates/<int:template_id>/', views.superadmin_email_template_detail, name='superadmin-email-template-detail'),
+    path('superadmin/bulk-email/campaigns/', views.superadmin_email_campaigns, name='superadmin-email-campaigns'),
+    path('superadmin/bulk-email/campaigns/<int:campaign_id>/', views.superadmin_email_campaign_detail, name='superadmin-email-campaign-detail'),
+    path('superadmin/bulk-email/campaigns/<int:campaign_id>/send/', views.superadmin_email_send_campaign, name='superadmin-email-send-campaign'),
+    path('superadmin/bulk-email/preview-recipients/', views.superadmin_email_preview_recipients, name='superadmin-email-preview-recipients'),
+    path('superadmin/bulk-email/send-quick/', views.superadmin_email_send_quick, name='superadmin-email-send-quick'),
     path('profile/', views.user_profile_view, name='user-profile'),
     path('profile/change-password/', views.change_password_view, name='change-password'),
     # DPDP Act compliance endpoints
