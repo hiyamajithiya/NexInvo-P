@@ -384,7 +384,8 @@ class Payment(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_payments')
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2, help_text='Total payment amount (received + TDS)')
-    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='TDS deducted amount')
+    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Income Tax TDS deducted amount')
+    gst_tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='GST TDS deducted amount (for Govt undertakings)')
     amount_received = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Actual amount received in bank/cash')
     payment_date = models.DateField()
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='cash')
@@ -400,9 +401,9 @@ class Payment(models.Model):
         return f"Payment {self.amount} for {self.invoice.invoice_number}"
 
     def save(self, *args, **kwargs):
-        # If amount_received is not set, calculate it from amount - tds_amount
+        # If amount_received is not set, calculate it from amount - tds_amount - gst_tds_amount
         if self.amount_received == 0 and self.amount > 0:
-            self.amount_received = self.amount - self.tds_amount
+            self.amount_received = self.amount - self.tds_amount - self.gst_tds_amount
         super().save(*args, **kwargs)
 
 
@@ -420,7 +421,8 @@ class Receipt(models.Model):
     receipt_number = models.CharField(max_length=50, unique=True)
     receipt_date = models.DateField()
     amount_received = models.DecimalField(max_digits=12, decimal_places=2, help_text='Actual amount received (after TDS)')
-    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='TDS deducted amount')
+    tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Income Tax TDS deducted amount')
+    gst_tds_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='GST TDS deducted amount (for Govt undertakings)')
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Total payment (received + TDS)')
     payment_method = models.CharField(max_length=20)
 

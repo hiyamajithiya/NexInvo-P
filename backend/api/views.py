@@ -1326,7 +1326,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
                     receipt_number = f"{receipt_prefix}{next_number}"
 
-                    # Create Receipt with TDS details
+                    # Create Receipt with TDS details (Income Tax TDS + GST TDS)
                     receipt = Receipt.objects.create(
                         organization=self.request.organization,
                         created_by=self.request.user,
@@ -1334,8 +1334,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
                         invoice=tax_invoice,
                         receipt_number=receipt_number,
                         receipt_date=payment.payment_date,
-                        amount_received=payment.amount_received or (payment.amount - payment.tds_amount),
+                        amount_received=payment.amount_received or (payment.amount - payment.tds_amount - payment.gst_tds_amount),
                         tds_amount=payment.tds_amount,
+                        gst_tds_amount=payment.gst_tds_amount,
                         total_amount=payment.amount,
                         payment_method=payment.payment_method,
                         received_from=tax_invoice.client.name,
@@ -1381,7 +1382,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
                 receipt_number = f"{receipt_prefix}{next_number}"
 
-                # Create Receipt for Tax Invoice payment with TDS details
+                # Create Receipt for Tax Invoice payment with TDS details (Income Tax TDS + GST TDS)
                 Receipt.objects.create(
                     organization=self.request.organization,
                     created_by=self.request.user,
@@ -1389,8 +1390,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     invoice=invoice,
                     receipt_number=receipt_number,
                     receipt_date=payment.payment_date,
-                    amount_received=payment.amount_received or (payment.amount - payment.tds_amount),
+                    amount_received=payment.amount_received or (payment.amount - payment.tds_amount - payment.gst_tds_amount),
                     tds_amount=payment.tds_amount,
+                    gst_tds_amount=payment.gst_tds_amount,
                     total_amount=payment.amount,
                     payment_method=payment.payment_method,
                     received_from=invoice.client.name,

@@ -197,7 +197,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = ['id', 'invoice', 'invoice_number', 'client_name', 'amount',
-                  'tds_amount', 'amount_received', 'payment_date', 'payment_method',
+                  'tds_amount', 'gst_tds_amount', 'amount_received', 'payment_date', 'payment_method',
                   'reference_number', 'notes', 'receipt_id', 'created_at', 'updated_at']
         read_only_fields = ['id', 'invoice_number', 'client_name', 'receipt_id', 'created_at', 'updated_at']
 
@@ -217,7 +217,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
         model = Receipt
         fields = ['id', 'payment', 'invoice', 'invoice_number', 'client_name',
                   'receipt_number', 'receipt_date', 'amount_received', 'tds_amount',
-                  'total_amount', 'payment_method', 'received_from', 'towards', 'notes',
+                  'gst_tds_amount', 'total_amount', 'payment_method', 'received_from', 'towards', 'notes',
                   'payment_reference', 'created_at', 'updated_at']
         read_only_fields = ['id', 'receipt_number', 'invoice_number', 'client_name',
                             'payment_reference', 'created_at', 'updated_at']

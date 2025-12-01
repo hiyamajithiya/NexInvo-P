@@ -21,6 +21,7 @@ function Receipts() {
     payment_date: new Date().toISOString().split('T')[0],
     amount: 0,
     tds_amount: 0,
+    gst_tds_amount: 0,
     amount_received: 0,
     payment_method: 'bank_transfer',
     reference_number: '',
@@ -52,6 +53,7 @@ function Receipts() {
       payment_date: new Date().toISOString().split('T')[0],
       amount: 0,
       tds_amount: 0,
+      gst_tds_amount: 0,
       amount_received: 0,
       payment_method: 'bank_transfer',
       reference_number: '',
@@ -70,21 +72,31 @@ function Receipts() {
       if (selectedInvoice) {
         updatedReceipt.amount = parseFloat(selectedInvoice.total_amount) || 0;
         updatedReceipt.tds_amount = 0;
+        updatedReceipt.gst_tds_amount = 0;
         updatedReceipt.amount_received = parseFloat(selectedInvoice.total_amount) || 0;
       }
     }
 
-    // When TDS is entered, recalculate amount_received
+    // When Income Tax TDS is entered, recalculate amount_received
     if (field === 'tds_amount') {
       const tds = parseFloat(value) || 0;
-      updatedReceipt.amount_received = parseFloat(updatedReceipt.amount) - tds;
+      const gstTds = parseFloat(updatedReceipt.gst_tds_amount) || 0;
+      updatedReceipt.amount_received = parseFloat(updatedReceipt.amount) - tds - gstTds;
+    }
+
+    // When GST TDS is entered, recalculate amount_received
+    if (field === 'gst_tds_amount') {
+      const gstTds = parseFloat(value) || 0;
+      const tds = parseFloat(updatedReceipt.tds_amount) || 0;
+      updatedReceipt.amount_received = parseFloat(updatedReceipt.amount) - tds - gstTds;
     }
 
     // When total amount changes, recalculate amount_received
     if (field === 'amount') {
       const total = parseFloat(value) || 0;
       const tds = parseFloat(updatedReceipt.tds_amount) || 0;
-      updatedReceipt.amount_received = total - tds;
+      const gstTds = parseFloat(updatedReceipt.gst_tds_amount) || 0;
+      updatedReceipt.amount_received = total - tds - gstTds;
     }
 
     setCurrentReceipt(updatedReceipt);
@@ -159,7 +171,8 @@ function Receipts() {
     setCurrentReceipt({
       ...receipt,
       tds_amount: receipt.tds_amount || 0,
-      amount_received: receipt.amount_received || (receipt.amount - (receipt.tds_amount || 0))
+      gst_tds_amount: receipt.gst_tds_amount || 0,
+      amount_received: receipt.amount_received || (receipt.amount - (receipt.tds_amount || 0) - (receipt.gst_tds_amount || 0))
     });
     setShowForm(true);
     setError('');
@@ -268,7 +281,7 @@ function Receipts() {
                 <small style={{color: '#666', fontSize: '11px'}}>Total amount including TDS</small>
               </div>
               <div className="form-field">
-                <label>TDS Deducted</label>
+                <label>Income Tax TDS</label>
                 <input
                   type="number"
                   className="form-input"
@@ -278,7 +291,20 @@ function Receipts() {
                   step="0.01"
                   placeholder="0.00"
                 />
-                <small style={{color: '#666', fontSize: '11px'}}>TDS amount deducted by client (if any)</small>
+                <small style={{color: '#666', fontSize: '11px'}}>Income Tax TDS deducted by client</small>
+              </div>
+              <div className="form-field">
+                <label>GST TDS</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={currentReceipt.gst_tds_amount}
+                  onChange={(e) => handleReceiptChange('gst_tds_amount', e.target.value)}
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                />
+                <small style={{color: '#666', fontSize: '11px'}}>GST TDS deducted (for Govt undertakings)</small>
               </div>
               <div className="form-field">
                 <label>Amount Received in Bank</label>
@@ -383,7 +409,8 @@ function Receipts() {
                       <th>Date</th>
                       <th>Payment Method</th>
                       <th>Total Amount</th>
-                      <th>TDS</th>
+                      <th>IT TDS</th>
+                      <th>GST TDS</th>
                       <th>Received</th>
                       <th>Reference</th>
                       <th>Actions</th>
@@ -405,8 +432,11 @@ function Receipts() {
                         <td style={{color: parseFloat(receipt.tds_amount) > 0 ? '#b45309' : '#999'}}>
                           {parseFloat(receipt.tds_amount) > 0 ? `₹${parseFloat(receipt.tds_amount).toFixed(2)}` : '-'}
                         </td>
+                        <td style={{color: parseFloat(receipt.gst_tds_amount) > 0 ? '#7c3aed' : '#999'}}>
+                          {parseFloat(receipt.gst_tds_amount) > 0 ? `₹${parseFloat(receipt.gst_tds_amount).toFixed(2)}` : '-'}
+                        </td>
                         <td style={{color: '#059669', fontWeight: '500'}}>
-                          ₹{parseFloat(receipt.amount_received || (receipt.amount - (receipt.tds_amount || 0))).toFixed(2)}
+                          ₹{parseFloat(receipt.amount_received || (receipt.amount - (receipt.tds_amount || 0) - (receipt.gst_tds_amount || 0))).toFixed(2)}
                         </td>
                         <td>{receipt.reference_number || '-'}</td>
                         <td>

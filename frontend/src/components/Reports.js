@@ -18,7 +18,8 @@ function Reports() {
     { id: 3, name: 'GST Summary', icon: '🧾', description: 'GST collected and payable summary' },
     { id: 4, name: 'Client-wise Report', icon: '👥', description: 'Revenue breakdown by client' },
     { id: 5, name: 'Receipt Report', icon: '💰', description: 'Receipt collection history' },
-    { id: 6, name: 'TDS Summary', icon: '📋', description: 'TDS deducted by clients summary' },
+    { id: 6, name: 'TDS Summary', icon: '📋', description: 'Income Tax TDS deducted by clients' },
+    { id: 7, name: 'GST TDS Summary', icon: '🏛️', description: 'GST TDS deducted by Govt undertakings' },
   ];
 
   useEffect(() => {
@@ -170,7 +171,7 @@ function Reports() {
             amount: parseFloat(invoice.total_amount || 0)
           }));
 
-      case 6: // TDS Summary
+      case 6: // Income Tax TDS Summary
         const filteredPayments = getFilteredPayments();
         const paymentsWithTDS = filteredPayments.filter(p => parseFloat(p.tds_amount || 0) > 0);
 
@@ -197,6 +198,36 @@ function Reports() {
           tdsStats[clientName].paymentCount++;
         });
         return Object.values(tdsStats);
+
+      case 7: // GST TDS Summary
+        const filteredPaymentsGST = getFilteredPayments();
+        const paymentsWithGstTDS = filteredPaymentsGST.filter(p => parseFloat(p.gst_tds_amount || 0) > 0);
+
+        if (paymentsWithGstTDS.length === 0) {
+          return [];
+        }
+
+        // Client-wise GST TDS summary
+        const gstTdsStats = {};
+        paymentsWithGstTDS.forEach(payment => {
+          const clientName = payment.client_name || 'Unknown';
+          if (!gstTdsStats[clientName]) {
+            gstTdsStats[clientName] = {
+              client: clientName,
+              totalInvoiceAmount: 0,
+              totalGstTDS: 0,
+              totalIncomeTaxTDS: 0,
+              totalReceived: 0,
+              paymentCount: 0
+            };
+          }
+          gstTdsStats[clientName].totalInvoiceAmount += parseFloat(payment.amount || 0);
+          gstTdsStats[clientName].totalGstTDS += parseFloat(payment.gst_tds_amount || 0);
+          gstTdsStats[clientName].totalIncomeTaxTDS += parseFloat(payment.tds_amount || 0);
+          gstTdsStats[clientName].totalReceived += parseFloat(payment.amount_received || 0);
+          gstTdsStats[clientName].paymentCount++;
+        });
+        return Object.values(gstTdsStats);
 
       default:
         return [];
@@ -312,7 +343,7 @@ function Reports() {
                 </div>
               ) : (
                 <>
-                  {/* TDS Summary Total Card */}
+                  {/* Income Tax TDS Summary Total Card */}
                   {selectedReport.id === 6 && (
                     <div style={{
                       display: 'flex',
@@ -341,7 +372,7 @@ function Reports() {
                         minWidth: '200px',
                         border: '1px solid #fcd34d'
                       }}>
-                        <div style={{ color: '#92400e', fontSize: '13px', marginBottom: '4px' }}>Total TDS Deducted</div>
+                        <div style={{ color: '#92400e', fontSize: '13px', marginBottom: '4px' }}>Total Income Tax TDS</div>
                         <div style={{ fontSize: '24px', fontWeight: '700', color: '#78350f' }}>
                           ₹{reportData.reduce((sum, r) => sum + r.totalTDS, 0).toFixed(2)}
                         </div>
@@ -374,6 +405,82 @@ function Reports() {
                       </div>
                     </div>
                   )}
+
+                  {/* GST TDS Summary Total Card */}
+                  {selectedReport.id === 7 && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '20px',
+                      marginBottom: '20px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '180px',
+                        border: '1px solid #bae6fd'
+                      }}>
+                        <div style={{ color: '#0369a1', fontSize: '13px', marginBottom: '4px' }}>Total Invoice Amount</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#0c4a6e' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalInvoiceAmount, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '180px',
+                        border: '1px solid #c084fc'
+                      }}>
+                        <div style={{ color: '#7c3aed', fontSize: '13px', marginBottom: '4px' }}>Total GST TDS</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#5b21b6' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalGstTDS, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '180px',
+                        border: '1px solid #fcd34d'
+                      }}>
+                        <div style={{ color: '#92400e', fontSize: '13px', marginBottom: '4px' }}>Total Income Tax TDS</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#78350f' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalIncomeTaxTDS, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '180px',
+                        border: '1px solid #6ee7b7'
+                      }}>
+                        <div style={{ color: '#047857', fontSize: '13px', marginBottom: '4px' }}>Total Received</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#064e3b' }}>
+                          ₹{reportData.reduce((sum, r) => sum + r.totalReceived, 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+                        padding: '16px 24px',
+                        borderRadius: '12px',
+                        flex: '1',
+                        minWidth: '180px',
+                        border: '1px solid #c4b5fd'
+                      }}>
+                        <div style={{ color: '#6d28d9', fontSize: '13px', marginBottom: '4px' }}>Total Receipts</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#4c1d95' }}>
+                          {reportData.reduce((sum, r) => sum + r.paymentCount, 0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="data-table">
                     <table>
                       <thead>
@@ -392,8 +499,10 @@ function Reports() {
                               <td key={idx}>
                                 {key === 'amount' || key === 'total' || key === 'taxable' || key === 'gst' || key === 'totalInvoiceAmount' || key === 'totalReceived' ? (
                                   <strong>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
-                                ) : key === 'totalTDS' ? (
+                                ) : key === 'totalTDS' || key === 'totalIncomeTaxTDS' ? (
                                   <strong style={{ color: '#b45309' }}>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
+                                ) : key === 'totalGstTDS' ? (
+                                  <strong style={{ color: '#7c3aed' }}>₹{typeof value === 'number' ? value.toFixed(2) : value}</strong>
                                 ) : key === 'status' ? (
                                   <span className={`status-badge status-${value}`}>
                                     {value.toUpperCase()}
