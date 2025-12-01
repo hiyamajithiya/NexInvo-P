@@ -19,12 +19,15 @@
     "start": "react-scripts start",
     "build": "node scripts/update-version.js patch && react-scripts build",
     "build:no-version": "react-scripts build",
+    "build:fast": "set GENERATE_SOURCEMAP=false && react-scripts build",
+    "build:prod": "node scripts/update-version.js patch && set GENERATE_SOURCEMAP=false&& set REACT_APP_API_URL=https://www.nexinvo.chinmaytechnosoft.com/api && react-scripts build",
+    "build:prod:linux": "node scripts/update-version.js patch && GENERATE_SOURCEMAP=false REACT_APP_API_URL=https://www.nexinvo.chinmaytechnosoft.com/api react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "version:patch": "node scripts/update-version.js patch",
     "version:minor": "node scripts/update-version.js minor",
     "version:major": "node scripts/update-version.js major",
-    "build:prod": "node scripts/update-version.js patch && set REACT_APP_API_URL=https://www.nexinvo.chinmaytechnosoft.com/api && react-scripts build"
+    "analyze": "set GENERATE_SOURCEMAP=true && react-scripts build && npx source-map-explorer 'build/static/js/*.js'"
   },
   "eslintConfig": {
     "extends": [

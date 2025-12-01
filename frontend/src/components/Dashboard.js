@@ -1,19 +1,37 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { dashboardAPI, settingsAPI } from '../services/api';
 import './Dashboard.css';
-import Invoices from './Invoices';
-import Clients from './Clients';
-import ServiceMaster from './ServiceMaster';
-import Receipts from './Receipts';
-import Reports from './Reports';
-import Settings from './Settings';
-import Profile from './Profile';
 import OrganizationSwitcher from './OrganizationSwitcher';
-import OrganizationSettings from '../pages/OrganizationSettings';
-import PricingPlans from './PricingPlans';
-import MySubscription from './MySubscription';
-import HelpCenter from './HelpCenter';
-import OnboardingWizard from './OnboardingWizard';
+
+// Lazy load components for code splitting - reduces initial bundle size
+const Invoices = lazy(() => import('./Invoices'));
+const Clients = lazy(() => import('./Clients'));
+const ServiceMaster = lazy(() => import('./ServiceMaster'));
+const Receipts = lazy(() => import('./Receipts'));
+const Reports = lazy(() => import('./Reports'));
+const Settings = lazy(() => import('./Settings'));
+const Profile = lazy(() => import('./Profile'));
+const OrganizationSettings = lazy(() => import('../pages/OrganizationSettings'));
+const PricingPlans = lazy(() => import('./PricingPlans'));
+const MySubscription = lazy(() => import('./MySubscription'));
+const HelpCenter = lazy(() => import('./HelpCenter'));
+const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
+
+// Component loading spinner
+const ComponentLoader = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '400px',
+    color: '#6366f1'
+  }}>
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: '32px', marginBottom: '8px' }}>⏳</div>
+      <div>Loading...</div>
+    </div>
+  </div>
+);
 
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -347,10 +365,12 @@ function Dashboard({ user, onLogout }) {
     <div className="dashboard-layout">
       {/* Onboarding Wizard for first-time users */}
       {showOnboarding && (
-        <OnboardingWizard
-          onComplete={() => setShowOnboarding(false)}
-          onNavigate={setActiveMenu}
-        />
+        <Suspense fallback={<ComponentLoader />}>
+          <OnboardingWizard
+            onComplete={() => setShowOnboarding(false)}
+            onNavigate={setActiveMenu}
+          />
+        </Suspense>
       )}
 
       {/* Sidebar Navigation */}
@@ -526,7 +546,9 @@ function Dashboard({ user, onLogout }) {
 
         {/* Content Area */}
         <div className="content-area">
-          {renderContent()}
+          <Suspense fallback={<ComponentLoader />}>
+            {renderContent()}
+          </Suspense>
         </div>
 
         {/* Footer with Branding */}

@@ -1,16 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import axios from 'axios';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
-import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ToastProvider } from './components/Toast';
 import versionCheckService from './services/versionCheck';
 import './theme.css';
 import './App.css';
+
+// Lazy load heavy components for faster initial load and smaller bundles
+const Login = lazy(() => import('./components/Login'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard'));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+  }}>
+    <div style={{ textAlign: 'center', color: '#fff' }}>
+      <div style={{ fontSize: '24px', marginBottom: '10px' }}>Loading...</div>
+      <div style={{ fontSize: '14px', opacity: 0.8 }}>Please wait</div>
+    </div>
+  </div>
+);
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
@@ -103,17 +121,19 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ToastProvider>
-        <div className="App">
-          {!isAuthenticated ? (
-            <Login onLogin={handleLogin} />
-          ) : isSuperAdmin ? (
-            <SuperAdminDashboard onLogout={handleLogout} />
-          ) : (
-            <OrganizationProvider>
-              <Dashboard user={user} onLogout={handleLogout} />
-            </OrganizationProvider>
-          )}
-        </div>
+        <Suspense fallback={<LoadingFallback />}>
+          <div className="App">
+            {!isAuthenticated ? (
+              <Login onLogin={handleLogin} />
+            ) : isSuperAdmin ? (
+              <SuperAdminDashboard onLogout={handleLogout} />
+            ) : (
+              <OrganizationProvider>
+                <Dashboard user={user} onLogout={handleLogout} />
+              </OrganizationProvider>
+            )}
+          </div>
+        </Suspense>
       </ToastProvider>
     </ThemeProvider>
   );
