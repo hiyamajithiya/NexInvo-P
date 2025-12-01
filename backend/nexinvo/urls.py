@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse
-from api.views import EmailTokenObtainPairView, register_view
+from api.views import EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view
 
 def api_root(request):
     return JsonResponse({
@@ -35,6 +35,11 @@ def api_root(request):
 urlpatterns = [
     path("", api_root),
     path("admin/", admin.site.urls),
+    # Email OTP verification endpoints
+    path("api/send-otp/", send_otp_view, name='send_otp'),
+    path("api/verify-otp/", verify_otp_view, name='verify_otp'),
+    path("api/resend-otp/", resend_otp_view, name='resend_otp'),
+    # Registration endpoint (now requires email verification)
     path("api/register/", register_view, name='register'),
     path("api/token/", EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("api/token/refresh/", TokenRefreshView.as_view(), name='token_refresh'),

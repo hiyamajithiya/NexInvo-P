@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { serviceItemAPI } from '../services/api';
+import { useToast } from './Toast';
 import './Pages.css';
 
 function ServiceMaster() {
+  const { showSuccess } = useToast();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
 
   const [currentService, setCurrentService] = useState({
@@ -51,8 +52,7 @@ function ServiceMaster() {
     if (window.confirm('Are you sure you want to delete this service?')) {
       try {
         await serviceItemAPI.delete(id);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        showSuccess('Service deleted successfully!');
         loadServices();
       } catch (err) {
         setError('Failed to delete service');
@@ -82,8 +82,7 @@ function ServiceMaster() {
         await serviceItemAPI.create(currentService);
       }
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Service saved successfully!');
       setShowForm(false);
       loadServices();
     } catch (err) {
@@ -119,12 +118,6 @@ function ServiceMaster() {
           </button>
         </div>
       </div>
-
-      {saveSuccess && (
-        <div className="success-message">
-          ✅ Service saved successfully!
-        </div>
-      )}
 
       {error && (
         <div className="error-message">

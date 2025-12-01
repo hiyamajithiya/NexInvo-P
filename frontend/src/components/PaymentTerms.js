@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { paymentTermAPI } from '../services/api';
+import { useToast } from './Toast';
 import './Pages.css';
 
 function PaymentTerms() {
+  const { showSuccess } = useToast();
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
 
   const [currentTerm, setCurrentTerm] = useState({
@@ -49,8 +50,7 @@ function PaymentTerms() {
     if (window.confirm('Are you sure you want to delete this payment term?')) {
       try {
         await paymentTermAPI.delete(id);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        showSuccess('Payment term deleted successfully!');
         loadPaymentTerms();
       } catch (err) {
         setError('Failed to delete payment term');
@@ -92,8 +92,7 @@ function PaymentTerms() {
         await paymentTermAPI.create(currentTerm);
       }
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Payment term saved successfully!');
       setShowForm(false);
       loadPaymentTerms();
     } catch (err) {
@@ -128,12 +127,6 @@ function PaymentTerms() {
           </button>
         </div>
       </div>
-
-      {saveSuccess && (
-        <div className="success-message">
-          ✅ Payment term saved successfully!
-        </div>
-      )}
 
       {error && (
         <div className="error-message">

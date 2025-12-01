@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { clientAPI } from '../services/api';
+import { useToast } from './Toast';
 import './Pages.css';
 
 // Indian States with GST State Codes
@@ -43,13 +44,13 @@ const INDIAN_STATES = [
 ];
 
 function Clients() {
+  const { showSuccess } = useToast();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
 
   const [currentClient, setCurrentClient] = useState({
@@ -107,8 +108,7 @@ function Clients() {
     if (window.confirm('Are you sure you want to delete this client?')) {
       try {
         await clientAPI.delete(id);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        showSuccess('Client deleted successfully!');
         loadClients();
       } catch (err) {
         setError('Failed to delete client');
@@ -189,8 +189,7 @@ function Clients() {
         await clientAPI.create(currentClient);
       }
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Client saved successfully!');
       setShowForm(false);
       loadClients();
     } catch (err) {
@@ -301,12 +300,6 @@ function Clients() {
           </button>
         </div>
       </div>
-
-      {saveSuccess && (
-        <div className="success-message">
-          ✅ Client saved successfully!
-        </div>
-      )}
 
       {error && (
         <div className="error-message">

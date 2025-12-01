@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 import './Login.css';
 
@@ -9,20 +9,125 @@ const Login = ({ onLogin }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
+  // OTP verification states
+  const [registrationStep, setRegistrationStep] = useState(1); // 1: email, 2: OTP, 3: details
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  // Timer for resend OTP
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
+
+  // Send OTP to email
+  const handleSendOTP = async () => {
+    if (!username) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.sendOTP(username);
+      setOtpSent(true);
+      setRegistrationStep(2);
+      setResendTimer(60); // 60 seconds before can resend
+      setSuccessMessage('OTP sent to your email. Please check your inbox.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verify OTP
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      setError('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.verifyOTP(username, otp);
+      setEmailVerified(true);
+      setRegistrationStep(3);
+      setSuccessMessage('Email verified successfully! Please complete your registration.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResendOTP = async () => {
+    if (resendTimer > 0) return;
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.resendOTP(username);
+      setOtp('');
+      setResendTimer(60);
+      setSuccessMessage('New OTP sent to your email.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to resend OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
+
+    // For registration, handle step-by-step
+    if (isRegisterMode) {
+      if (registrationStep === 1) {
+        // Step 1: Send OTP
+        handleSendOTP();
+        return;
+      } else if (registrationStep === 2) {
+        // Step 2: Verify OTP
+        handleVerifyOTP();
+        return;
+      }
+      // Step 3: Complete registration
+    }
 
     // Validate consent for registration
     if (isRegisterMode && !acceptedTerms) {
       setError('Please accept the Terms of Service and Privacy Policy to create an account.');
+      return;
+    }
+
+    // Validate mobile number for registration
+    if (isRegisterMode && !mobileNumber) {
+      setError('Mobile number is required.');
       return;
     }
 
@@ -36,7 +141,8 @@ const Login = ({ onLogin }) => {
           password: password,
           first_name: firstName,
           last_name: lastName,
-          company_name: companyName || `${firstName}'s Company`
+          company_name: companyName || `${firstName}'s Company`,
+          mobile_number: mobileNumber
         };
 
         await authAPI.register(registerData);
@@ -64,12 +170,56 @@ const Login = ({ onLogin }) => {
   const toggleMode = () => {
     setIsRegisterMode(!isRegisterMode);
     setError('');
+    setSuccessMessage('');
     setUsername('');
     setPassword('');
     setFirstName('');
     setLastName('');
     setCompanyName('');
+    setMobileNumber('');
     setAcceptedTerms(false);
+    // Reset OTP states
+    setRegistrationStep(1);
+    setOtp('');
+    setOtpSent(false);
+    setEmailVerified(false);
+    setResendTimer(0);
+  };
+
+  // Go back to previous step in registration
+  const handleBackStep = () => {
+    if (registrationStep === 2) {
+      setRegistrationStep(1);
+      setOtp('');
+      setOtpSent(false);
+    } else if (registrationStep === 3) {
+      setRegistrationStep(2);
+      setEmailVerified(false);
+    }
+    setError('');
+    setSuccessMessage('');
+  };
+
+  // Get step title
+  const getStepTitle = () => {
+    if (!isRegisterMode) return 'Welcome Back';
+    switch (registrationStep) {
+      case 1: return 'Create Account';
+      case 2: return 'Verify Email';
+      case 3: return 'Complete Registration';
+      default: return 'Create Account';
+    }
+  };
+
+  // Get step description
+  const getStepDescription = () => {
+    if (!isRegisterMode) return 'Sign in to your account';
+    switch (registrationStep) {
+      case 1: return 'Enter your email to get started';
+      case 2: return `Enter the OTP sent to ${username}`;
+      case 3: return 'Fill in your details to complete registration';
+      default: return 'Start managing invoices today';
+    }
   };
 
   return (
@@ -147,17 +297,31 @@ const Login = ({ onLogin }) => {
           {isRegisterMode && (
             <button
               type="button"
-              onClick={toggleMode}
+              onClick={registrationStep > 1 ? handleBackStep : toggleMode}
               className="back-to-login-btn"
             >
-              ← Back to Sign In
+              ← {registrationStep > 1 ? 'Back' : 'Back to Sign In'}
             </button>
           )}
           <div className="login-header">
-            <h2 className="login-title">{isRegisterMode ? 'Create Account' : 'Welcome Back'}</h2>
-            <p className="login-subtitle">
-              {isRegisterMode ? 'Start managing invoices today' : 'Sign in to your account'}
-            </p>
+            <h2 className="login-title">{getStepTitle()}</h2>
+            <p className="login-subtitle">{getStepDescription()}</p>
+            {isRegisterMode && (
+              <div className="registration-steps">
+                <div className={`step ${registrationStep >= 1 ? 'active' : ''} ${registrationStep > 1 ? 'completed' : ''}`}>
+                  <span className="step-number">{registrationStep > 1 ? '✓' : '1'}</span>
+                  <span className="step-label">Email</span>
+                </div>
+                <div className={`step ${registrationStep >= 2 ? 'active' : ''} ${registrationStep > 2 ? 'completed' : ''}`}>
+                  <span className="step-number">{registrationStep > 2 ? '✓' : '2'}</span>
+                  <span className="step-label">Verify</span>
+                </div>
+                <div className={`step ${registrationStep >= 3 ? 'active' : ''}`}>
+                  <span className="step-number">3</span>
+                  <span className="step-label">Details</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
@@ -167,11 +331,80 @@ const Login = ({ onLogin }) => {
               </div>
             )}
 
-            {isRegisterMode && (
+            {successMessage && (
+              <div className="success-message">
+                {successMessage}
+              </div>
+            )}
+
+            {/* Step 1: Email input (for registration) */}
+            {isRegisterMode && registrationStep === 1 && (
+              <div className="form-group">
+                <label htmlFor="username">Email Address *</label>
+                <input
+                  id="username"
+                  type="email"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                />
+                <small className="form-help">We'll send a verification OTP to this email</small>
+              </div>
+            )}
+
+            {/* Step 2: OTP verification */}
+            {isRegisterMode && registrationStep === 2 && (
               <>
+                <div className="form-group">
+                  <label htmlFor="otp">Enter OTP *</label>
+                  <input
+                    id="otp"
+                    type="text"
+                    value={otp}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtp(value);
+                    }}
+                    placeholder="Enter 6-digit OTP"
+                    required
+                    maxLength={6}
+                    style={{ letterSpacing: '8px', textAlign: 'center', fontSize: '20px' }}
+                  />
+                  <small className="form-help">
+                    OTP sent to {username}. Valid for 10 minutes.
+                  </small>
+                </div>
+                <div className="resend-otp-container">
+                  {resendTimer > 0 ? (
+                    <span className="resend-timer">Resend OTP in {resendTimer}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="resend-otp-btn"
+                      onClick={handleResendOTP}
+                      disabled={loading}
+                    >
+                      Resend OTP
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Step 3: Complete registration (personal details) */}
+            {isRegisterMode && registrationStep === 3 && (
+              <>
+                <div className="verified-email-badge">
+                  <span className="verified-icon">✓</span>
+                  <span className="verified-text">{username}</span>
+                  <span className="verified-label">Verified</span>
+                </div>
+
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="firstName">First Name</label>
+                    <label htmlFor="firstName">First Name *</label>
                     <input
                       id="firstName"
                       type="text"
@@ -183,7 +416,7 @@ const Login = ({ onLogin }) => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="lastName">Last Name</label>
+                    <label htmlFor="lastName">Last Name *</label>
                     <input
                       id="lastName"
                       type="text"
@@ -196,6 +429,19 @@ const Login = ({ onLogin }) => {
                 </div>
 
                 <div className="form-group">
+                  <label htmlFor="mobileNumber">Mobile Number *</label>
+                  <input
+                    id="mobileNumber"
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    required
+                  />
+                  <small className="form-help">Enter 10-digit Indian mobile number</small>
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="companyName">Company Name</label>
                   <input
                     id="companyName"
@@ -205,46 +451,75 @@ const Login = ({ onLogin }) => {
                     placeholder="Your Company Ltd."
                   />
                 </div>
+
+                <div className="form-group">
+                  <label htmlFor="password">Password *</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a strong password"
+                      required
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex="-1"
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                </div>
               </>
             )}
 
-            <div className="form-group">
-              <label htmlFor="username">Email Address</label>
-              <input
-                id="username"
-                type="email"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoComplete="username"
-              />
-            </div>
+            {/* Login form fields */}
+            {!isRegisterMode && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="username">Email Address</label>
+                  <input
+                    id="username"
+                    type="email"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                    autoComplete="username"
+                  />
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="password">Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                  tabIndex="-1"
-                >
-                  {showPassword ? '👁️' : '👁️‍🗨️'}
-                </button>
-              </div>
-            </div>
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      required
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex="-1"
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
-            {isRegisterMode && (
+            {/* Consent checkbox - only shown in step 3 of registration */}
+            {isRegisterMode && registrationStep === 3 && (
               <div className="form-group consent-group">
                 <label className="consent-label">
                   <input
@@ -272,7 +547,19 @@ const Login = ({ onLogin }) => {
               className="login-button"
               disabled={loading}
             >
-              {loading ? (isRegisterMode ? 'Creating Account...' : 'Signing in...') : (isRegisterMode ? 'Create Account' : 'Sign In')}
+              {loading ? (
+                isRegisterMode ? (
+                  registrationStep === 1 ? 'Sending OTP...' :
+                  registrationStep === 2 ? 'Verifying...' :
+                  'Creating Account...'
+                ) : 'Signing in...'
+              ) : (
+                isRegisterMode ? (
+                  registrationStep === 1 ? 'Send OTP' :
+                  registrationStep === 2 ? 'Verify OTP' :
+                  'Create Account'
+                ) : 'Sign In'
+              )}
             </button>
 
             <div className="form-footer">

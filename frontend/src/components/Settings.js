@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { settingsAPI, paymentTermAPI, userAPI } from '../services/api';
 import InvoiceFormatEditor from './InvoiceFormatEditor';
 import Tooltip, { InfoBox } from './Tooltip';
+import { useToast } from './Toast';
 import './Pages.css';
 
 function Settings() {
+  const { showSuccess, showError } = useToast();
   const [activeTab, setActiveTab] = useState('company');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -176,8 +177,7 @@ function Settings() {
     setError('');
     try {
       await settingsAPI.updateCompanySettings(companyInfo);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Company settings saved successfully!');
     } catch (err) {
       console.error('Error saving company info:', err);
       setError(err.response?.data?.message || 'Failed to save company information');
@@ -191,8 +191,7 @@ function Settings() {
     setError('');
     try {
       await settingsAPI.updateInvoiceSettings(invoiceSettings);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Invoice settings saved successfully!');
     } catch (err) {
       console.error('Error saving invoice settings:', err);
       setError(err.response?.data?.message || 'Failed to save invoice settings');
@@ -203,7 +202,7 @@ function Settings() {
 
   const handleCancel = () => {
     // Reset to initial values or reload from backend
-    setSaveSuccess(false);
+    loadSettings();
   };
 
   // Load Payment Terms
@@ -258,8 +257,7 @@ function Settings() {
       }
 
       setShowPaymentForm(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Payment term saved successfully!');
       loadPaymentTerms();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save payment term');
@@ -277,8 +275,7 @@ function Settings() {
     if (window.confirm('Are you sure you want to delete this payment term?')) {
       try {
         await paymentTermAPI.delete(id);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        showSuccess('Payment term deleted successfully!');
         loadPaymentTerms();
       } catch (err) {
         setError('Failed to delete payment term');
@@ -318,8 +315,7 @@ function Settings() {
       }
 
       await settingsAPI.updateEmailSettings(payload);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Email settings saved successfully!');
     } catch (err) {
       console.error('Error saving email settings:', err);
       setError(err.response?.data?.error || 'Failed to save email settings');
@@ -389,8 +385,7 @@ function Settings() {
       }
 
       setShowUserForm(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('User saved successfully!');
       loadUsers();
     } catch (err) {
       console.error('Error saving user:', err);
@@ -418,8 +413,7 @@ function Settings() {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         await userAPI.delete(id);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        showSuccess('User deleted successfully!');
         loadUsers();
       } catch (err) {
         console.error('Error deleting user:', err);
@@ -484,8 +478,7 @@ function Settings() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Data exported successfully!');
     } catch (err) {
       console.error('Export error:', err);
       setError(err.response?.data?.error || 'Failed to export data. Please try again.');
@@ -521,8 +514,7 @@ function Settings() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Tally XML exported successfully!');
     } catch (err) {
       console.error('Tally Export error:', err);
       if (err.response?.status === 404) {
@@ -564,8 +556,7 @@ function Settings() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Tally Excel exported successfully!');
     } catch (err) {
       console.error('Tally Excel Export error:', err);
       if (err.response?.status === 404) {
@@ -580,12 +571,6 @@ function Settings() {
 
   return (
     <div className="page-content">
-      {saveSuccess && (
-        <div className="success-message">
-          ✅ Settings saved successfully!
-        </div>
-      )}
-
       {error && (
         <div className="error-message">
           ❌ {error}

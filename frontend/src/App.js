@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { OrganizationProvider } from './contexts/OrganizationContext';
+import { ToastProvider } from './components/Toast';
 import versionCheckService from './services/versionCheck';
 import './theme.css';
 import './App.css';
@@ -101,17 +102,19 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div className="App">
-        {!isAuthenticated ? (
-          <Login onLogin={handleLogin} />
-        ) : isSuperAdmin ? (
-          <SuperAdminDashboard onLogout={handleLogout} />
-        ) : (
-          <OrganizationProvider>
-            <Dashboard user={user} onLogout={handleLogout} />
-          </OrganizationProvider>
-        )}
-      </div>
+      <ToastProvider>
+        <div className="App">
+          {!isAuthenticated ? (
+            <Login onLogin={handleLogin} />
+          ) : isSuperAdmin ? (
+            <SuperAdminDashboard onLogout={handleLogout} />
+          ) : (
+            <OrganizationProvider>
+              <Dashboard user={user} onLogout={handleLogout} />
+            </OrganizationProvider>
+          )}
+        </div>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

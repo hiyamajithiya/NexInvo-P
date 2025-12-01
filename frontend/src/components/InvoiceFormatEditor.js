@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { settingsAPI } from '../services/api';
+import { useToast } from './Toast';
 import './Pages.css';
 
 function InvoiceFormatEditor() {
+  const { showSuccess } = useToast();
   const [loading, setLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('header');
 
@@ -118,8 +119,7 @@ function InvoiceFormatEditor() {
     setError('');
     try {
       await settingsAPI.updateInvoiceFormatSettings(formatSettings);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      showSuccess('Invoice format settings saved successfully!');
     } catch (err) {
       console.error('Error saving format settings:', err);
       setError('Failed to save format settings');
@@ -185,12 +185,6 @@ function InvoiceFormatEditor() {
         <h1>📄 Invoice Format Editor</h1>
         <p>Customize your invoice layout and appearance</p>
       </div>
-
-      {saveSuccess && (
-        <div className="success-message">
-          ✓ Format settings saved successfully!
-        </div>
-      )}
 
       {error && (
         <div className="error-message">

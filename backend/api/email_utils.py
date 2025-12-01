@@ -526,3 +526,105 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
     except Exception as e:
         logger.error(f"Failed to send upgrade request notification: {str(e)}")
         return False
+
+
+def send_otp_email(email, otp_code):
+    """
+    Send OTP email for email verification during registration
+
+    Args:
+        email: Email address to send OTP to
+        otp_code: 6-digit OTP code
+
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        subject = 'NexInvo - Email Verification OTP'
+
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">📊 NexInvo</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Email Verification</p>
+            </div>
+
+            <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+                <p style="font-size: 16px; margin-bottom: 20px;">
+                    Hello,
+                </p>
+
+                <p style="font-size: 16px; margin-bottom: 20px;">
+                    Thank you for registering with NexInvo. Please use the following OTP to verify your email address:
+                </p>
+
+                <div style="background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); padding: 25px; border-radius: 10px; text-align: center; margin: 30px 0;">
+                    <p style="font-size: 14px; color: #666; margin: 0 0 10px 0;">Your One-Time Password (OTP)</p>
+                    <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #6366f1; font-family: 'Courier New', monospace;">
+                        {otp_code}
+                    </div>
+                </div>
+
+                <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0; font-size: 14px; color: #92400e;">
+                        <strong>⚠️ Important:</strong> This OTP is valid for <strong>10 minutes</strong> only. Do not share this OTP with anyone.
+                    </p>
+                </div>
+
+                <p style="font-size: 14px; color: #666; margin: 20px 0;">
+                    If you didn't request this verification, please ignore this email. Someone might have entered your email by mistake.
+                </p>
+
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+
+                <p style="font-size: 12px; color: #666; text-align: center;">
+                    This is an automated message from NexInvo Invoice Management System.
+                    <br>
+                    For support, contact <a href="mailto:{SUPPORT_EMAIL}" style="color: #6366f1;">{SUPPORT_EMAIL}</a>
+                </p>
+
+                <p style="font-size: 12px; color: #666; text-align: center;">
+                    © 2025 Chinmay Technosoft Private Limited. All rights reserved.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        plain_message = f"""
+NexInvo - Email Verification
+
+Hello,
+
+Thank you for registering with NexInvo. Please use the following OTP to verify your email address:
+
+Your OTP: {otp_code}
+
+This OTP is valid for 10 minutes only. Do not share this OTP with anyone.
+
+If you didn't request this verification, please ignore this email.
+
+---
+© 2025 Chinmay Technosoft Private Limited. All rights reserved.
+Support: {SUPPORT_EMAIL}
+        """
+
+        send_email_with_system_settings(
+            subject=subject,
+            plain_message=plain_message,
+            html_message=html_message,
+            recipient_list=[email],
+        )
+
+        logger.info(f"OTP email sent to {email}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send OTP email to {email}: {str(e)}")
+        return False

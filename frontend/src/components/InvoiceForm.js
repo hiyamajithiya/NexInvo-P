@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { invoiceAPI, clientAPI, settingsAPI, serviceItemAPI, paymentTermAPI } from '../services/api';
+import { useToast } from './Toast';
 import './Pages.css';
 
 function InvoiceForm({ onBack, invoice }) {
+  const { showSuccess } = useToast();
   const [invoiceSettings, setInvoiceSettings] = useState({
     defaultGstRate: 18,
     paymentDueDays: 30,
@@ -32,7 +34,6 @@ function InvoiceForm({ onBack, invoice }) {
   const [services, setServices] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
 
   // Load clients, services, payment terms and settings on component mount
@@ -226,10 +227,10 @@ function InvoiceForm({ onBack, invoice }) {
         await invoiceAPI.create(payload);
       }
 
-      setSaveSuccess(true);
+      showSuccess('Invoice saved successfully!');
       setTimeout(() => {
         onBack();
-      }, 1500);
+      }, 1000);
     } catch (err) {
       console.error('Error saving invoice:', err);
       setError(err.response?.data?.message || 'Failed to save invoice');
@@ -286,10 +287,10 @@ function InvoiceForm({ onBack, invoice }) {
       link.click();
       link.remove();
 
-      setSaveSuccess(true);
+      showSuccess('Invoice saved and PDF generated successfully!');
       setTimeout(() => {
         onBack();
-      }, 1500);
+      }, 1000);
     } catch (err) {
       console.error('Error saving invoice:', err);
       setError(err.response?.data?.message || 'Failed to save invoice and generate PDF');
@@ -314,12 +315,6 @@ function InvoiceForm({ onBack, invoice }) {
           </button>
         </div>
       </div>
-
-      {saveSuccess && (
-        <div className="success-message">
-          ✅ Invoice saved successfully!
-        </div>
-      )}
 
       {error && (
         <div className="error-message">

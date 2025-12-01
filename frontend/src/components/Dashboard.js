@@ -4,7 +4,7 @@ import './Dashboard.css';
 import Invoices from './Invoices';
 import Clients from './Clients';
 import ServiceMaster from './ServiceMaster';
-import Payments from './Payments';
+import Receipts from './Receipts';
 import Reports from './Reports';
 import Settings from './Settings';
 import Profile from './Profile';
@@ -114,8 +114,8 @@ function Dashboard({ user, onLogout }) {
         return <Clients />;
       case 'services':
         return <ServiceMaster />;
-      case 'payments':
-        return <Payments />;
+      case 'receipts':
+        return <Receipts />;
       case 'reports':
         return <Reports />;
       case 'settings':
@@ -147,7 +147,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              <div className="stat-card green" onClick={() => setActiveMenu('payments')} style={{ cursor: 'pointer' }}>
+              <div className="stat-card green" onClick={() => setActiveMenu('receipts')} style={{ cursor: 'pointer' }}>
                 <div className="stat-header">
                   <div className="stat-icon-wrapper green-bg">
                     <span className="stat-icon-lg">💰</span>
@@ -331,7 +331,7 @@ function Dashboard({ user, onLogout }) {
       case 'invoices': return 'Invoices Management';
       case 'clients': return 'Client Management';
       case 'services': return 'Service Master';
-      case 'payments': return 'Payment Records';
+      case 'receipts': return 'Receipt Records';
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
       case 'organization': return 'Organization Settings';
@@ -412,12 +412,12 @@ function Dashboard({ user, onLogout }) {
             <span className="nav-text">Service Master</span>
           </a>
           <a
-            href="#payments"
-            className={`nav-item ${activeMenu === 'payments' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('payments'); }}
+            href="#receipts"
+            className={`nav-item ${activeMenu === 'receipts' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('receipts'); }}
           >
-            <span className="nav-icon">💳</span>
-            <span className="nav-text">Payments</span>
+            <span className="nav-icon">🧾</span>
+            <span className="nav-text">Receipts</span>
           </a>
           <a
             href="#reports"
@@ -445,19 +445,11 @@ function Dashboard({ user, onLogout }) {
           </a>
           <a
             href="#subscription"
-            className={`nav-item ${activeMenu === 'subscription' ? 'active' : ''}`}
+            className={`nav-item ${activeMenu === 'subscription' || activeMenu === 'pricing' ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); setActiveMenu('subscription'); }}
           >
             <span className="nav-icon">💼</span>
             <span className="nav-text">My Subscription</span>
-          </a>
-          <a
-            href="#pricing"
-            className={`nav-item ${activeMenu === 'pricing' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('pricing'); }}
-          >
-            <span className="nav-icon">💳</span>
-            <span className="nav-text">Upgrade Plan</span>
           </a>
           <a
             href="#help"
@@ -469,12 +461,6 @@ function Dashboard({ user, onLogout }) {
           </a>
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="system-status">
-            <div className="status-indicator"></div>
-            <span>System Active</span>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content */}

@@ -14,10 +14,10 @@ function Reports() {
 
   const reports = [
     { id: 1, name: 'Revenue Report', icon: '📊', description: 'Monthly and yearly revenue analysis' },
-    { id: 2, name: 'Outstanding Report', icon: '⏳', description: 'Pending payments and invoices' },
+    { id: 2, name: 'Outstanding Report', icon: '⏳', description: 'Pending invoices' },
     { id: 3, name: 'GST Summary', icon: '🧾', description: 'GST collected and payable summary' },
     { id: 4, name: 'Client-wise Report', icon: '👥', description: 'Revenue breakdown by client' },
-    { id: 5, name: 'Payment Report', icon: '💰', description: 'Payment collection history' },
+    { id: 5, name: 'Receipt Report', icon: '💰', description: 'Receipt collection history' },
     { id: 6, name: 'TDS Summary', icon: '📋', description: 'TDS deducted by clients summary' },
   ];
 
@@ -249,16 +249,6 @@ function Reports() {
           <h1 className="page-main-title">Reports</h1>
           <p className="page-description">Generate and view business reports</p>
         </div>
-        <div className="page-header-right">
-          <button
-            className="btn-create"
-            onClick={handleExportReport}
-            disabled={!selectedReport}
-          >
-            <span className="btn-icon">📥</span>
-            Export Report
-          </button>
-        </div>
       </div>
 
       <div className="reports-grid">
@@ -284,7 +274,7 @@ function Reports() {
                 <h2 className="report-view-title">{selectedReport.icon} {selectedReport.name}</h2>
                 <p className="report-view-description">{selectedReport.description}</p>
               </div>
-              <div className="report-filters">
+              <div className="report-filters" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <select
                   className="filter-select"
                   value={dateFilter}
@@ -296,6 +286,15 @@ function Reports() {
                   <option value="this_year">This Year</option>
                   <option value="all_time">All Time</option>
                 </select>
+                <button
+                  className="btn-create"
+                  onClick={handleExportReport}
+                  disabled={reportData.length === 0}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  <span className="btn-icon">📥</span>
+                  Export Report
+                </button>
               </div>
             </div>
 
@@ -368,7 +367,7 @@ function Reports() {
                         minWidth: '200px',
                         border: '1px solid #c4b5fd'
                       }}>
-                        <div style={{ color: '#6d28d9', fontSize: '13px', marginBottom: '4px' }}>Total Payments</div>
+                        <div style={{ color: '#6d28d9', fontSize: '13px', marginBottom: '4px' }}>Total Receipts</div>
                         <div style={{ fontSize: '24px', fontWeight: '700', color: '#4c1d95' }}>
                           {reportData.reduce((sum, r) => sum + r.paymentCount, 0)}
                         </div>

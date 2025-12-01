@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification, BulkEmailTemplate, BulkEmailCampaign, BulkEmailRecipient)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification, BulkEmailTemplate, BulkEmailCampaign, BulkEmailRecipient, EmailOTP)
 from .serializers import (
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
@@ -68,21 +68,184 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
 
+# =============================================================================
+# EMAIL OTP VERIFICATION VIEWS
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def send_otp_view(request):
+    """Send OTP to email for verification during registration"""
+    email = request.data.get('email', '').strip().lower()
+
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Basic email validation
+    import re
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, email):
+        return Response(
+            {'error': 'Please enter a valid email address'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if user already exists
+    if User.objects.filter(email=email).exists():
+        return Response(
+            {'error': 'An account with this email already exists. Please login instead.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Generate OTP
+        otp = EmailOTP.generate_otp(email)
+
+        # Send OTP via email
+        from .email_utils import send_otp_email
+        email_sent = send_otp_email(email, otp.otp_code)
+
+        if email_sent:
+            return Response({
+                'success': True,
+                'message': f'OTP sent to {email}. Please check your email.',
+                'expires_in_minutes': 10
+            })
+        else:
+            return Response(
+                {'error': 'Failed to send OTP email. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to send OTP: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_otp_view(request):
+    """Verify OTP code entered by user"""
+    email = request.data.get('email', '').strip().lower()
+    otp_code = request.data.get('otp', '').strip()
+
+    if not email or not otp_code:
+        return Response(
+            {'error': 'Email and OTP are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Verify OTP
+    success, message = EmailOTP.verify_otp(email, otp_code)
+
+    if success:
+        return Response({
+            'success': True,
+            'message': message,
+            'email_verified': True
+        })
+    else:
+        return Response(
+            {'error': message},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_otp_view(request):
+    """Resend OTP to email (same as send_otp but with different messaging)"""
+    email = request.data.get('email', '').strip().lower()
+
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if user already exists
+    if User.objects.filter(email=email).exists():
+        return Response(
+            {'error': 'An account with this email already exists.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Generate new OTP (this will delete any existing OTP)
+        otp = EmailOTP.generate_otp(email)
+
+        # Send OTP via email
+        from .email_utils import send_otp_email
+        email_sent = send_otp_email(email, otp.otp_code)
+
+        if email_sent:
+            return Response({
+                'success': True,
+                'message': f'New OTP sent to {email}.',
+                'expires_in_minutes': 10
+            })
+        else:
+            return Response(
+                {'error': 'Failed to send OTP email. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to resend OTP: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 # User Registration View
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
-    """Register a new user with email as username"""
-    email = request.data.get('email')
+    """Register a new user with email as username - requires email OTP verification"""
+    email = request.data.get('email', '').strip().lower()
     password = request.data.get('password')
     first_name = request.data.get('first_name', '')
     last_name = request.data.get('last_name', '')
     company_name = request.data.get('company_name', '')
+    mobile_number = request.data.get('mobile_number', '').strip()
 
     # Validation
     if not email or not password:
         return Response(
             {'error': 'Email and password are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Mobile number is mandatory
+    if not mobile_number:
+        return Response(
+            {'error': 'Mobile number is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate mobile number format (Indian: 10 digits, may start with +91)
+    import re
+    mobile_clean = mobile_number.replace(' ', '').replace('-', '')
+    if mobile_clean.startswith('+91'):
+        mobile_clean = mobile_clean[3:]
+    elif mobile_clean.startswith('91') and len(mobile_clean) > 10:
+        mobile_clean = mobile_clean[2:]
+
+    if not re.match(r'^[6-9]\d{9}$', mobile_clean):
+        return Response(
+            {'error': 'Please enter a valid 10-digit Indian mobile number'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if email has been verified via OTP
+    if not EmailOTP.is_email_verified(email):
+        return Response(
+            {'error': 'Please verify your email address first by entering the OTP sent to your email'},
             status=status.HTTP_400_BAD_REQUEST
         )
 

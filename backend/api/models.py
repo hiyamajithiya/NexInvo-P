@@ -1398,3 +1398,124 @@ class BulkEmailRecipient(models.Model):
 
     def __str__(self):
         return f"{self.email} - {self.status}"
+
+
+# =============================================================================
+# EMAIL OTP VERIFICATION FOR REGISTRATION
+# =============================================================================
+
+class EmailOTP(models.Model):
+    """
+    Stores OTP codes for email verification during registration.
+    OTPs expire after 10 minutes and are deleted after verification.
+    """
+    email = models.EmailField(db_index=True)
+    otp_code = models.CharField(max_length=6)
+    is_verified = models.BooleanField(default=False)
+    attempts = models.IntegerField(default=0, help_text='Number of verification attempts')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Email OTP"
+        verbose_name_plural = "Email OTPs"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email', 'otp_code']),
+            models.Index(fields=['email', 'is_verified']),
+        ]
+
+    def __str__(self):
+        return f"OTP for {self.email} - {'Verified' if self.is_verified else 'Pending'}"
+
+    def is_expired(self):
+        """Check if OTP has expired"""
+        return timezone.now() > self.expires_at
+
+    def is_valid(self):
+        """Check if OTP is still valid (not expired and not too many attempts)"""
+        if self.is_expired():
+            return False, "OTP has expired. Please request a new one."
+        if self.attempts >= 5:
+            return False, "Too many verification attempts. Please request a new OTP."
+        if self.is_verified:
+            return False, "OTP has already been verified."
+        return True, "Valid"
+
+    @classmethod
+    def generate_otp(cls, email):
+        """Generate a new OTP for the given email"""
+        import random
+        from datetime import timedelta
+
+        # Delete any existing unverified OTPs for this email
+        cls.objects.filter(email=email.lower(), is_verified=False).delete()
+
+        # Generate 6-digit OTP
+        otp_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+        # Create new OTP record (expires in 10 minutes)
+        otp = cls.objects.create(
+            email=email.lower(),
+            otp_code=otp_code,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        return otp
+
+    @classmethod
+    def verify_otp(cls, email, otp_code):
+        """Verify OTP for the given email"""
+        try:
+            otp = cls.objects.get(
+                email=email.lower(),
+                is_verified=False
+            )
+
+            # Check if valid
+            is_valid, message = otp.is_valid()
+            if not is_valid:
+                return False, message
+
+            # Increment attempt counter
+            otp.attempts += 1
+            otp.save()
+
+            # Check OTP code
+            if otp.otp_code != otp_code:
+                remaining = 5 - otp.attempts
+                if remaining > 0:
+                    return False, f"Invalid OTP. {remaining} attempts remaining."
+                else:
+                    return False, "Too many failed attempts. Please request a new OTP."
+
+            # Mark as verified
+            otp.is_verified = True
+            otp.verified_at = timezone.now()
+            otp.save()
+
+            return True, "Email verified successfully!"
+
+        except cls.DoesNotExist:
+            return False, "No OTP found for this email. Please request a new one."
+
+    @classmethod
+    def is_email_verified(cls, email):
+        """Check if email has been verified recently (within last 30 minutes)"""
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(minutes=30)
+        return cls.objects.filter(
+            email=email.lower(),
+            is_verified=True,
+            verified_at__gte=cutoff
+        ).exists()
+
+    @classmethod
+    def cleanup_expired(cls):
+        """Delete expired and old OTPs (older than 1 hour)"""
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(hours=1)
+        cls.objects.filter(created_at__lt=cutoff).delete()
