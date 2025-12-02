@@ -10,6 +10,7 @@ import './theme.css';
 import './App.css';
 
 // Lazy load heavy components for faster initial load and smaller bundles
+const LandingPage = lazy(() => import('./components/LandingPage'));
 const Login = lazy(() => import('./components/Login'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard'));
@@ -37,12 +38,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(true);
+  const [showSignup, setShowSignup] = useState(false);
 
   // Check for existing authentication on mount
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (token) {
       checkUserStatus(token);
+      setShowLanding(false); // Skip landing if already logged in
     } else {
       setLoading(false);
     }
@@ -101,12 +105,31 @@ function App() {
     setIsAuthenticated(false);
     setIsSuperAdmin(false);
     setUser(null);
+    setShowLanding(true); // Show landing page after logout
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('current_org_id');
     // Clear onboarding state so next user sees wizard from start
     localStorage.removeItem('onboarding_wizard_seen');
     localStorage.removeItem('onboarding_completed');
+  };
+
+  // Navigate from landing to login
+  const handleNavigateToLogin = () => {
+    setShowLanding(false);
+    setShowSignup(false);
+  };
+
+  // Navigate from landing to signup
+  const handleNavigateToSignup = () => {
+    setShowLanding(false);
+    setShowSignup(true);
+  };
+
+  // Navigate back to landing
+  const handleBackToLanding = () => {
+    setShowLanding(true);
+    setShowSignup(false);
   };
 
   if (loading) {
@@ -123,8 +146,18 @@ function App() {
       <ToastProvider>
         <Suspense fallback={<LoadingFallback />}>
           <div className="App">
-            {!isAuthenticated ? (
-              <Login onLogin={handleLogin} />
+            {/* Show Landing Page first for non-authenticated users */}
+            {!isAuthenticated && showLanding ? (
+              <LandingPage
+                onNavigateToLogin={handleNavigateToLogin}
+                onNavigateToSignup={handleNavigateToSignup}
+              />
+            ) : !isAuthenticated ? (
+              <Login
+                onLogin={handleLogin}
+                initialMode={showSignup ? 'register' : 'login'}
+                onBackToLanding={handleBackToLanding}
+              />
             ) : isSuperAdmin ? (
               <SuperAdminDashboard onLogout={handleLogout} />
             ) : (

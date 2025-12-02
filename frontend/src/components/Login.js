@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 import './Login.css';
 
-const Login = ({ onLogin }) => {
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
+  const [isRegisterMode, setIsRegisterMode] = useState(initialMode === 'register');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -294,6 +294,16 @@ const Login = ({ onLogin }) => {
       {/* Right Panel - Login Form */}
       <div className="login-form-panel">
         <div className="login-card">
+          {/* Back to Home button - visible when onBackToLanding is provided */}
+          {onBackToLanding && (
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="back-to-home-btn"
+            >
+              ← Back to Home
+            </button>
+          )}
           {isRegisterMode && (
             <button
               type="button"

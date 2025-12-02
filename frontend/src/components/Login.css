@@ -25,32 +25,7 @@
   overflow: hidden;
 }
 
-/* Animated Background Pattern */
-.login-features-panel::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    rgba(255, 255, 255, 0.03) 10px,
-    rgba(255, 255, 255, 0.03) 20px
-  );
-  animation: slidePattern 20s linear infinite;
-}
-
-@keyframes slidePattern {
-  0% {
-    transform: translate(0, 0);
-  }
-  100% {
-    transform: translate(50px, 50px);
-  }
-}
+/* Background Pattern - Removed for clean look */
 
 .features-content {
   position: relative;
@@ -530,6 +505,32 @@
   font-size: 13px;
   color: #6b7280;
   font-weight: 500;
+}
+
+/* ========================================
+   BACK TO HOME BUTTON
+   ======================================== */
+.back-to-home-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 2px solid var(--gray-200);
+  color: var(--gray-600);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+}
+
+.back-to-home-btn:hover {
+  color: var(--primary-600);
+  border-color: var(--primary-400);
+  background: rgba(99, 102, 241, 0.05);
+  transform: translateX(-4px);
 }
 
 /* ========================================
