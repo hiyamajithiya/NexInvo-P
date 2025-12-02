@@ -2647,16 +2647,17 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Superadmins see all plans
-        if self.request.user.is_superuser:
+        if self.request.user.is_authenticated and self.request.user.is_superuser:
             return SubscriptionPlan.objects.all()
-        # Other users see only active and visible plans
+        # Public/other users see only active and visible plans
         return SubscriptionPlan.objects.filter(is_active=True, is_visible=True)
 
     def get_permissions(self):
-        # Only superadmins can create, update, delete
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return [IsAuthenticated()]
-        return super().get_permissions()
+        # Allow public access to list and retrieve (for landing page)
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        # Only authenticated users for other actions
+        return [IsAuthenticated()]
 
     def create(self, request, *args, **kwargs):
         if not request.user.is_superuser:
