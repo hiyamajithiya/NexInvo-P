@@ -296,60 +296,15 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               </div>
             ))
           ) : (
-            // Fallback to default plans if API fails
-            <>
-              <div className="pricing-card">
-                <h3 className="pricing-name">Free</h3>
-                <div className="pricing-price">
-                  <span className="price-amount">₹0</span>
-                  <span className="price-period">/month</span>
-                </div>
-                <ul className="pricing-features">
-                  <li>Up to 10 invoices/month</li>
-                  <li>1 User</li>
-                  <li>Basic Reports</li>
-                  <li>Email Support</li>
-                </ul>
-                <button className="btn-pricing" onClick={onNavigateToSignup}>
-                  Get Started
-                </button>
-              </div>
-              <div className="pricing-card featured">
-                <div className="pricing-badge">POPULAR</div>
-                <h3 className="pricing-name">Professional</h3>
-                <div className="pricing-price">
-                  <span className="price-amount">₹499</span>
-                  <span className="price-period">/month</span>
-                </div>
-                <ul className="pricing-features">
-                  <li>Unlimited Invoices</li>
-                  <li>Up to 5 Users</li>
-                  <li>Advanced Reports</li>
-                  <li>Priority Support</li>
-                  <li>Custom Branding</li>
-                </ul>
-                <button className="btn-pricing featured" onClick={onNavigateToSignup}>
-                  Start Free Trial
-                </button>
-              </div>
-              <div className="pricing-card">
-                <h3 className="pricing-name">Enterprise</h3>
-                <div className="pricing-price">
-                  <span className="price-amount">₹999</span>
-                  <span className="price-period">/month</span>
-                </div>
-                <ul className="pricing-features">
-                  <li>Everything in Pro</li>
-                  <li>Unlimited Users</li>
-                  <li>API Access</li>
-                  <li>Dedicated Support</li>
-                  <li>Custom Integrations</li>
-                </ul>
-                <button className="btn-pricing" onClick={onNavigateToSignup}>
-                  Contact Sales
-                </button>
-              </div>
-            </>
+            // Show message when no plans are available
+            <div className="pricing-empty">
+              <div className="pricing-empty-icon">📋</div>
+              <h3>Pricing Plans Coming Soon</h3>
+              <p>We're preparing our subscription plans. Sign up now to get notified when they're available!</p>
+              <button className="btn-pricing featured" onClick={onNavigateToSignup}>
+                Sign Up for Updates
+              </button>
+            </div>
           )}
         </div>
       </section>
