@@ -191,9 +191,9 @@ function Settings() {
           ...companyInfo,
           logo: resizedImage
         });
-        setSuccess('Logo uploaded and optimized successfully');
+        showSuccess('Logo uploaded and optimized successfully');
       } catch (err) {
-        setError('Failed to process image. Please try again.');
+        showError('Failed to process image. Please try again.');
         console.error('Logo resize error:', err);
       }
     }
