@@ -108,15 +108,15 @@ grpcio-status==1.71.2
 # Calendar & Scheduling
 icalendar==6.3.2
 
-# Desktop GUI (Windows)
-pywin32==311
-pypiwin32==223
-pywin32-ctypes==0.2.3
-tkcalendar==1.6.1
-tkinterdnd2==0.4.3
-ttkbootstrap==1.18.1
-plyer==2.1.0
-win10toast==0.9
+# Desktop GUI (Windows-only - DO NOT install on Linux servers)
+# pywin32==311
+# pypiwin32==223
+# pywin32-ctypes==0.2.3
+# tkcalendar==1.6.1
+# tkinterdnd2==0.4.3
+# ttkbootstrap==1.18.1
+# plyer==2.1.0
+# win10toast==0.9
 
 # Additional Dependencies
 asgiref==3.10.0
