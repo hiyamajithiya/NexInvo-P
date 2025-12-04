@@ -47,16 +47,17 @@
 }
 
 .brand-icon {
-  font-size: 48px;
   width: 72px;
   height: 72px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow-md);
+}
+
+.brand-icon svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
 }
 
 .brand-name {
@@ -172,23 +173,108 @@
    RIGHT PANEL - LOGIN FORM
    ======================================== */
 .login-form-panel {
-  flex: 0 0 420px;
+  flex: 0 0 460px;
   background: var(--white);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px 35px;
+  padding: 0;
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
+  position: relative;
 }
 
+/* Form Panel Navigation */
+.form-panel-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid var(--gray-100);
+  background: var(--white);
+  min-height: 70px;
+}
+
+.nav-logo-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-base);
+  text-decoration: none;
+}
+
+.nav-logo-link:hover {
+  background: var(--gray-50);
+}
+
+.nav-logo-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.nav-logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.back-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 2px solid var(--gray-200);
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+}
+
+.back-step-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.back-step-btn:hover {
+  color: var(--primary-600);
+  border-color: var(--primary-400);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+/* Login Card Container */
 .login-card {
   width: 100%;
   max-width: 380px;
-  animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  margin: 0 auto;
+  padding: 30px 40px 40px;
+  animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   z-index: 20;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideInRight {
@@ -413,7 +499,14 @@
 
   .login-form-panel {
     flex: 0 0 auto;
-    padding: 40px 30px;
+  }
+
+  .form-panel-nav {
+    padding: 16px 24px;
+  }
+
+  .login-card {
+    padding: 24px 30px 30px;
   }
 }
 
@@ -429,15 +522,32 @@
   .brand-icon {
     width: 60px;
     height: 60px;
-    font-size: 36px;
   }
 
-  .login-form-panel {
-    padding: 30px 20px;
+  .brand-icon svg {
+    width: 60px;
+    height: 60px;
+  }
+
+  .form-panel-nav {
+    padding: 14px 20px;
+  }
+
+  .nav-logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .nav-logo-text {
+    font-size: 16px;
+  }
+
+  .login-card {
+    padding: 20px 24px 30px;
   }
 
   .login-title {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .form-row {
@@ -507,54 +617,7 @@
   font-weight: 500;
 }
 
-/* ========================================
-   BACK TO HOME BUTTON
-   ======================================== */
-.back-to-home-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 2px solid var(--gray-200);
-  color: var(--gray-600);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 8px 14px;
-  margin-bottom: 16px;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
-}
-
-.back-to-home-btn:hover {
-  color: var(--primary-600);
-  border-color: var(--primary-400);
-  background: rgba(99, 102, 241, 0.05);
-  transform: translateX(-4px);
-}
-
-/* ========================================
-   BACK TO SIGN IN BUTTON
-   ======================================== */
-.back-to-login-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  color: var(--primary-600);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 8px 0;
-  margin-bottom: 8px;
-  transition: all var(--transition-base);
-}
-
-.back-to-login-btn:hover {
-  color: var(--primary-700);
-  transform: translateX(-4px);
-}
+/* Old back button styles removed - now using form-panel-nav */
 
 /* ========================================
    CONSENT CHECKBOX STYLES

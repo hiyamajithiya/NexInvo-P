@@ -229,7 +229,15 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         <div className="features-content">
           <div className="features-header">
             <div className="brand-logo">
-              <div className="brand-icon">📊</div>
+              <div className="brand-icon">
+                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="48" height="48" rx="12" fill="rgba(255,255,255,0.2)"/>
+                  <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
+                  <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
+                  <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
+                  <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
+                </svg>
+              </div>
               <h1 className="brand-name">NexInvo</h1>
             </div>
             <p className="brand-tagline">Modern Invoice Management for Growing Businesses</p>
@@ -293,26 +301,42 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
       {/* Right Panel - Login Form */}
       <div className="login-form-panel">
-        <div className="login-card">
-          {/* Back to Home button - visible when onBackToLanding is provided */}
+        {/* Top Navigation Bar */}
+        <div className="form-panel-nav">
           {onBackToLanding && (
-            <button
-              type="button"
-              onClick={onBackToLanding}
-              className="back-to-home-btn"
-            >
-              ← Back to Home
+            <button type="button" onClick={onBackToLanding} className="nav-logo-link">
+              <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="nav-logo-icon">
+                <rect width="48" height="48" rx="12" fill="url(#form-nav-gradient)"/>
+                <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
+                <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
+                <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
+                <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
+                <defs>
+                  <linearGradient id="form-nav-gradient" x1="0" y1="0" x2="48" y2="48">
+                    <stop stopColor="#6366f1"/>
+                    <stop offset="0.5" stopColor="#7c3aed"/>
+                    <stop offset="1" stopColor="#8b5cf6"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span className="nav-logo-text">NexInvo</span>
             </button>
           )}
-          {isRegisterMode && (
+          {isRegisterMode && registrationStep > 1 && (
             <button
               type="button"
-              onClick={registrationStep > 1 ? handleBackStep : toggleMode}
-              className="back-to-login-btn"
+              onClick={handleBackStep}
+              className="back-step-btn"
             >
-              ← {registrationStep > 1 ? 'Back' : 'Back to Sign In'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Back
             </button>
           )}
+        </div>
+
+        <div className="login-card">
           <div className="login-header">
             <h2 className="login-title">{getStepTitle()}</h2>
             <p className="login-subtitle">{getStepDescription()}</p>
