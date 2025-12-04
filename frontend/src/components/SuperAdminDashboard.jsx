@@ -2215,15 +2215,6 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     <div className="user-dropdown-name">Super Admin</div>
                   </div>
                   <button
-                    className="user-dropdown-item"
-                    onClick={() => {
-                      setActiveMenu('settings');
-                      setShowUserDropdown(false);
-                    }}
-                  >
-                    <span>⚙️</span> Settings
-                  </button>
-                  <button
                     className="user-dropdown-item logout"
                     onClick={onLogout}
                   >

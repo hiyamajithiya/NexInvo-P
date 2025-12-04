@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -12,14 +12,17 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Tooltip,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
   KeyboardArrowDown as ArrowDownIcon,
   Add as AddIcon,
   Check as CheckIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import { useOrganization } from '../contexts/OrganizationContext';
+import { organizationAPI } from '../services/api';
 
 const OrganizationSwitcher = () => {
   const {
@@ -36,6 +39,24 @@ const OrganizationSwitcher = () => {
   const [newOrgSlug, setNewOrgSlug] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [orgLimits, setOrgLimits] = useState(null);
+  const [loadingLimits, setLoadingLimits] = useState(false);
+
+  // Load organization limits
+  useEffect(() => {
+    const loadLimits = async () => {
+      setLoadingLimits(true);
+      try {
+        const response = await organizationAPI.getLimits();
+        setOrgLimits(response.data);
+      } catch (error) {
+        console.error('Failed to load organization limits:', error);
+      } finally {
+        setLoadingLimits(false);
+      }
+    };
+    loadLimits();
+  }, [organizations.length]); // Reload when organizations change
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);
@@ -168,10 +189,42 @@ const OrganizationSwitcher = () => {
 
         <Divider sx={{ my: 1 }} />
 
-        <MenuItem onClick={handleCreateDialogOpen}>
-          <AddIcon fontSize="small" sx={{ mr: 1 }} />
-          Create New Organization
-        </MenuItem>
+        {/* Organization limit info */}
+        {orgLimits && orgLimits.is_owner && orgLimits.max_allowed !== -1 && (
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Organizations: {orgLimits.current_count} / {orgLimits.max_allowed}
+            </Typography>
+          </Box>
+        )}
+
+        {orgLimits?.can_create ? (
+          <MenuItem onClick={handleCreateDialogOpen}>
+            <AddIcon fontSize="small" sx={{ mr: 1 }} />
+            Create New Organization
+          </MenuItem>
+        ) : orgLimits?.is_owner ? (
+          <Tooltip title={`Organization limit reached (${orgLimits?.current_count}/${orgLimits?.max_allowed}). Upgrade your plan to create more.`}>
+            <Box>
+              <MenuItem disabled sx={{ opacity: 0.6 }}>
+                <LockIcon fontSize="small" sx={{ mr: 1, color: 'text.disabled' }} />
+                <Box>
+                  <Typography variant="body2" color="text.disabled">Create New Organization</Typography>
+                  <Typography variant="caption" color="error">Limit reached - Upgrade plan</Typography>
+                </Box>
+              </MenuItem>
+            </Box>
+          </Tooltip>
+        ) : (
+          <Tooltip title="Only organization owners can create new organizations">
+            <Box>
+              <MenuItem disabled sx={{ opacity: 0.6 }}>
+                <LockIcon fontSize="small" sx={{ mr: 1, color: 'text.disabled' }} />
+                <Typography variant="body2" color="text.disabled">Create New Organization</Typography>
+              </MenuItem>
+            </Box>
+          </Tooltip>
+        )}
       </Menu>
 
       {/* Create Organization Dialog */}

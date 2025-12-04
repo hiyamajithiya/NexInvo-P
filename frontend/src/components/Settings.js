@@ -131,7 +131,44 @@ function Settings() {
     });
   };
 
-  const handleLogoUpload = (event) => {
+  // Resize image to optimal dimensions for logo
+  const resizeImage = (file, maxWidth = 300, maxHeight = 150) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+
+        // Calculate new dimensions maintaining aspect ratio
+        if (width > maxWidth || height > maxHeight) {
+          const widthRatio = maxWidth / width;
+          const heightRatio = maxHeight / height;
+          const ratio = Math.min(widthRatio, heightRatio);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        // Create canvas and draw resized image
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Use high-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to base64 (use PNG for logos to preserve transparency)
+        const resizedBase64 = canvas.toDataURL('image/png', 0.9);
+        resolve(resizedBase64);
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
       // Validate file type
@@ -140,22 +177,25 @@ function Settings() {
         return;
       }
 
-      // Validate file size (max 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        setError('Logo file size should be less than 2MB');
+      // Validate file size (max 5MB for original, will be resized)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Logo file size should be less than 5MB');
         return;
       }
 
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result);
+      try {
+        // Resize image to optimal dimensions (max 300x150 for logos)
+        const resizedImage = await resizeImage(file, 300, 150);
+        setLogoPreview(resizedImage);
         setCompanyInfo({
           ...companyInfo,
-          logo: reader.result
+          logo: resizedImage
         });
-      };
-      reader.readAsDataURL(file);
+        setSuccess('Logo uploaded and optimized successfully');
+      } catch (err) {
+        setError('Failed to process image. Please try again.');
+        console.error('Logo resize error:', err);
+      }
     }
   };
 

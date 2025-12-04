@@ -88,11 +88,13 @@ class OrganizationMembership(models.Model):
     """
     Links users to organizations with roles.
     A user can belong to multiple organizations.
+    Viewers can only view data (read-only access) - useful for shared accountants/CAs.
     """
     ROLE_CHOICES = [
         ('owner', 'Owner'),
         ('admin', 'Admin'),
         ('user', 'User'),
+        ('viewer', 'Viewer'),  # Read-only access for shared accountants/CAs
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='memberships')
@@ -640,6 +642,7 @@ class SubscriptionPlan(models.Model):
 
     # Feature Limits
     max_users = models.IntegerField(default=1, help_text="Maximum users allowed")
+    max_organizations = models.IntegerField(default=1, help_text="Maximum organizations allowed")
     max_invoices_per_month = models.IntegerField(default=100, help_text="Maximum invoices per month")
     max_storage_gb = models.IntegerField(default=1, help_text="Maximum storage in GB")
 

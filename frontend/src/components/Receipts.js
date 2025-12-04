@@ -16,6 +16,10 @@ function Receipts() {
   const [dateFilter, setDateFilter] = useState('');
   const [error, setError] = useState('');
 
+  // Multi-select states
+  const [selectedReceipts, setSelectedReceipts] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
   const [currentReceipt, setCurrentReceipt] = useState({
     invoice: '',
     payment_date: new Date().toISOString().split('T')[0],
@@ -188,6 +192,142 @@ function Receipts() {
         setError('Failed to delete receipt');
       }
     }
+  };
+
+  // Multi-select handlers
+  const handleSelectReceipt = (receiptId) => {
+    setSelectedReceipts(prev => {
+      if (prev.includes(receiptId)) {
+        return prev.filter(id => id !== receiptId);
+      } else {
+        return [...prev, receiptId];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedReceipts.length === filteredReceipts.length) {
+      setSelectedReceipts([]);
+    } else {
+      setSelectedReceipts(filteredReceipts.map(r => r.id));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedReceipts([]);
+  };
+
+  // Bulk action handlers
+  const handleBulkEmail = async () => {
+    if (selectedReceipts.length === 0) return;
+
+    // Only receipts with receipt_id can be emailed
+    const emailableReceipts = filteredReceipts.filter(
+      r => selectedReceipts.includes(r.id) && r.receipt_id
+    );
+
+    if (emailableReceipts.length === 0) {
+      alert('No receipts available to email. Only receipts with generated PDFs can be emailed.');
+      return;
+    }
+
+    if (!window.confirm(`Send email for ${emailableReceipts.length} receipt(s)?`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const receipt of emailableReceipts) {
+      try {
+        await receiptAPI.resendEmail(receipt.receipt_id);
+        successCount++;
+      } catch (err) {
+        console.error(`Error sending email for receipt ${receipt.receipt_id}:`, err);
+        failedCount++;
+      }
+    }
+
+    setBulkActionLoading(false);
+    alert(`Email sent: ${successCount} successful${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
+    clearSelection();
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedReceipts.length === 0) return;
+
+    // Only receipts with receipt_id can be downloaded
+    const downloadableReceipts = filteredReceipts.filter(
+      r => selectedReceipts.includes(r.id) && r.receipt_id
+    );
+
+    if (downloadableReceipts.length === 0) {
+      alert('No receipts available to download. Only receipts with generated PDFs can be downloaded.');
+      return;
+    }
+
+    setBulkActionLoading(true);
+
+    for (const receipt of downloadableReceipts) {
+      try {
+        const response = await receiptAPI.download(receipt.receipt_id);
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `receipt-${receipt.receipt_id}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        // Small delay between downloads
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (err) {
+        console.error(`Error downloading receipt ${receipt.receipt_id}:`, err);
+      }
+    }
+
+    setBulkActionLoading(false);
+    alert(`Downloaded ${downloadableReceipts.length} receipt(s)`);
+    clearSelection();
+  };
+
+  const handleBulkPrint = async () => {
+    if (selectedReceipts.length === 0) return;
+
+    // Only receipts with receipt_id can be printed
+    const printableReceipts = filteredReceipts.filter(
+      r => selectedReceipts.includes(r.id) && r.receipt_id
+    );
+
+    if (printableReceipts.length === 0) {
+      alert('No receipts available to print. Only receipts with generated PDFs can be printed.');
+      return;
+    }
+
+    setBulkActionLoading(true);
+
+    for (const receipt of printableReceipts) {
+      try {
+        const response = await receiptAPI.download(receipt.receipt_id);
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const printWindow = window.open(url, '_blank');
+        if (printWindow) {
+          printWindow.onload = () => {
+            printWindow.print();
+          };
+        }
+        // Small delay between opening windows
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        console.error(`Error printing receipt ${receipt.receipt_id}:`, err);
+      }
+    }
+
+    setBulkActionLoading(false);
+    clearSelection();
   };
 
   const filteredReceipts = receipts
@@ -387,6 +527,104 @@ function Receipts() {
             </div>
           </div>
 
+          {/* Bulk Action Bar */}
+          {selectedReceipts.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 20px',
+              marginBottom: '16px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              borderRadius: '12px',
+              color: 'white',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontWeight: '600', fontSize: '15px' }}>
+                  {selectedReceipts.length} receipt{selectedReceipts.length > 1 ? 's' : ''} selected
+                </span>
+                <button
+                  onClick={clearSelection}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    color: 'white',
+                    padding: '4px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                  }}
+                >
+                  Clear Selection
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={handleBulkEmail}
+                  disabled={bulkActionLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    color: '#6366f1',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    opacity: bulkActionLoading ? 0.7 : 1,
+                  }}
+                >
+                  <span>📧</span> Send Email
+                </button>
+                <button
+                  onClick={handleBulkDownload}
+                  disabled={bulkActionLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    color: '#6366f1',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    opacity: bulkActionLoading ? 0.7 : 1,
+                  }}
+                >
+                  <span>📥</span> Download
+                </button>
+                <button
+                  onClick={handleBulkPrint}
+                  disabled={bulkActionLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    color: '#6366f1',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    opacity: bulkActionLoading ? 0.7 : 1,
+                  }}
+                >
+                  <span>🖨️</span> Print
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="content-card">
             {filteredReceipts.length === 0 ? (
               <div className="empty-state-large">
@@ -403,6 +641,20 @@ function Receipts() {
                 <table>
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedReceipts.length === filteredReceipts.length && filteredReceipts.length > 0}
+                          onChange={handleSelectAll}
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            accentColor: '#6366f1',
+                          }}
+                          title={selectedReceipts.length === filteredReceipts.length ? 'Deselect All' : 'Select All'}
+                        />
+                      </th>
                       <th>ID</th>
                       <th>Invoice No</th>
                       <th>Client</th>
@@ -418,7 +670,26 @@ function Receipts() {
                   </thead>
                   <tbody>
                     {filteredReceipts.map((receipt) => (
-                      <tr key={receipt.id}>
+                      <tr
+                        key={receipt.id}
+                        style={{
+                          backgroundColor: selectedReceipts.includes(receipt.id) ? '#f0f4ff' : 'transparent',
+                          transition: 'background-color 0.2s ease',
+                        }}
+                      >
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedReceipts.includes(receipt.id)}
+                            onChange={() => handleSelectReceipt(receipt.id)}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              cursor: 'pointer',
+                              accentColor: '#6366f1',
+                            }}
+                          />
+                        </td>
                         <td><strong>#{receipt.id}</strong></td>
                         <td>{receipt.invoice_number}</td>
                         <td>{receipt.client_name}</td>

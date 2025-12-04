@@ -5,22 +5,12 @@ import {
   Paper,
   Typography,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Chip,
   Switch,
   FormControlLabel,
@@ -31,6 +21,13 @@ import {
   Autocomplete,
   Checkbox,
   FormGroup,
+  InputAdornment,
+  Tooltip,
+  LinearProgress,
+  Tabs,
+  Tab,
+  Divider,
+  Avatar,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -40,6 +37,17 @@ import {
   Block as BlockIcon,
   LocalOffer as LocalOfferIcon,
   CalendarToday as CalendarIcon,
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  ContentCopy as CopyIcon,
+  TrendingUp as TrendingUpIcon,
+  Schedule as ScheduleIcon,
+  People as PeopleIcon,
+  Percent as PercentIcon,
+  CurrencyRupee as RupeeIcon,
+  EventAvailable as EventAvailableIcon,
+  Visibility as VisibilityIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -52,11 +60,13 @@ const CouponManagement = () => {
   const [editMode, setEditMode] = useState(false);
   const [currentCoupon, setCurrentCoupon] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
     description: '',
-    discount_types: ['percentage'], // Now supports multiple discount types
+    discount_types: [],
     discount_percentage: '',
     discount_fixed: '',
     discount_days: '',
@@ -106,14 +116,12 @@ const CouponManagement = () => {
       setEditMode(true);
       setCurrentCoupon(coupon);
 
-      // Format dates for datetime-local input
       const formatDate = (dateStr) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
         return date.toISOString().slice(0, 16);
       };
 
-      // Parse discount types from coupon data
       const discountTypes = coupon.discount_types || [coupon.discount_type];
 
       setFormData({
@@ -135,7 +143,6 @@ const CouponManagement = () => {
       setEditMode(false);
       setCurrentCoupon(null);
 
-      // Set default dates (today and 30 days from now)
       const now = new Date();
       const future = new Date();
       future.setDate(future.getDate() + 30);
@@ -179,13 +186,10 @@ const CouponManagement = () => {
       let newTypes;
 
       if (currentTypes.includes(discountType)) {
-        // Remove if already selected
         newTypes = currentTypes.filter(t => t !== discountType);
       } else if (currentTypes.length < 2) {
-        // Add if less than 2 selected
         newTypes = [...currentTypes, discountType];
       } else {
-        // Already 2 selected, don't add more
         return prev;
       }
 
@@ -200,13 +204,11 @@ const CouponManagement = () => {
     try {
       const token = localStorage.getItem('access_token');
 
-      // Validate at least one discount type is selected
       if (!formData.discount_types || formData.discount_types.length === 0) {
         showSnackbar('Please select at least one discount type', 'error');
         return;
       }
 
-      // Convert dates to ISO format
       const payload = {
         code: formData.code.toUpperCase(),
         name: formData.name,
@@ -284,6 +286,11 @@ const CouponManagement = () => {
     }
   };
 
+  const copyToClipboard = (code) => {
+    navigator.clipboard.writeText(code);
+    showSnackbar('Coupon code copied!', 'success');
+  };
+
   const showSnackbar = (message, severity) => {
     setSnackbar({ open: true, message, severity });
   };
@@ -297,15 +304,15 @@ const CouponManagement = () => {
     const discountTypes = coupon.discount_types || [coupon.discount_type];
 
     if (discountTypes.includes('percentage') && coupon.discount_percentage) {
-      discountParts.push(`${coupon.discount_percentage}% OFF`);
+      discountParts.push(`${coupon.discount_percentage}%`);
     } else if (coupon.discount_type === 'percentage' && coupon.discount_value) {
-      discountParts.push(`${coupon.discount_value}% OFF`);
+      discountParts.push(`${coupon.discount_value}%`);
     }
 
     if (discountTypes.includes('fixed') && coupon.discount_fixed) {
-      discountParts.push(`₹${coupon.discount_fixed} OFF`);
+      discountParts.push(`₹${coupon.discount_fixed}`);
     } else if (coupon.discount_type === 'fixed' && coupon.discount_value) {
-      discountParts.push(`₹${coupon.discount_value} OFF`);
+      discountParts.push(`₹${coupon.discount_value}`);
     }
 
     if (discountTypes.includes('extended_period') && coupon.discount_days) {
@@ -322,262 +329,598 @@ const CouponManagement = () => {
     const validFrom = new Date(coupon.valid_from);
     const validUntil = new Date(coupon.valid_until);
 
-    if (now < validFrom) {
-      return { label: 'Upcoming', color: 'info' };
+    if (!coupon.is_active) {
+      return { label: 'Inactive', color: '#6b7280', bgColor: '#f3f4f6' };
+    } else if (now < validFrom) {
+      return { label: 'Upcoming', color: '#3b82f6', bgColor: '#dbeafe' };
     } else if (now > validUntil) {
-      return { label: 'Expired', color: 'error' };
+      return { label: 'Expired', color: '#ef4444', bgColor: '#fee2e2' };
     } else {
-      return { label: 'Active', color: 'success' };
+      return { label: 'Active', color: '#10b981', bgColor: '#d1fae5' };
     }
   };
+
+  const getUsagePercentage = (coupon) => {
+    if (!coupon.max_total_uses) return 0;
+    return Math.min(((coupon.current_usage_count || 0) / coupon.max_total_uses) * 100, 100);
+  };
+
+  const getDaysRemaining = (coupon) => {
+    const now = new Date();
+    const validUntil = new Date(coupon.valid_until);
+    const diff = Math.ceil((validUntil - now) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  // Filter coupons based on tab and search
+  const filteredCoupons = coupons.filter(coupon => {
+    const matchesSearch = coupon.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (coupon.name && coupon.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const status = getValidityStatus(coupon);
+
+    if (activeTab === 0) return matchesSearch; // All
+    if (activeTab === 1) return matchesSearch && status.label === 'Active'; // Active
+    if (activeTab === 2) return matchesSearch && status.label === 'Upcoming'; // Upcoming
+    if (activeTab === 3) return matchesSearch && (status.label === 'Expired' || status.label === 'Inactive'); // Expired/Inactive
+
+    return matchesSearch;
+  });
+
+  // Calculate stats
+  const activeCoupons = coupons.filter(c => {
+    const status = getValidityStatus(c);
+    return status.label === 'Active';
+  }).length;
+
+  const expiredCoupons = coupons.filter(c => {
+    const status = getValidityStatus(c);
+    return status.label === 'Expired' || status.label === 'Inactive';
+  }).length;
+
+  const totalRedemptions = coupons.reduce((sum, c) => sum + (c.current_usage_count || 0), 0);
 
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <CircularProgress />
+        <CircularProgress sx={{ color: '#6366f1' }} />
       </Box>
     );
   }
 
   return (
-    <Box>
-      {/* Header */}
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box sx={{ p: 3, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      {/* Header Section */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 4,
+          mb: 3,
+          borderRadius: 3,
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          color: 'white',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <Box sx={{ position: 'absolute', top: -50, right: -50, opacity: 0.1 }}>
+          <LocalOfferIcon sx={{ fontSize: 250 }} />
+        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, color: 'white' }}>
               Coupon Management
             </Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Create and manage discount coupons for subscription plans
+            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+              Create, manage, and track discount coupons for your subscription plans
             </Typography>
           </Box>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              color: '#ffffff',
+            }}
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               textTransform: 'none',
-              fontWeight: 'bold',
+              fontWeight: 700,
+              fontSize: '1rem',
+              px: 4,
+              py: 1.5,
+              borderRadius: 2,
+              border: '2px solid rgba(255,255,255,0.5)',
+              backdropFilter: 'blur(4px)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.3)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
+              },
+              transition: 'all 0.2s ease',
+              '& .MuiSvgIcon-root': {
+                color: '#ffffff',
+              },
             }}
           >
-            Create Coupon
+            Create New Coupon
           </Button>
         </Box>
       </Paper>
 
       {/* Statistics Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ bgcolor: 'rgba(139, 92, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #8b5cf6' }}>
-              <LocalOfferIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #fff 0%, #f8fafc 100%)',
+              transition: 'all 0.2s ease',
+              '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 24px rgba(0,0,0,0.08)' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: '#ede9fe', width: 56, height: 56 }}>
+                <LocalOfferIcon sx={{ fontSize: 28, color: '#8b5cf6' }} />
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', fontWeight: 500 }}>Total Coupons</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>{coupons.length}</Typography>
+              </Box>
             </Box>
-            <Box>
-              <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Total Coupons</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>{coupons.length}</Typography>
-            </Box>
-          </Box>
-        </Paper>
+          </Paper>
+        </Grid>
 
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #10b981' }}>
-              <CheckCircleIcon sx={{ fontSize: 28, color: '#10b981' }} />
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #fff 0%, #f0fdf4 100%)',
+              transition: 'all 0.2s ease',
+              '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 24px rgba(0,0,0,0.08)' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: '#d1fae5', width: 56, height: 56 }}>
+                <CheckCircleIcon sx={{ fontSize: 28, color: '#10b981' }} />
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', fontWeight: 500 }}>Active</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>{activeCoupons}</Typography>
+              </Box>
             </Box>
-            <Box>
-              <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Active Coupons</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>
-                {coupons.filter(c => c.is_active).length}
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
+          </Paper>
+        </Grid>
 
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ bgcolor: 'rgba(239, 68, 68, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #ef4444' }}>
-              <BlockIcon sx={{ fontSize: 28, color: '#ef4444' }} />
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #fff 0%, #fef2f2 100%)',
+              transition: 'all 0.2s ease',
+              '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 24px rgba(0,0,0,0.08)' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: '#fee2e2', width: 56, height: 56 }}>
+                <BlockIcon sx={{ fontSize: 28, color: '#ef4444' }} />
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', fontWeight: 500 }}>Expired/Inactive</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>{expiredCoupons}</Typography>
+              </Box>
             </Box>
-            <Box>
-              <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Expired</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>
-                {coupons.filter(c => new Date(c.valid_until) < new Date()).length}
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
+          </Paper>
+        </Grid>
 
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', borderRadius: 2, p: 1.5, border: '2px solid #3b82f6' }}>
-              <CalendarIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #fff 0%, #eff6ff 100%)',
+              transition: 'all 0.2s ease',
+              '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 24px rgba(0,0,0,0.08)' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: '#dbeafe', width: 56, height: 56 }}>
+                <TrendingUpIcon sx={{ fontSize: 28, color: '#3b82f6' }} />
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#6b7280', fontWeight: 500 }}>Total Redemptions</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>{totalRedemptions}</Typography>
+              </Box>
             </Box>
-            <Box>
-              <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Total Redemptions</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#111827' }}>
-                {coupons.reduce((sum, c) => sum + (c.current_usage_count || 0), 0)}
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
-      </div>
+          </Paper>
+        </Grid>
+      </Grid>
 
-      {/* Coupons Table */}
-      <Paper sx={{ p: 3, borderRadius: 3 }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Discount</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Applicable Plans</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Validity</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Usage</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {coupons.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} sx={{ textAlign: 'center', py: 6 }}>
-                    <Typography variant="body1" sx={{ color: '#6b7280', mb: 2 }}>
-                      No coupons created yet
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      startIcon={<AddIcon />}
-                      onClick={() => handleOpenDialog()}
-                    >
-                      Create Your First Coupon
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                coupons.map((coupon) => {
-                  const validityStatus = getValidityStatus(coupon);
-                  return (
-                    <TableRow key={coupon.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
-                      <TableCell>
-                        <Chip
-                          label={coupon.code}
-                          size="small"
-                          sx={{
-                            bgcolor: '#f3f4f6',
-                            fontWeight: 'bold',
-                            fontFamily: 'monospace',
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography sx={{ fontWeight: 600, color: '#111827' }}>
-                            {coupon.name || coupon.code}
+      {/* Search and Filter Section */}
+      <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid #e5e7eb' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Tabs
+            value={activeTab}
+            onChange={(e, v) => setActiveTab(v)}
+            sx={{
+              '& .MuiTab-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                minWidth: 100,
+              },
+              '& .Mui-selected': {
+                color: '#6366f1',
+              },
+              '& .MuiTabs-indicator': {
+                backgroundColor: '#6366f1',
+              },
+            }}
+          >
+            <Tab label={`All (${coupons.length})`} />
+            <Tab label={`Active (${activeCoupons})`} />
+            <Tab label={`Upcoming (${coupons.filter(c => getValidityStatus(c).label === 'Upcoming').length})`} />
+            <Tab label={`Expired (${expiredCoupons})`} />
+          </Tabs>
+
+          <TextField
+            placeholder="Search coupons..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            size="small"
+            sx={{
+              width: 280,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                '&:hover fieldset': { borderColor: '#6366f1' },
+                '&.Mui-focused fieldset': { borderColor: '#6366f1' },
+              },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: '#9ca3af' }} />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Coupons Grid */}
+      {filteredCoupons.length === 0 ? (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 6,
+            borderRadius: 3,
+            border: '2px dashed #e5e7eb',
+            textAlign: 'center',
+          }}
+        >
+          <LocalOfferIcon sx={{ fontSize: 64, color: '#d1d5db', mb: 2 }} />
+          <Typography variant="h6" sx={{ color: '#6b7280', mb: 1 }}>
+            {searchTerm ? 'No coupons found' : 'No coupons created yet'}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#9ca3af', mb: 3 }}>
+            {searchTerm ? 'Try a different search term' : 'Create your first coupon to start offering discounts'}
+          </Typography>
+          {!searchTerm && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon sx={{ color: 'white' }} />}
+              onClick={() => handleOpenDialog()}
+              sx={{
+                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                textTransform: 'none',
+                fontWeight: 700,
+                color: 'white',
+                px: 4,
+                py: 1.5,
+                borderRadius: 2,
+              }}
+            >
+              Create Your First Coupon
+            </Button>
+          )}
+        </Paper>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredCoupons.map((coupon) => {
+            const status = getValidityStatus(coupon);
+            const usagePercent = getUsagePercentage(coupon);
+            const daysRemaining = getDaysRemaining(coupon);
+
+            return (
+              <Grid item xs={12} sm={6} lg={4} key={coupon.id}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 0,
+                    borderRadius: 3,
+                    border: '1px solid #e5e7eb',
+                    overflow: 'hidden',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 12px 24px rgba(99, 102, 241, 0.15)',
+                      borderColor: '#6366f1',
+                    },
+                  }}
+                >
+                  {/* Card Header */}
+                  <Box
+                    sx={{
+                      p: 3,
+                      background: status.label === 'Active'
+                        ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+                        : status.label === 'Upcoming'
+                        ? 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)'
+                        : 'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)',
+                      color: 'white',
+                      position: 'relative',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                              letterSpacing: 1,
+                              color: 'white',
+                            }}
+                          >
+                            {coupon.code}
                           </Typography>
-                          {coupon.description && (
-                            <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                              {coupon.description.substring(0, 50)}
-                              {coupon.description.length > 50 ? '...' : ''}
-                            </Typography>
-                          )}
+                          <Tooltip title="Copy code">
+                            <IconButton
+                              size="small"
+                              onClick={() => copyToClipboard(coupon.code)}
+                              sx={{ color: 'rgba(255,255,255,0.8)', '&:hover': { color: 'white' } }}
+                            >
+                              <CopyIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={getDiscountDisplay(coupon)}
-                          size="small"
-                          sx={{
-                            bgcolor: coupon.discount_type === 'percentage' ? '#ddd6fe' :
-                                     coupon.discount_type === 'fixed' ? '#dbeafe' : '#d1fae5',
-                            color: coupon.discount_type === 'percentage' ? '#5b21b6' :
-                                   coupon.discount_type === 'fixed' ? '#1e40af' : '#065f46',
-                            fontWeight: 'bold',
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                          {coupon.applicable_plan_names?.join(', ') || 'All Plans'}
+                        <Typography variant="body2" sx={{ color: 'white', fontWeight: 500 }}>
+                          {coupon.name || 'Untitled Coupon'}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                            From: {new Date(coupon.valid_from).toLocaleDateString('en-IN')}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                            Until: {new Date(coupon.valid_until).toLocaleDateString('en-IN')}
-                          </Typography>
-                          <Chip
-                            label={validityStatus.label}
-                            size="small"
-                            color={validityStatus.color}
-                            sx={{ mt: 0.5 }}
-                          />
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>
-                            {coupon.current_usage_count || 0}
-                            {coupon.max_total_uses && ` / ${coupon.max_total_uses}`}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                            Max per user: {coupon.max_uses_per_user}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
+                      </Box>
+                      <Chip
+                        label={status.label}
+                        size="small"
+                        sx={{
+                          bgcolor: 'rgba(255,255,255,0.3)',
+                          color: 'white',
+                          fontWeight: 700,
+                          backdropFilter: 'blur(4px)',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                        }}
+                      />
+                    </Box>
+
+                    {/* Discount Display */}
+                    <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {(coupon.discount_types || [coupon.discount_type]).includes('percentage') &&
+                       (coupon.discount_percentage || coupon.discount_value) && (
                         <Chip
-                          label={coupon.is_active ? 'Active' : 'Inactive'}
+                          icon={<PercentIcon sx={{ fontSize: 16, color: 'white !important' }} />}
+                          label={`${coupon.discount_percentage || coupon.discount_value}% OFF`}
                           size="small"
-                          icon={coupon.is_active ? <CheckCircleIcon /> : <BlockIcon />}
                           sx={{
-                            bgcolor: coupon.is_active ? '#d1fae5' : '#fee2e2',
-                            color: coupon.is_active ? '#065f46' : '#991b1b',
-                            fontWeight: 'bold',
+                            bgcolor: 'rgba(0,0,0,0.2)',
+                            color: 'white',
+                            fontWeight: 700,
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            '& .MuiChip-icon': { color: 'white' },
                           }}
                         />
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+                      )}
+                      {(coupon.discount_types || [coupon.discount_type]).includes('fixed') &&
+                       (coupon.discount_fixed || (coupon.discount_type === 'fixed' && coupon.discount_value)) && (
+                        <Chip
+                          icon={<RupeeIcon sx={{ fontSize: 16, color: 'white !important' }} />}
+                          label={`₹${coupon.discount_fixed || coupon.discount_value} OFF`}
+                          size="small"
+                          sx={{
+                            bgcolor: 'rgba(0,0,0,0.2)',
+                            color: 'white',
+                            fontWeight: 700,
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            '& .MuiChip-icon': { color: 'white' },
+                          }}
+                        />
+                      )}
+                      {(coupon.discount_types || [coupon.discount_type]).includes('extended_period') &&
+                       (coupon.discount_days || (coupon.discount_type === 'extended_period' && coupon.discount_value)) && (
+                        <Chip
+                          icon={<EventAvailableIcon sx={{ fontSize: 16, color: 'white !important' }} />}
+                          label={`+${coupon.discount_days || coupon.discount_value} Days`}
+                          size="small"
+                          sx={{
+                            bgcolor: 'rgba(0,0,0,0.2)',
+                            color: 'white',
+                            fontWeight: 700,
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            '& .MuiChip-icon': { color: 'white' },
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+
+                  {/* Card Body */}
+                  <Box sx={{ p: 3 }}>
+                    {/* Description */}
+                    {coupon.description && (
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: '#4b5563',
+                          mb: 2,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {coupon.description}
+                      </Typography>
+                    )}
+
+                    {/* Applicable Plans */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Applicable Plans
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#1f2937', mt: 0.5, fontWeight: 500 }}>
+                        {coupon.applicable_plan_names?.length > 0
+                          ? coupon.applicable_plan_names.join(', ')
+                          : 'All Plans'}
+                      </Typography>
+                    </Box>
+
+                    {/* Usage Progress */}
+                    <Box sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Usage
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#374151', fontWeight: 700 }}>
+                          {coupon.current_usage_count || 0}
+                          {coupon.max_total_uses ? ` / ${coupon.max_total_uses}` : ' (Unlimited)'}
+                        </Typography>
+                      </Box>
+                      {coupon.max_total_uses && (
+                        <LinearProgress
+                          variant="determinate"
+                          value={usagePercent}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            bgcolor: '#e5e7eb',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              background: usagePercent >= 90
+                                ? 'linear-gradient(90deg, #ef4444, #f87171)'
+                                : usagePercent >= 70
+                                ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                                : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                            },
+                          }}
+                        />
+                      )}
+                    </Box>
+
+                    {/* Validity Info */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Valid From
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#1f2937', fontWeight: 600 }}>
+                          {new Date(coupon.valid_from).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                          Valid Until
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#1f2937', fontWeight: 600 }}>
+                          {new Date(coupon.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* Days Remaining Badge */}
+                    {status.label === 'Active' && (
+                      <Chip
+                        icon={<ScheduleIcon sx={{ fontSize: 16, color: 'white !important' }} />}
+                        label={daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Expires today'}
+                        size="small"
+                        sx={{
+                          bgcolor: daysRemaining <= 7 ? '#f59e0b' : '#6366f1',
+                          color: 'white',
+                          fontWeight: 700,
+                          mb: 2,
+                          '& .MuiChip-icon': { color: 'white !important' },
+                        }}
+                      />
+                    )}
+
+                    <Divider sx={{ my: 2 }} />
+
+                    {/* Action Buttons */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <PeopleIcon sx={{ fontSize: 16, color: '#6b7280' }} />
+                        <Typography variant="caption" sx={{ color: '#4b5563', fontWeight: 500 }}>
+                          Max {coupon.max_uses_per_user}/user
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Edit">
                           <IconButton
                             size="small"
                             onClick={() => handleOpenDialog(coupon)}
-                            sx={{ color: '#3b82f6' }}
+                            sx={{
+                              color: '#6366f1',
+                              '&:hover': { bgcolor: '#ede9fe' },
+                            }}
                           >
                             <EditIcon fontSize="small" />
                           </IconButton>
-                          {coupon.is_active && (
+                        </Tooltip>
+                        {coupon.is_active && status.label !== 'Expired' && (
+                          <Tooltip title="Deactivate">
                             <IconButton
                               size="small"
                               onClick={() => handleDeactivate(coupon.id)}
-                              sx={{ color: '#f59e0b' }}
-                              title="Deactivate"
+                              sx={{
+                                color: '#f59e0b',
+                                '&:hover': { bgcolor: '#fef3c7' },
+                              }}
                             >
                               <BlockIcon fontSize="small" />
                             </IconButton>
-                          )}
+                          </Tooltip>
+                        )}
+                        <Tooltip title="Delete">
                           <IconButton
                             size="small"
                             onClick={() => handleDelete(coupon.id)}
-                            sx={{ color: '#ef4444' }}
+                            sx={{
+                              color: '#ef4444',
+                              '&:hover': { bgcolor: '#fee2e2' },
+                            }}
                           >
                             <DeleteIcon fontSize="small" />
                           </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Paper>
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog
@@ -586,24 +929,37 @@ const CouponManagement = () => {
         maxWidth="lg"
         fullWidth
         PaperProps={{
-          sx: { borderRadius: 3 }
+          sx: { borderRadius: 3, overflow: 'hidden' }
         }}
       >
         <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
           color: 'white',
-          py: 3
+          py: 3,
+          px: 4,
         }}>
-          {editMode ? 'Edit Coupon' : 'Create New Coupon'}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>
+              <LocalOfferIcon sx={{ color: 'white' }} />
+            </Avatar>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
+                {editMode ? 'Edit Coupon' : 'Create New Coupon'}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                {editMode ? 'Update coupon details and settings' : 'Set up a new discount coupon for your customers'}
+              </Typography>
+            </Box>
+          </Box>
         </DialogTitle>
-        <DialogContent sx={{ p: 4 }}>
-          <Grid container spacing={4} sx={{ mt: 0.5 }}>
+        <DialogContent sx={{ p: 4, bgcolor: '#f8fafc' }}>
+          <Grid container spacing={4} sx={{ mt: 0 }}>
             {/* Left Column */}
             <Grid item xs={12} md={6}>
               {/* Basic Information Section */}
-              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f9fafb', borderRadius: 2, mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+              <Paper elevation={0} sx={{ p: 3, bgcolor: 'white', borderRadius: 3, mb: 3, border: '1px solid #e5e7eb' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 4, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
                   Basic Information
                 </Typography>
                 <Grid container spacing={2}>
@@ -615,10 +971,9 @@ const CouponManagement = () => {
                       value={formData.code}
                       onChange={handleInputChange}
                       required
-                      inputProps={{ style: { textTransform: 'uppercase' } }}
-                      placeholder="e.g., WELCOME20, SAVE50"
+                      inputProps={{ style: { textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 600 } }}
+                      placeholder="e.g., WELCOME20"
                       helperText="Unique code for users to redeem"
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -629,7 +984,6 @@ const CouponManagement = () => {
                       value={formData.name}
                       onChange={handleInputChange}
                       placeholder="e.g., Welcome Offer"
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -642,171 +996,191 @@ const CouponManagement = () => {
                       multiline
                       rows={3}
                       placeholder="Describe the coupon offer and its terms"
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                 </Grid>
               </Paper>
 
               {/* Discount Settings Section */}
-              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f0fdf4', borderRadius: 2, mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ width: 6, height: 24, bgcolor: '#10b981', borderRadius: 1, mr: 2 }} />
+              <Paper elevation={0} sx={{ p: 3, bgcolor: 'white', borderRadius: 3, mb: 3, border: '1px solid #e5e7eb' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 4, height: 24, bgcolor: '#10b981', borderRadius: 1, mr: 2 }} />
                   Discount Settings
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>
-                  Select one or two discount types to combine (e.g., percentage + extra days)
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 3 }}>
+                  Select one or two discount types to combine
                 </Typography>
-                <Grid container spacing={2}>
-                  {/* Discount Type Checkboxes */}
-                  <Grid item xs={12}>
-                    <Paper sx={{ p: 2, bgcolor: 'white', borderRadius: 2 }}>
-                      <FormGroup>
-                        {/* Percentage Discount Option */}
-                        <Box sx={{ mb: 2 }}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.discount_types?.includes('percentage') || false}
-                                onChange={() => handleDiscountTypeChange('percentage')}
-                                disabled={!formData.discount_types?.includes('percentage') && formData.discount_types?.length >= 2}
-                                sx={{ color: '#8b5cf6', '&.Mui-checked': { color: '#8b5cf6' } }}
-                              />
-                            }
-                            label={
-                              <Box>
-                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Percentage Discount (%)</Typography>
-                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Discount as a percentage of the plan price</Typography>
-                              </Box>
-                            }
-                          />
-                          {formData.discount_types?.includes('percentage') && (
-                            <TextField
-                              fullWidth
-                              size="small"
-                              label="Discount Percentage"
-                              name="discount_percentage"
-                              type="number"
-                              value={formData.discount_percentage}
-                              onChange={handleInputChange}
-                              placeholder="e.g., 20"
-                              InputProps={{
-                                endAdornment: <Typography sx={{ ml: 1, fontWeight: 'bold' }}>%</Typography>,
-                              }}
-                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
-                            />
-                          )}
-                        </Box>
-
-                        {/* Fixed Amount Option */}
-                        <Box sx={{ mb: 2 }}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.discount_types?.includes('fixed') || false}
-                                onChange={() => handleDiscountTypeChange('fixed')}
-                                disabled={!formData.discount_types?.includes('fixed') && formData.discount_types?.length >= 2}
-                                sx={{ color: '#3b82f6', '&.Mui-checked': { color: '#3b82f6' } }}
-                              />
-                            }
-                            label={
-                              <Box>
-                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Fixed Amount (₹)</Typography>
-                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Fixed rupee discount off the plan price</Typography>
-                              </Box>
-                            }
-                          />
-                          {formData.discount_types?.includes('fixed') && (
-                            <TextField
-                              fullWidth
-                              size="small"
-                              label="Discount Amount"
-                              name="discount_fixed"
-                              type="number"
-                              value={formData.discount_fixed}
-                              onChange={handleInputChange}
-                              placeholder="e.g., 500"
-                              InputProps={{
-                                startAdornment: <Typography sx={{ mr: 1, fontWeight: 'bold' }}>₹</Typography>,
-                              }}
-                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
-                            />
-                          )}
-                        </Box>
-
-                        {/* Extended Period Option */}
-                        <Box>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.discount_types?.includes('extended_period') || false}
-                                onChange={() => handleDiscountTypeChange('extended_period')}
-                                disabled={!formData.discount_types?.includes('extended_period') && formData.discount_types?.length >= 2}
-                                sx={{ color: '#10b981', '&.Mui-checked': { color: '#10b981' } }}
-                              />
-                            }
-                            label={
-                              <Box>
-                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Extended Period (Days)</Typography>
-                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Add extra days to the subscription</Typography>
-                              </Box>
-                            }
-                          />
-                          {formData.discount_types?.includes('extended_period') && (
-                            <TextField
-                              fullWidth
-                              size="small"
-                              label="Additional Days"
-                              name="discount_days"
-                              type="number"
-                              value={formData.discount_days}
-                              onChange={handleInputChange}
-                              placeholder="e.g., 30"
-                              InputProps={{
-                                endAdornment: <Typography sx={{ ml: 1, fontWeight: 'bold' }}>days</Typography>,
-                              }}
-                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
-                            />
-                          )}
-                        </Box>
-                      </FormGroup>
-                      {formData.discount_types?.length >= 2 && (
-                        <Alert severity="info" sx={{ mt: 2 }}>
-                          Maximum 2 discount types can be selected. Uncheck one to select a different type.
-                        </Alert>
-                      )}
-                    </Paper>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Autocomplete
-                      multiple
-                      options={plans}
-                      getOptionLabel={(option) => option.name}
-                      value={plans.filter(plan => formData.applicable_plans.includes(plan.id))}
-                      onChange={(event, newValue) => {
-                        setFormData({
-                          ...formData,
-                          applicable_plans: newValue.map(plan => plan.id)
-                        });
-                      }}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Applicable Plans"
-                          helperText="Leave empty to apply to all plans"
-                          sx={{ bgcolor: 'white' }}
+                <FormGroup>
+                  {/* Percentage Discount Option */}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      mb: 2,
+                      borderRadius: 2,
+                      border: formData.discount_types?.includes('percentage') ? '2px solid #8b5cf6' : '1px solid #e5e7eb',
+                      bgcolor: formData.discount_types?.includes('percentage') ? '#faf5ff' : 'transparent',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.discount_types?.includes('percentage') || false}
+                          onChange={() => handleDiscountTypeChange('percentage')}
+                          disabled={!formData.discount_types?.includes('percentage') && formData.discount_types?.length >= 2}
+                          sx={{ color: '#8b5cf6', '&.Mui-checked': { color: '#8b5cf6' } }}
                         />
-                      )}
-                      sx={{ bgcolor: 'white', borderRadius: 1 }}
+                      }
+                      label={
+                        <Box>
+                          <Typography sx={{ fontWeight: 600, color: '#111827' }}>Percentage Discount</Typography>
+                          <Typography variant="caption" sx={{ color: '#6b7280' }}>Discount as a percentage of the plan price</Typography>
+                        </Box>
+                      }
                     />
-                  </Grid>
-                </Grid>
-              </Paper>
+                    {formData.discount_types?.includes('percentage') && (
+                      <TextField
+                        size="small"
+                        label="Percentage"
+                        name="discount_percentage"
+                        type="number"
+                        value={formData.discount_percentage}
+                        onChange={handleInputChange}
+                        placeholder="20"
+                        InputProps={{
+                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                        }}
+                        sx={{ mt: 2, width: 150 }}
+                      />
+                    )}
+                  </Paper>
 
+                  {/* Fixed Amount Option */}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      mb: 2,
+                      borderRadius: 2,
+                      border: formData.discount_types?.includes('fixed') ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                      bgcolor: formData.discount_types?.includes('fixed') ? '#eff6ff' : 'transparent',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.discount_types?.includes('fixed') || false}
+                          onChange={() => handleDiscountTypeChange('fixed')}
+                          disabled={!formData.discount_types?.includes('fixed') && formData.discount_types?.length >= 2}
+                          sx={{ color: '#3b82f6', '&.Mui-checked': { color: '#3b82f6' } }}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography sx={{ fontWeight: 600, color: '#111827' }}>Fixed Amount</Typography>
+                          <Typography variant="caption" sx={{ color: '#6b7280' }}>Fixed rupee discount off the plan price</Typography>
+                        </Box>
+                      }
+                    />
+                    {formData.discount_types?.includes('fixed') && (
+                      <TextField
+                        size="small"
+                        label="Amount"
+                        name="discount_fixed"
+                        type="number"
+                        value={formData.discount_fixed}
+                        onChange={handleInputChange}
+                        placeholder="500"
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
+                        sx={{ mt: 2, width: 150 }}
+                      />
+                    )}
+                  </Paper>
+
+                  {/* Extended Period Option */}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      border: formData.discount_types?.includes('extended_period') ? '2px solid #10b981' : '1px solid #e5e7eb',
+                      bgcolor: formData.discount_types?.includes('extended_period') ? '#f0fdf4' : 'transparent',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={formData.discount_types?.includes('extended_period') || false}
+                          onChange={() => handleDiscountTypeChange('extended_period')}
+                          disabled={!formData.discount_types?.includes('extended_period') && formData.discount_types?.length >= 2}
+                          sx={{ color: '#10b981', '&.Mui-checked': { color: '#10b981' } }}
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography sx={{ fontWeight: 600, color: '#111827' }}>Extended Period</Typography>
+                          <Typography variant="caption" sx={{ color: '#6b7280' }}>Add extra days to the subscription</Typography>
+                        </Box>
+                      }
+                    />
+                    {formData.discount_types?.includes('extended_period') && (
+                      <TextField
+                        size="small"
+                        label="Days"
+                        name="discount_days"
+                        type="number"
+                        value={formData.discount_days}
+                        onChange={handleInputChange}
+                        placeholder="30"
+                        InputProps={{
+                          endAdornment: <InputAdornment position="end">days</InputAdornment>,
+                        }}
+                        sx={{ mt: 2, width: 150 }}
+                      />
+                    )}
+                  </Paper>
+                </FormGroup>
+                {formData.discount_types?.length >= 2 && (
+                  <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
+                    Maximum 2 discount types can be selected.
+                  </Alert>
+                )}
+
+                <Box sx={{ mt: 3 }}>
+                  <Autocomplete
+                    multiple
+                    options={plans}
+                    getOptionLabel={(option) => option.name}
+                    value={plans.filter(plan => formData.applicable_plans.includes(plan.id))}
+                    onChange={(event, newValue) => {
+                      setFormData({
+                        ...formData,
+                        applicable_plans: newValue.map(plan => plan.id)
+                      });
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Applicable Plans"
+                        helperText="Leave empty to apply to all plans"
+                      />
+                    )}
+                  />
+                </Box>
+              </Paper>
+            </Grid>
+
+            {/* Right Column */}
+            <Grid item xs={12} md={6}>
               {/* Validity Period Section */}
-              <Paper elevation={0} sx={{ p: 3, bgcolor: '#fef3c7', borderRadius: 2 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ width: 6, height: 24, bgcolor: '#f59e0b', borderRadius: 1, mr: 2 }} />
+              <Paper elevation={0} sx={{ p: 3, bgcolor: 'white', borderRadius: 3, mb: 3, border: '1px solid #e5e7eb' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 4, height: 24, bgcolor: '#f59e0b', borderRadius: 1, mr: 2 }} />
                   Validity Period
                 </Typography>
                 <Grid container spacing={2}>
@@ -820,7 +1194,6 @@ const CouponManagement = () => {
                       onChange={handleInputChange}
                       required
                       InputLabelProps={{ shrink: true }}
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -833,19 +1206,15 @@ const CouponManagement = () => {
                       onChange={handleInputChange}
                       required
                       InputLabelProps={{ shrink: true }}
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                 </Grid>
               </Paper>
-            </Grid>
 
-            {/* Right Column */}
-            <Grid item xs={12} md={6}>
               {/* Usage Limits Section */}
-              <Paper elevation={0} sx={{ p: 3, bgcolor: '#dbeafe', borderRadius: 2, mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 2, display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ width: 6, height: 24, bgcolor: '#3b82f6', borderRadius: 1, mr: 2 }} />
+              <Paper elevation={0} sx={{ p: 3, bgcolor: 'white', borderRadius: 3, mb: 3, border: '1px solid #e5e7eb' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 4, height: 24, bgcolor: '#3b82f6', borderRadius: 1, mr: 2 }} />
                   Usage Limits
                 </Typography>
                 <Grid container spacing={2}>
@@ -859,7 +1228,6 @@ const CouponManagement = () => {
                       onChange={handleInputChange}
                       placeholder="Leave empty for unlimited"
                       helperText="Maximum total redemptions across all users"
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -872,19 +1240,26 @@ const CouponManagement = () => {
                       onChange={handleInputChange}
                       required
                       helperText="How many times each user can use this coupon"
-                      sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
                 </Grid>
               </Paper>
 
               {/* Status Section */}
-              <Paper elevation={0} sx={{ p: 3, bgcolor: '#f3e8ff', borderRadius: 2, mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ width: 6, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
+              <Paper elevation={0} sx={{ p: 3, bgcolor: 'white', borderRadius: 3, mb: 3, border: '1px solid #e5e7eb' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 3, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ width: 4, height: 24, bgcolor: '#8b5cf6', borderRadius: 1, mr: 2 }} />
                   Status
                 </Typography>
-                <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  border: '1px solid #e5e7eb',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  bgcolor: formData.is_active ? '#f0fdf4' : '#f9fafb',
+                }}>
                   <Box>
                     <Typography sx={{ fontWeight: 600, color: '#111827' }}>Active</Typography>
                     <Typography variant="body2" sx={{ color: '#6b7280' }}>Coupon can be redeemed by users</Typography>
@@ -899,57 +1274,67 @@ const CouponManagement = () => {
               </Paper>
 
               {/* Preview Card */}
-              <Paper elevation={2} sx={{ p: 3, borderRadius: 2, border: '2px solid #8b5cf6' }}>
-                <Typography variant="caption" sx={{ color: '#6b7280', mb: 1, display: 'block' }}>Preview</Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 3,
+                  borderRadius: 3,
+                  border: '2px solid #6366f1',
+                  background: 'linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%)',
+                }}
+              >
+                <Typography variant="caption" sx={{ color: '#4b5563', fontWeight: 700, textTransform: 'uppercase', display: 'block', mb: 2, letterSpacing: 1 }}>
+                  Live Preview
+                </Typography>
                 <Box sx={{ textAlign: 'center', py: 2 }}>
                   <Chip
                     label={formData.code || 'COUPON CODE'}
                     sx={{
-                      bgcolor: '#8b5cf6',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                       color: 'white',
-                      fontWeight: 'bold',
+                      fontWeight: 700,
                       fontFamily: 'monospace',
                       fontSize: '1.1rem',
-                      px: 2,
-                      py: 2.5,
+                      px: 3,
+                      py: 3,
                       mb: 2,
                     }}
                   />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1f2937', mb: 1 }}>
                     {formData.name || 'Coupon Name'}
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mb: 2 }}>
                     {formData.discount_types?.includes('percentage') && formData.discount_percentage && (
                       <Chip
                         label={`${formData.discount_percentage}% OFF`}
-                        sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold', fontSize: '0.9rem' }}
+                        sx={{ bgcolor: '#7c3aed', color: 'white', fontWeight: 700 }}
                       />
                     )}
                     {formData.discount_types?.includes('fixed') && formData.discount_fixed && (
                       <Chip
                         label={`₹${formData.discount_fixed} OFF`}
-                        sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 'bold', fontSize: '0.9rem' }}
+                        sx={{ bgcolor: '#2563eb', color: 'white', fontWeight: 700 }}
                       />
                     )}
                     {formData.discount_types?.includes('extended_period') && formData.discount_days && (
                       <Chip
                         label={`+${formData.discount_days} Days Free`}
-                        sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold', fontSize: '0.9rem' }}
+                        sx={{ bgcolor: '#059669', color: 'white', fontWeight: 700 }}
                       />
                     )}
                     {(!formData.discount_types || formData.discount_types.length === 0) && (
                       <Chip
                         label="Select Discount Type"
-                        sx={{ bgcolor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold', fontSize: '0.9rem' }}
+                        sx={{ bgcolor: '#6366f1', color: 'white', fontWeight: 600 }}
                       />
                     )}
                   </Box>
-                  <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                  <Typography variant="body2" sx={{ color: '#4b5563', fontWeight: 500 }}>
                     {formData.description || 'Coupon description will appear here'}
                   </Typography>
                   {formData.valid_from && formData.valid_until && (
-                    <Box sx={{ mt: 2, p: 2, bgcolor: '#f9fafb', borderRadius: 1 }}>
-                      <Typography variant="caption" sx={{ color: '#6b7280', display: 'block' }}>
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255,255,255,0.8)', borderRadius: 2 }}>
+                      <Typography variant="caption" sx={{ color: '#374151', fontWeight: 600, display: 'block' }}>
                         Valid: {new Date(formData.valid_from).toLocaleDateString('en-IN')} - {new Date(formData.valid_until).toLocaleDateString('en-IN')}
                       </Typography>
                     </Box>
@@ -959,10 +1344,10 @@ const CouponManagement = () => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 3, bgcolor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+        <DialogActions sx={{ p: 3, bgcolor: '#f8fafc', borderTop: '1px solid #e5e7eb' }}>
           <Button
             onClick={handleCloseDialog}
-            sx={{ textTransform: 'none', fontWeight: 'bold' }}
+            sx={{ textTransform: 'none', fontWeight: 600, color: '#6b7280' }}
           >
             Cancel
           </Button>
@@ -970,11 +1355,16 @@ const CouponManagement = () => {
             variant="contained"
             onClick={handleSubmit}
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
               textTransform: 'none',
-              fontWeight: 'bold',
+              fontWeight: 700,
               px: 4,
-              py: 1,
+              py: 1.5,
+              borderRadius: 2,
+              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+              '&:hover': {
+                boxShadow: '0 6px 20px rgba(99, 102, 241, 0.5)',
+              },
             }}
           >
             {editMode ? 'Update Coupon' : 'Create Coupon'}
@@ -985,11 +1375,19 @@ const CouponManagement = () => {
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        autoHideDuration={4000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbar.severity}
+          sx={{
+            width: '100%',
+            borderRadius: 2,
+            fontWeight: 500,
+          }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>

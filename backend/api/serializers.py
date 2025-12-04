@@ -392,7 +392,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         model = SubscriptionPlan
         fields = [
             'id', 'name', 'description', 'price', 'billing_cycle', 'trial_days',
-            'max_users', 'max_invoices_per_month', 'max_storage_gb',
+            'max_users', 'max_organizations', 'max_invoices_per_month', 'max_storage_gb',
             'features', 'is_active', 'is_visible', 'sort_order', 'highlight',
             'created_at', 'updated_at'
         ]

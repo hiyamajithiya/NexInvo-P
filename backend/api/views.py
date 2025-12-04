@@ -27,7 +27,7 @@ from .serializers import (
     CouponUsageSerializer, SubscriptionSerializer, SubscriptionUpgradeRequestSerializer
 )
 from .pdf_generator import generate_invoice_pdf
-from .email_service import send_invoice_email, send_receipt_email
+from .email_service import send_invoice_email, send_receipt_email, send_bulk_invoice_emails
 from .invoice_importer import InvoiceImporter, generate_excel_template
 
 
@@ -582,6 +582,115 @@ def invoice_format_settings_view(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_report_email(request):
+    """
+    Send a report via email to specified recipient.
+    Expects: report_name, report_data (list of dicts), recipient_email, date_filter
+    """
+    report_name = request.data.get('report_name')
+    report_data = request.data.get('report_data', [])
+    recipient_email = request.data.get('recipient_email')
+    date_filter = request.data.get('date_filter', 'All Time')
+
+    if not report_name or not recipient_email:
+        return Response({'error': 'Report name and recipient email are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not report_data:
+        return Response({'error': 'No report data to send'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Get email settings for the organization
+        email_settings = EmailSettings.objects.get(organization=request.organization)
+    except EmailSettings.DoesNotExist:
+        return Response({'error': 'Email settings not configured. Please configure email settings first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not email_settings.smtp_username or not email_settings.smtp_password or not email_settings.from_email:
+        return Response({'error': 'SMTP settings incomplete. Please configure email settings.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Get company settings for company name
+        try:
+            company_settings = CompanySettings.objects.get(organization=request.organization)
+            company_name = company_settings.companyName
+        except CompanySettings.DoesNotExist:
+            company_name = request.organization.name
+
+        # Generate CSV content
+        if report_data:
+            headers = list(report_data[0].keys())
+            csv_rows = [','.join(headers)]
+            for row in report_data:
+                values = []
+                for h in headers:
+                    val = row.get(h, '')
+                    if isinstance(val, (int, float)):
+                        values.append(str(round(val, 2)))
+                    else:
+                        values.append(str(val).replace(',', ' '))
+                csv_rows.append(','.join(values))
+            csv_content = '\n'.join(csv_rows)
+        else:
+            csv_content = 'No data available'
+
+        # Create email
+        from django.core.mail import EmailMessage, get_connection
+
+        connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
+            host=email_settings.smtp_host,
+            port=email_settings.smtp_port,
+            username=email_settings.smtp_username,
+            password=email_settings.smtp_password,
+            use_tls=email_settings.use_tls,
+            timeout=30,
+        )
+
+        subject = f'{report_name} - {company_name}'
+        signature = f"\n\n{email_settings.email_signature}" if email_settings.email_signature else ""
+
+        body = f"""Dear User,
+
+Please find attached the {report_name} for the period: {date_filter}.
+
+Report Summary:
+- Report Type: {report_name}
+- Period: {date_filter}
+- Total Records: {len(report_data)}
+- Generated on: {datetime.now().strftime('%d-%b-%Y %H:%M')}
+
+This report was generated from {company_name}'s NexInvo system.
+
+Best Regards,
+{company_name}
+{email_settings.from_email}
+{signature}
+        """.strip()
+
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=email_settings.from_email,
+            to=[recipient_email],
+            connection=connection
+        )
+        email.content_subtype = "plain"
+        email.encoding = 'utf-8'
+
+        # Attach CSV report
+        filename = f"{report_name.replace(' ', '_')}_{date_filter.replace(' ', '_')}.csv"
+        email.attach(filename, csv_content, 'text/csv')
+
+        email.send(fail_silently=False)
+
+        return Response({'message': f'Report sent successfully to {recipient_email}'})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({'error': f'Failed to send email: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # ========== Organization Management ViewSets ==========
 
@@ -609,12 +718,71 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         ).distinct()
 
     def create(self, request, *args, **kwargs):
-        """Only superadmin can create organizations"""
-        if not request.user.is_superuser:
+        """
+        Create a new organization.
+        - Superadmin can always create organizations
+        - Tenant admins (owners) can create organizations based on their subscription plan limits
+        """
+        if request.user.is_superuser:
+            return super().create(request, *args, **kwargs)
+
+        # Check if user is an owner of any organization
+        owner_memberships = OrganizationMembership.objects.filter(
+            user=request.user,
+            role='owner',
+            is_active=True
+        ).select_related('organization')
+
+        if not owner_memberships.exists():
             return Response(
-                {'error': 'Only superadmin can create organizations'},
+                {'error': 'Only organization owners can create new organizations'},
                 status=status.HTTP_403_FORBIDDEN
             )
+
+        # Get user's current organizations count
+        user_org_count = owner_memberships.count()
+
+        # Get the subscription plan from any of the user's organizations
+        # Use the highest plan limit among all organizations the user owns
+        max_org_limit = 1  # Default limit
+
+        for membership in owner_memberships:
+            org = membership.organization
+            try:
+                # Get the organization's subscription
+                subscription = Subscription.objects.filter(
+                    organization=org,
+                    status='active'
+                ).select_related('plan').first()
+
+                if subscription and subscription.plan:
+                    plan_limit = subscription.plan.max_organizations or 1
+                    if plan_limit > max_org_limit:
+                        max_org_limit = plan_limit
+                else:
+                    # Fallback to organization's plan field
+                    plan = SubscriptionPlan.objects.filter(
+                        name__iexact=org.plan,
+                        is_active=True
+                    ).first()
+                    if plan:
+                        plan_limit = plan.max_organizations or 1
+                        if plan_limit > max_org_limit:
+                            max_org_limit = plan_limit
+            except Exception:
+                pass
+
+        # Check if user has reached their limit
+        if user_org_count >= max_org_limit:
+            return Response(
+                {
+                    'error': f'Organization limit reached. Your plan allows maximum {max_org_limit} organization(s). Please upgrade your subscription to create more organizations.',
+                    'current_count': user_org_count,
+                    'max_allowed': max_org_limit
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
@@ -701,6 +869,71 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 {'error': 'You do not have access to this organization'},
                 status=status.HTTP_403_FORBIDDEN
             )
+
+    @action(detail=False, methods=['get'])
+    def limits(self, request):
+        """Get the user's organization creation limits based on their subscription plan"""
+        user = request.user
+
+        # Superadmins have unlimited organizations
+        if user.is_superuser:
+            return Response({
+                'current_count': Organization.objects.count(),
+                'max_allowed': -1,  # -1 means unlimited
+                'can_create': True,
+                'is_owner': True
+            })
+
+        # Get user's organizations where they are owner
+        owner_memberships = OrganizationMembership.objects.filter(
+            user=user,
+            role='owner',
+            is_active=True
+        ).select_related('organization')
+
+        if not owner_memberships.exists():
+            return Response({
+                'current_count': 0,
+                'max_allowed': 0,
+                'can_create': False,
+                'is_owner': False
+            })
+
+        user_org_count = owner_memberships.count()
+        max_org_limit = 1  # Default limit
+
+        for membership in owner_memberships:
+            org = membership.organization
+            try:
+                # Get the organization's subscription
+                subscription = Subscription.objects.filter(
+                    organization=org,
+                    status='active'
+                ).select_related('plan').first()
+
+                if subscription and subscription.plan:
+                    plan_limit = subscription.plan.max_organizations or 1
+                    if plan_limit > max_org_limit:
+                        max_org_limit = plan_limit
+                else:
+                    # Fallback to organization's plan field
+                    plan = SubscriptionPlan.objects.filter(
+                        name__iexact=org.plan,
+                        is_active=True
+                    ).first()
+                    if plan:
+                        plan_limit = plan.max_organizations or 1
+                        if plan_limit > max_org_limit:
+                            max_org_limit = plan_limit
+            except Exception:
+                pass
+
+        return Response({
+            'current_count': user_org_count,
+            'max_allowed': max_org_limit,
+            'can_create': user_org_count < max_org_limit,
+            'is_owner': True
+        })
 
     @action(detail=True, methods=['get'])
     def members(self, request, pk=None):
@@ -1171,6 +1404,60 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     {'error': 'Failed to send email'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def bulk_send_email(self, request):
+        """Send emails for multiple invoices at once - optimized for speed"""
+        try:
+            invoice_ids = request.data.get('invoice_ids', [])
+
+            if not invoice_ids:
+                return Response(
+                    {'error': 'No invoice IDs provided'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get invoices
+            invoices = Invoice.objects.filter(
+                id__in=invoice_ids,
+                organization=request.organization
+            ).select_related('client')
+
+            if not invoices.exists():
+                return Response(
+                    {'error': 'No valid invoices found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get company settings
+            try:
+                company_settings = CompanySettings.objects.get(organization=request.organization)
+            except CompanySettings.DoesNotExist:
+                company_settings = CompanySettings.objects.create(
+                    user=request.user,
+                    companyName="NexInvo"
+                )
+
+            # Send bulk emails using optimized function
+            result = send_bulk_invoice_emails(list(invoices), company_settings)
+
+            # Update status for successfully sent invoices
+            Invoice.objects.filter(
+                id__in=invoice_ids,
+                organization=request.organization,
+                status='draft',
+                is_emailed=True
+            ).update(status='sent')
+
+            return Response({
+                'message': f'Emails sent: {result["success"]} successful, {result["failed"]} failed',
+                'success_count': result['success'],
+                'failed_count': result['failed'],
+                'errors': result['errors'][:10] if result['errors'] else []  # Return only first 10 errors
+            })
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

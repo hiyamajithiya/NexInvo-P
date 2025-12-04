@@ -83,6 +83,7 @@ export const organizationAPI = {
   update: (id, data) => api.put(`/organizations/${id}/`, data),
   delete: (id) => api.delete(`/organizations/${id}/`),
   switch: (id) => api.post(`/organizations/${id}/switch/`),
+  getLimits: () => api.get('/organizations/limits/'),
   getMembers: (id) => api.get(`/organizations/${id}/members/`),
   inviteMember: (id, data) => api.post(`/organizations/${id}/invite/`, data),
   updateMember: (orgId, userId, data) => api.put(`/organizations/${orgId}/members/${userId}/`, data),
@@ -115,6 +116,7 @@ export const invoiceAPI = {
   delete: (id) => api.delete(`/invoices/${id}/`),
   generatePDF: (id) => api.get(`/invoices/${id}/pdf/`, { responseType: 'blob' }),
   sendEmail: (id) => api.post(`/invoices/${id}/send_email/`),
+  bulkSendEmail: (ids) => api.post('/invoices/bulk_send_email/', { invoice_ids: ids }),
   convertToTaxInvoice: (id) => api.post(`/invoices/${id}/convert_to_tax_invoice/`),
   importInvoices: (file) => {
     const formData = new FormData();
@@ -184,6 +186,11 @@ export const receiptAPI = {
 // Dashboard APIs
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats/'),
+};
+
+// Reports APIs
+export const reportsAPI = {
+  sendEmail: (data) => api.post('/reports/send-email/', data),
 };
 
 // User Profile APIs

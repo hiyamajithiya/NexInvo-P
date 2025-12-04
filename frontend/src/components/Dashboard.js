@@ -492,10 +492,6 @@ function Dashboard({ user, onLogout }) {
             <p className="page-subtitle">Welcome back, {user?.username || 'Admin'}</p>
           </div>
           <div className="header-right">
-            <div className="search-box">
-              <input type="text" placeholder="Search..." />
-              <span className="search-icon">🔍</span>
-            </div>
             <button
               className="help-icon-btn"
               onClick={() => setActiveMenu('help')}

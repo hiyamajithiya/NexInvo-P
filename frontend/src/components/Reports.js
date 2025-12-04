@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI, paymentAPI } from '../services/api';
+import { invoiceAPI, clientAPI, paymentAPI, reportsAPI } from '../services/api';
 import './Pages.css';
 
 function Reports() {
@@ -11,6 +11,11 @@ function Reports() {
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
   const [payments, setPayments] = useState([]);
+
+  // Email modal states
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const reports = [
     { id: 1, name: 'Revenue Report', icon: '📊', description: 'Monthly and yearly revenue analysis' },
@@ -271,6 +276,56 @@ function Reports() {
     document.body.removeChild(link);
   };
 
+  const getDateFilterLabel = () => {
+    const labels = {
+      'this_month': 'This Month',
+      'last_month': 'Last Month',
+      'this_quarter': 'This Quarter',
+      'this_year': 'This Year',
+      'all_time': 'All Time'
+    };
+    return labels[dateFilter] || dateFilter;
+  };
+
+  const handleOpenEmailModal = () => {
+    if (!selectedReport) {
+      alert('Please select a report first');
+      return;
+    }
+    const reportDataCheck = generateReportData();
+    if (reportDataCheck.length === 0) {
+      alert('No data available to send');
+      return;
+    }
+    setShowEmailModal(true);
+  };
+
+  const handleSendReportEmail = async () => {
+    if (!emailRecipient || !emailRecipient.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const reportDataToSend = generateReportData();
+      const response = await reportsAPI.sendEmail({
+        report_name: selectedReport.name,
+        report_data: reportDataToSend,
+        recipient_email: emailRecipient,
+        date_filter: getDateFilterLabel()
+      });
+      alert(response.data.message || 'Report sent successfully!');
+      setShowEmailModal(false);
+      setEmailRecipient('');
+    } catch (err) {
+      console.error('Error sending report:', err);
+      alert(err.response?.data?.error || 'Failed to send report. Please check your email settings.');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const reportData = generateReportData();
 
   return (
@@ -325,6 +380,15 @@ function Reports() {
                 >
                   <span className="btn-icon">📥</span>
                   Export Report
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={handleOpenEmailModal}
+                  disabled={reportData.length === 0}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  <span className="btn-icon">📧</span>
+                  Send Email
                 </button>
               </div>
             </div>
@@ -527,6 +591,88 @@ function Reports() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="modal-overlay" onClick={() => !sendingEmail && setShowEmailModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2>Send Report via Email</h2>
+              <button
+                className="modal-close"
+                onClick={() => !sendingEmail && setShowEmailModal(false)}
+                disabled={sendingEmail}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px', color: '#6b7280' }}>
+                Send the <strong>{selectedReport?.name}</strong> report ({getDateFilterLabel()}) to an email address.
+              </p>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                  Recipient Email Address
+                </label>
+                <input
+                  type="email"
+                  value={emailRecipient}
+                  onChange={(e) => setEmailRecipient(e.target.value)}
+                  placeholder="Enter email address"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    outline: 'none',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                  onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                  disabled={sendingEmail}
+                  autoFocus
+                />
+              </div>
+              <div style={{
+                padding: '12px',
+                background: '#f0f9ff',
+                borderRadius: '8px',
+                border: '1px solid #bae6fd',
+                fontSize: '13px',
+                color: '#0369a1'
+              }}>
+                <strong>Note:</strong> The report will be sent as a CSV attachment to the specified email address.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => setShowEmailModal(false)}
+                disabled={sendingEmail}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-create"
+                onClick={handleSendReportEmail}
+                disabled={sendingEmail || !emailRecipient}
+              >
+                {sendingEmail ? (
+                  <>
+                    <span className="btn-icon">⏳</span>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <span className="btn-icon">📧</span>
+                    Send Report
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

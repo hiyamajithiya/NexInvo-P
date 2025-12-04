@@ -17,10 +17,13 @@ function Invoices() {
   const [activeTab, setActiveTab] = useState('proforma'); // Tab for invoice type
   const [proformaCount, setProformaCount] = useState(0);
   const [taxInvoiceCount, setTaxInvoiceCount] = useState(0);
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   useEffect(() => {
     loadInvoices();
     loadInvoiceCounts();
+    setSelectedInvoices([]); // Clear selection when tab changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -120,6 +123,145 @@ function Invoices() {
       console.error('Error loading invoice:', err);
       alert('Failed to load invoice for editing');
     }
+  };
+
+  // Selection handlers
+  const handleSelectInvoice = (invoiceId) => {
+    setSelectedInvoices(prev => {
+      if (prev.includes(invoiceId)) {
+        return prev.filter(id => id !== invoiceId);
+      } else {
+        return [...prev, invoiceId];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedInvoices.length === invoices.length) {
+      setSelectedInvoices([]);
+    } else {
+      setSelectedInvoices(invoices.map(inv => inv.id));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedInvoices([]);
+  };
+
+  // Bulk action handlers
+  const handleBulkEmail = async () => {
+    if (selectedInvoices.length === 0) return;
+
+    if (!window.confirm(`Send email for ${selectedInvoices.length} selected invoice(s)?`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+
+    try {
+      // Use optimized bulk email API for faster sending
+      const response = await invoiceAPI.bulkSendEmail(selectedInvoices);
+      const { success_count, failed_count, errors } = response.data;
+
+      let message = `Email sent: ${success_count} successful`;
+      if (failed_count > 0) {
+        message += `, ${failed_count} failed`;
+        if (errors && errors.length > 0) {
+          console.warn('Bulk email errors:', errors);
+        }
+      }
+      alert(message);
+    } catch (err) {
+      console.error('Error sending bulk emails:', err);
+      alert(err.response?.data?.error || 'Failed to send emails');
+    }
+
+    setBulkActionLoading(false);
+    clearSelection();
+    loadInvoices();
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedInvoices.length === 0) return;
+
+    setBulkActionLoading(true);
+
+    for (const id of selectedInvoices) {
+      try {
+        const response = await invoiceAPI.generatePDF(id);
+        const invoice = invoices.find(inv => inv.id === id);
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `invoice_${invoice?.invoice_number || id}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Small delay between downloads
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (err) {
+        console.error(`Error downloading PDF for invoice ${id}:`, err);
+      }
+    }
+
+    setBulkActionLoading(false);
+    alert(`Downloaded ${selectedInvoices.length} invoice(s)`);
+    clearSelection();
+  };
+
+  const handleBulkPrint = async () => {
+    if (selectedInvoices.length === 0) return;
+
+    setBulkActionLoading(true);
+
+    // Download all PDFs and open them for printing
+    for (const id of selectedInvoices) {
+      try {
+        const response = await invoiceAPI.generatePDF(id);
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const printWindow = window.open(url, '_blank');
+        if (printWindow) {
+          printWindow.onload = () => {
+            printWindow.print();
+          };
+        }
+        // Small delay between opening windows
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        console.error(`Error printing invoice ${id}:`, err);
+      }
+    }
+
+    setBulkActionLoading(false);
+    clearSelection();
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedInvoices.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to delete ${selectedInvoices.length} selected invoice(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const id of selectedInvoices) {
+      try {
+        await invoiceAPI.delete(id);
+        successCount++;
+      } catch (err) {
+        console.error(`Error deleting invoice ${id}:`, err);
+        failedCount++;
+      }
+    }
+
+    setBulkActionLoading(false);
+    alert(`Deleted: ${successCount} successful, ${failedCount} failed`);
+    clearSelection();
+    loadInvoices();
   };
 
   const handleDownloadTemplate = async () => {
@@ -394,6 +536,124 @@ function Invoices() {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedInvoices.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 20px',
+          marginBottom: '16px',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          borderRadius: '12px',
+          color: 'white',
+          boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontWeight: '600', fontSize: '15px' }}>
+              {selectedInvoices.length} invoice{selectedInvoices.length > 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={clearSelection}
+              style={{
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '500',
+              }}
+            >
+              Clear Selection
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={handleBulkEmail}
+              disabled={bulkActionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255,255,255,0.95)',
+                border: 'none',
+                color: '#6366f1',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                opacity: bulkActionLoading ? 0.7 : 1,
+              }}
+            >
+              <span>📧</span> Send Email
+            </button>
+            <button
+              onClick={handleBulkDownload}
+              disabled={bulkActionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255,255,255,0.95)',
+                border: 'none',
+                color: '#6366f1',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                opacity: bulkActionLoading ? 0.7 : 1,
+              }}
+            >
+              <span>📥</span> Download
+            </button>
+            <button
+              onClick={handleBulkPrint}
+              disabled={bulkActionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255,255,255,0.95)',
+                border: 'none',
+                color: '#6366f1',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                opacity: bulkActionLoading ? 0.7 : 1,
+              }}
+            >
+              <span>🖨️</span> Print
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkActionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#ef4444',
+                border: 'none',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                opacity: bulkActionLoading ? 0.7 : 1,
+              }}
+            >
+              <span>🗑️</span> Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="content-card">
         {loading ? (
           <div className="empty-state-large">
@@ -415,6 +675,20 @@ function Invoices() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedInvoices.length === invoices.length && invoices.length > 0}
+                      onChange={handleSelectAll}
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        cursor: 'pointer',
+                        accentColor: '#6366f1',
+                      }}
+                      title={selectedInvoices.length === invoices.length ? 'Deselect All' : 'Select All'}
+                    />
+                  </th>
                   <th>Invoice No</th>
                   <th>Client</th>
                   <th>Date</th>
@@ -426,7 +700,26 @@ function Invoices() {
               </thead>
               <tbody>
                 {invoices.map((invoice) => (
-                  <tr key={invoice.id}>
+                  <tr
+                    key={invoice.id}
+                    style={{
+                      backgroundColor: selectedInvoices.includes(invoice.id) ? '#f0f4ff' : 'transparent',
+                      transition: 'background-color 0.2s ease',
+                    }}
+                  >
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoices.includes(invoice.id)}
+                        onChange={() => handleSelectInvoice(invoice.id)}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          cursor: 'pointer',
+                          accentColor: '#6366f1',
+                        }}
+                      />
+                    </td>
                     <td>{invoice.invoice_number}</td>
                     <td>{invoice.client_name}</td>
                     <td>{new Date(invoice.invoice_date).toLocaleDateString()}</td>

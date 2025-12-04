@@ -57,6 +57,7 @@ const SubscriptionPlans = () => {
     billing_cycle: 'monthly',
     trial_days: 0,
     max_users: 1,
+    max_organizations: 1,
     max_invoices_per_month: 100,
     max_storage_gb: 1,
     features: '',
@@ -97,6 +98,7 @@ const SubscriptionPlans = () => {
         billing_cycle: plan.billing_cycle,
         trial_days: plan.trial_days || 0,
         max_users: plan.max_users,
+        max_organizations: plan.max_organizations || 1,
         max_invoices_per_month: plan.max_invoices_per_month,
         max_storage_gb: plan.max_storage_gb,
         features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
@@ -115,6 +117,7 @@ const SubscriptionPlans = () => {
         billing_cycle: 'monthly',
         trial_days: 0,
         max_users: 1,
+        max_organizations: 1,
         max_invoices_per_month: 100,
         max_storage_gb: 1,
         features: '',
@@ -157,6 +160,7 @@ const SubscriptionPlans = () => {
         price: parseFloat(formData.price),
         trial_days: parseInt(formData.trial_days),
         max_users: parseInt(formData.max_users),
+        max_organizations: parseInt(formData.max_organizations),
         max_invoices_per_month: parseInt(formData.max_invoices_per_month),
         max_storage_gb: parseInt(formData.max_storage_gb),
         sort_order: parseInt(formData.sort_order),
@@ -357,6 +361,9 @@ const SubscriptionPlans = () => {
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                         <Typography variant="caption" sx={{ color: '#6b7280' }}>
                           👥 {plan.max_users} users
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                          🏢 {plan.max_organizations || 1} organizations
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#6b7280' }}>
                           📄 {plan.max_invoices_per_month} invoices/mo
@@ -584,7 +591,7 @@ const SubscriptionPlans = () => {
                   Usage Limits
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Max Users"
@@ -593,11 +600,24 @@ const SubscriptionPlans = () => {
                       value={formData.max_users}
                       onChange={handleInputChange}
                       required
-                      helperText="Maximum number of users allowed"
+                      helperText="Maximum users per organization"
                       sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Max Organizations"
+                      name="max_organizations"
+                      type="number"
+                      value={formData.max_organizations}
+                      onChange={handleInputChange}
+                      required
+                      helperText="Maximum organizations user can create"
+                      sx={{ bgcolor: 'white' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Max Invoices Per Month"
@@ -610,7 +630,7 @@ const SubscriptionPlans = () => {
                       sx={{ bgcolor: 'white' }}
                     />
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Storage (GB)"

@@ -22,6 +22,7 @@ urlpatterns = [
     path('invoices/import/', views.import_invoices, name='import-invoices'),
     path('invoices/import-template/', views.download_import_template, name='download-import-template'),
     path('export/', views.export_data, name='export-data'),
+    path('reports/send-email/', views.send_report_email, name='send-report-email'),
 
     # Router URLs
     path('', include(router.urls)),

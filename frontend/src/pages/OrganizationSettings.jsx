@@ -188,6 +188,8 @@ const OrganizationSettings = () => {
         return 'error';
       case 'admin':
         return 'warning';
+      case 'viewer':
+        return 'info';
       default:
         return 'default';
     }
@@ -364,11 +366,15 @@ const OrganizationSettings = () => {
                 onChange={(e) => setInviteRole(e.target.value)}
                 label="Role"
               >
-                <MenuItem value="user">User</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="owner">Owner</MenuItem>
+                <MenuItem value="viewer">Viewer (Read-only access for shared accountants/CAs)</MenuItem>
+                <MenuItem value="user">User (Standard access)</MenuItem>
+                <MenuItem value="admin">Admin (Full management access)</MenuItem>
+                <MenuItem value="owner">Owner (Complete control)</MenuItem>
               </Select>
             </FormControl>
+            <Typography variant="caption" color="text.secondary">
+              Viewer role allows read-only access. Useful when the same accountant or CA works with multiple organizations.
+            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -393,9 +399,10 @@ const OrganizationSettings = () => {
                 onChange={(e) => setEditRole(e.target.value)}
                 label="Role"
               >
-                <MenuItem value="user">User</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="owner">Owner</MenuItem>
+                <MenuItem value="viewer">Viewer (Read-only access)</MenuItem>
+                <MenuItem value="user">User (Standard access)</MenuItem>
+                <MenuItem value="admin">Admin (Full management access)</MenuItem>
+                <MenuItem value="owner">Owner (Complete control)</MenuItem>
               </Select>
             </FormControl>
           </Box>
