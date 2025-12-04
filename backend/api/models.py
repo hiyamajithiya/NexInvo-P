@@ -680,10 +680,20 @@ class Coupon(models.Model):
     name = models.CharField(max_length=100, help_text="Internal name for reference")
     description = models.TextField(blank=True, help_text="Description of the offer")
 
-    # Discount Details
-    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES)
-    discount_value = models.DecimalField(max_digits=10, decimal_places=2,
-                                        help_text="20 for 20%, 500 for ₹500, 30 for 30 days")
+    # Legacy Discount Details (kept for backward compatibility)
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, blank=True, null=True)
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True,
+                                        help_text="Legacy field - 20 for 20%, 500 for ₹500, 30 for 30 days")
+
+    # New Multiple Discount Types Support
+    discount_types = models.JSONField(default=list, blank=True,
+                                     help_text="List of discount types: percentage, fixed, extended_period")
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True,
+                                             help_text="Percentage discount (e.g., 20 for 20%)")
+    discount_fixed = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True,
+                                        help_text="Fixed amount discount in rupees")
+    discount_days = models.IntegerField(blank=True, null=True,
+                                       help_text="Additional days to add to subscription")
 
     # Applicable Plans (if empty, applies to all plans)
     applicable_plans = models.ManyToManyField(SubscriptionPlan, blank=True, related_name='coupons',

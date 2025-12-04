@@ -408,7 +408,9 @@ class CouponSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coupon
         fields = [
-            'id', 'code', 'name', 'description', 'discount_type', 'discount_value',
+            'id', 'code', 'name', 'description',
+            'discount_type', 'discount_value',  # Legacy fields
+            'discount_types', 'discount_percentage', 'discount_fixed', 'discount_days',  # New fields
             'applicable_plans', 'applicable_plan_names', 'valid_from', 'valid_until',
             'max_total_uses', 'max_uses_per_user', 'current_usage_count',
             'is_active', 'is_valid_now', 'created_by', 'created_by_email',
@@ -426,6 +428,25 @@ class CouponSerializer(serializers.ModelSerializer):
         """Check if coupon is currently valid"""
         is_valid, message = obj.is_valid()
         return is_valid
+
+    def validate(self, data):
+        """Validate that at least one discount type is provided"""
+        discount_types = data.get('discount_types', [])
+
+        # If using new multi-discount system
+        if discount_types:
+            if len(discount_types) > 2:
+                raise serializers.ValidationError("Maximum 2 discount types can be selected")
+
+            # Validate each discount type has a corresponding value
+            if 'percentage' in discount_types and not data.get('discount_percentage'):
+                raise serializers.ValidationError("Percentage discount value is required")
+            if 'fixed' in discount_types and not data.get('discount_fixed'):
+                raise serializers.ValidationError("Fixed discount amount is required")
+            if 'extended_period' in discount_types and not data.get('discount_days'):
+                raise serializers.ValidationError("Extended period days is required")
+
+        return data
 
 
 class CouponUsageSerializer(serializers.ModelSerializer):

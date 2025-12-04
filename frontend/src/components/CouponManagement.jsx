@@ -29,6 +29,8 @@ import {
   Snackbar,
   CircularProgress,
   Autocomplete,
+  Checkbox,
+  FormGroup,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -54,8 +56,10 @@ const CouponManagement = () => {
     code: '',
     name: '',
     description: '',
-    discount_type: 'percentage',
-    discount_value: '',
+    discount_types: ['percentage'], // Now supports multiple discount types
+    discount_percentage: '',
+    discount_fixed: '',
+    discount_days: '',
     applicable_plans: [],
     valid_from: '',
     valid_until: '',
@@ -109,12 +113,17 @@ const CouponManagement = () => {
         return date.toISOString().slice(0, 16);
       };
 
+      // Parse discount types from coupon data
+      const discountTypes = coupon.discount_types || [coupon.discount_type];
+
       setFormData({
         code: coupon.code,
         name: coupon.name || '',
         description: coupon.description || '',
-        discount_type: coupon.discount_type,
-        discount_value: coupon.discount_value,
+        discount_types: discountTypes,
+        discount_percentage: coupon.discount_percentage || (coupon.discount_type === 'percentage' ? coupon.discount_value : ''),
+        discount_fixed: coupon.discount_fixed || (coupon.discount_type === 'fixed' ? coupon.discount_value : ''),
+        discount_days: coupon.discount_days || (coupon.discount_type === 'extended_period' ? coupon.discount_value : ''),
         applicable_plans: coupon.applicable_plans || [],
         valid_from: formatDate(coupon.valid_from),
         valid_until: formatDate(coupon.valid_until),
@@ -135,8 +144,10 @@ const CouponManagement = () => {
         code: '',
         name: '',
         description: '',
-        discount_type: 'percentage',
-        discount_value: '',
+        discount_types: [],
+        discount_percentage: '',
+        discount_fixed: '',
+        discount_days: '',
         applicable_plans: [],
         valid_from: now.toISOString().slice(0, 16),
         valid_until: future.toISOString().slice(0, 16),
@@ -162,19 +173,57 @@ const CouponManagement = () => {
     });
   };
 
+  const handleDiscountTypeChange = (discountType) => {
+    setFormData(prev => {
+      const currentTypes = prev.discount_types || [];
+      let newTypes;
+
+      if (currentTypes.includes(discountType)) {
+        // Remove if already selected
+        newTypes = currentTypes.filter(t => t !== discountType);
+      } else if (currentTypes.length < 2) {
+        // Add if less than 2 selected
+        newTypes = [...currentTypes, discountType];
+      } else {
+        // Already 2 selected, don't add more
+        return prev;
+      }
+
+      return {
+        ...prev,
+        discount_types: newTypes,
+      };
+    });
+  };
+
   const handleSubmit = async () => {
     try {
       const token = localStorage.getItem('access_token');
 
+      // Validate at least one discount type is selected
+      if (!formData.discount_types || formData.discount_types.length === 0) {
+        showSnackbar('Please select at least one discount type', 'error');
+        return;
+      }
+
       // Convert dates to ISO format
       const payload = {
-        ...formData,
         code: formData.code.toUpperCase(),
-        discount_value: parseFloat(formData.discount_value),
+        name: formData.name,
+        description: formData.description,
+        discount_types: formData.discount_types,
+        discount_percentage: formData.discount_types.includes('percentage') && formData.discount_percentage
+          ? parseFloat(formData.discount_percentage) : null,
+        discount_fixed: formData.discount_types.includes('fixed') && formData.discount_fixed
+          ? parseFloat(formData.discount_fixed) : null,
+        discount_days: formData.discount_types.includes('extended_period') && formData.discount_days
+          ? parseInt(formData.discount_days) : null,
+        applicable_plans: formData.applicable_plans,
         max_total_uses: formData.max_total_uses ? parseInt(formData.max_total_uses) : null,
         max_uses_per_user: parseInt(formData.max_uses_per_user),
         valid_from: new Date(formData.valid_from).toISOString(),
         valid_until: new Date(formData.valid_until).toISOString(),
+        is_active: formData.is_active,
       };
 
       if (editMode) {
@@ -244,13 +293,28 @@ const CouponManagement = () => {
   };
 
   const getDiscountDisplay = (coupon) => {
-    if (coupon.discount_type === 'percentage') {
-      return `${coupon.discount_value}% OFF`;
-    } else if (coupon.discount_type === 'fixed') {
-      return `₹${coupon.discount_value} OFF`;
-    } else {
-      return `+${coupon.discount_value} days`;
+    const discountParts = [];
+    const discountTypes = coupon.discount_types || [coupon.discount_type];
+
+    if (discountTypes.includes('percentage') && coupon.discount_percentage) {
+      discountParts.push(`${coupon.discount_percentage}% OFF`);
+    } else if (coupon.discount_type === 'percentage' && coupon.discount_value) {
+      discountParts.push(`${coupon.discount_value}% OFF`);
     }
+
+    if (discountTypes.includes('fixed') && coupon.discount_fixed) {
+      discountParts.push(`₹${coupon.discount_fixed} OFF`);
+    } else if (coupon.discount_type === 'fixed' && coupon.discount_value) {
+      discountParts.push(`₹${coupon.discount_value} OFF`);
+    }
+
+    if (discountTypes.includes('extended_period') && coupon.discount_days) {
+      discountParts.push(`+${coupon.discount_days} days`);
+    } else if (coupon.discount_type === 'extended_period' && coupon.discount_value) {
+      discountParts.push(`+${coupon.discount_value} days`);
+    }
+
+    return discountParts.length > 0 ? discountParts.join(' + ') : 'No discount';
   };
 
   const getValidityStatus = (coupon) => {
@@ -590,50 +654,128 @@ const CouponManagement = () => {
                   <Box sx={{ width: 6, height: 24, bgcolor: '#10b981', borderRadius: 1, mr: 2 }} />
                   Discount Settings
                 </Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280', mb: 2 }}>
+                  Select one or two discount types to combine (e.g., percentage + extra days)
+                </Typography>
                 <Grid container spacing={2}>
+                  {/* Discount Type Checkboxes */}
                   <Grid item xs={12}>
-                    <FormControl fullWidth sx={{ bgcolor: 'white' }}>
-                      <InputLabel>Discount Type</InputLabel>
-                      <Select
-                        name="discount_type"
-                        value={formData.discount_type}
-                        onChange={handleInputChange}
-                        label="Discount Type"
-                      >
-                        <MenuItem value="percentage">Percentage Discount (%)</MenuItem>
-                        <MenuItem value="fixed">Fixed Amount (₹)</MenuItem>
-                        <MenuItem value="extended_period">Extended Period (Days)</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label={
-                        formData.discount_type === 'percentage' ? 'Discount Percentage' :
-                        formData.discount_type === 'fixed' ? 'Discount Amount (₹)' :
-                        'Additional Days'
-                      }
-                      name="discount_value"
-                      type="number"
-                      value={formData.discount_value}
-                      onChange={handleInputChange}
-                      required
-                      placeholder={
-                        formData.discount_type === 'percentage' ? 'e.g., 20' :
-                        formData.discount_type === 'fixed' ? 'e.g., 500' :
-                        'e.g., 30'
-                      }
-                      InputProps={{
-                        startAdornment: formData.discount_type === 'fixed' ?
-                          <Typography sx={{ mr: 1, fontWeight: 'bold' }}>₹</Typography> : null,
-                        endAdornment: formData.discount_type === 'percentage' ?
-                          <Typography sx={{ ml: 1, fontWeight: 'bold' }}>%</Typography> :
-                          formData.discount_type === 'extended_period' ?
-                          <Typography sx={{ ml: 1, fontWeight: 'bold' }}>days</Typography> : null,
-                      }}
-                      sx={{ bgcolor: 'white' }}
-                    />
+                    <Paper sx={{ p: 2, bgcolor: 'white', borderRadius: 2 }}>
+                      <FormGroup>
+                        {/* Percentage Discount Option */}
+                        <Box sx={{ mb: 2 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.discount_types?.includes('percentage') || false}
+                                onChange={() => handleDiscountTypeChange('percentage')}
+                                disabled={!formData.discount_types?.includes('percentage') && formData.discount_types?.length >= 2}
+                                sx={{ color: '#8b5cf6', '&.Mui-checked': { color: '#8b5cf6' } }}
+                              />
+                            }
+                            label={
+                              <Box>
+                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Percentage Discount (%)</Typography>
+                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Discount as a percentage of the plan price</Typography>
+                              </Box>
+                            }
+                          />
+                          {formData.discount_types?.includes('percentage') && (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label="Discount Percentage"
+                              name="discount_percentage"
+                              type="number"
+                              value={formData.discount_percentage}
+                              onChange={handleInputChange}
+                              placeholder="e.g., 20"
+                              InputProps={{
+                                endAdornment: <Typography sx={{ ml: 1, fontWeight: 'bold' }}>%</Typography>,
+                              }}
+                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
+                            />
+                          )}
+                        </Box>
+
+                        {/* Fixed Amount Option */}
+                        <Box sx={{ mb: 2 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.discount_types?.includes('fixed') || false}
+                                onChange={() => handleDiscountTypeChange('fixed')}
+                                disabled={!formData.discount_types?.includes('fixed') && formData.discount_types?.length >= 2}
+                                sx={{ color: '#3b82f6', '&.Mui-checked': { color: '#3b82f6' } }}
+                              />
+                            }
+                            label={
+                              <Box>
+                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Fixed Amount (₹)</Typography>
+                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Fixed rupee discount off the plan price</Typography>
+                              </Box>
+                            }
+                          />
+                          {formData.discount_types?.includes('fixed') && (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label="Discount Amount"
+                              name="discount_fixed"
+                              type="number"
+                              value={formData.discount_fixed}
+                              onChange={handleInputChange}
+                              placeholder="e.g., 500"
+                              InputProps={{
+                                startAdornment: <Typography sx={{ mr: 1, fontWeight: 'bold' }}>₹</Typography>,
+                              }}
+                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
+                            />
+                          )}
+                        </Box>
+
+                        {/* Extended Period Option */}
+                        <Box>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.discount_types?.includes('extended_period') || false}
+                                onChange={() => handleDiscountTypeChange('extended_period')}
+                                disabled={!formData.discount_types?.includes('extended_period') && formData.discount_types?.length >= 2}
+                                sx={{ color: '#10b981', '&.Mui-checked': { color: '#10b981' } }}
+                              />
+                            }
+                            label={
+                              <Box>
+                                <Typography sx={{ fontWeight: 600, color: '#111827' }}>Extended Period (Days)</Typography>
+                                <Typography variant="caption" sx={{ color: '#6b7280' }}>Add extra days to the subscription</Typography>
+                              </Box>
+                            }
+                          />
+                          {formData.discount_types?.includes('extended_period') && (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label="Additional Days"
+                              name="discount_days"
+                              type="number"
+                              value={formData.discount_days}
+                              onChange={handleInputChange}
+                              placeholder="e.g., 30"
+                              InputProps={{
+                                endAdornment: <Typography sx={{ ml: 1, fontWeight: 'bold' }}>days</Typography>,
+                              }}
+                              sx={{ mt: 1, ml: 4, maxWidth: '200px' }}
+                            />
+                          )}
+                        </Box>
+                      </FormGroup>
+                      {formData.discount_types?.length >= 2 && (
+                        <Alert severity="info" sx={{ mt: 2 }}>
+                          Maximum 2 discount types can be selected. Uncheck one to select a different type.
+                        </Alert>
+                      )}
+                    </Paper>
                   </Grid>
                   <Grid item xs={12}>
                     <Autocomplete
@@ -776,24 +918,32 @@ const CouponManagement = () => {
                   <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
                     {formData.name || 'Coupon Name'}
                   </Typography>
-                  <Chip
-                    label={
-                      formData.discount_value ? (
-                        formData.discount_type === 'percentage' ? `${formData.discount_value}% OFF` :
-                        formData.discount_type === 'fixed' ? `₹${formData.discount_value} OFF` :
-                        `+${formData.discount_value} Days Free`
-                      ) : 'Discount Value'
-                    }
-                    sx={{
-                      bgcolor: formData.discount_type === 'percentage' ? '#ddd6fe' :
-                               formData.discount_type === 'fixed' ? '#dbeafe' : '#d1fae5',
-                      color: formData.discount_type === 'percentage' ? '#5b21b6' :
-                             formData.discount_type === 'fixed' ? '#1e40af' : '#065f46',
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
-                      mb: 2,
-                    }}
-                  />
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mb: 2 }}>
+                    {formData.discount_types?.includes('percentage') && formData.discount_percentage && (
+                      <Chip
+                        label={`${formData.discount_percentage}% OFF`}
+                        sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold', fontSize: '0.9rem' }}
+                      />
+                    )}
+                    {formData.discount_types?.includes('fixed') && formData.discount_fixed && (
+                      <Chip
+                        label={`₹${formData.discount_fixed} OFF`}
+                        sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 'bold', fontSize: '0.9rem' }}
+                      />
+                    )}
+                    {formData.discount_types?.includes('extended_period') && formData.discount_days && (
+                      <Chip
+                        label={`+${formData.discount_days} Days Free`}
+                        sx={{ bgcolor: '#d1fae5', color: '#065f46', fontWeight: 'bold', fontSize: '0.9rem' }}
+                      />
+                    )}
+                    {(!formData.discount_types || formData.discount_types.length === 0) && (
+                      <Chip
+                        label="Select Discount Type"
+                        sx={{ bgcolor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold', fontSize: '0.9rem' }}
+                      />
+                    )}
+                  </Box>
                   <Typography variant="body2" sx={{ color: '#6b7280' }}>
                     {formData.description || 'Coupon description will appear here'}
                   </Typography>
