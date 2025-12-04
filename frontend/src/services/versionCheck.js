@@ -5,21 +5,35 @@
  * This solves the cache issue where users don't see deployed updates
  */
 
-const VERSION_CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
+const VERSION_CHECK_INTERVAL = 60 * 1000; // Check every 1 minute (reduced from 5 minutes)
 const CURRENT_VERSION_KEY = 'nexinvo_app_version';
+const LAST_CHECK_KEY = 'nexinvo_last_version_check';
 
 class VersionCheckService {
   constructor() {
     this.intervalId = null;
     this.currentVersion = localStorage.getItem(CURRENT_VERSION_KEY);
+    this.notificationShown = false;
   }
 
   /**
    * Start version checking
    */
   start() {
-    // Initial check after a short delay (let the app load first)
-    setTimeout(() => this.checkVersion(), 10000);
+    // Immediately check version on start (with cache bust)
+    this.checkVersion(true);
+
+    // Also check when tab becomes visible again
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.checkVersion(true);
+      }
+    });
+
+    // Check on window focus
+    window.addEventListener('focus', () => {
+      this.checkVersion(true);
+    });
 
     // Set up periodic checks
     this.intervalId = setInterval(() => {
@@ -39,14 +53,19 @@ class VersionCheckService {
 
   /**
    * Check for new version
+   * @param {boolean} force - Force check even if recently checked
    */
-  async checkVersion() {
+  async checkVersion(force = false) {
     try {
-      // Add timestamp to prevent caching
-      const response = await fetch(`/version.json?t=${Date.now()}`, {
+      // Add multiple cache-busting techniques
+      const cacheBuster = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const response = await fetch(`/version.json?_=${cacheBuster}`, {
+        method: 'GET',
         cache: 'no-store',
         headers: {
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       });
 
@@ -57,11 +76,13 @@ class VersionCheckService {
 
       const data = await response.json();
       const serverVersion = data.version;
+      const serverBuildDate = data.buildDate;
 
       // First time - just store the version
       if (!this.currentVersion) {
         this.currentVersion = serverVersion;
         localStorage.setItem(CURRENT_VERSION_KEY, serverVersion);
+        localStorage.setItem(LAST_CHECK_KEY, serverBuildDate);
         console.log('Version check: Initial version stored:', serverVersion);
         return;
       }
@@ -70,9 +91,18 @@ class VersionCheckService {
       if (serverVersion !== this.currentVersion) {
         console.log('Version check: New version available!', {
           current: this.currentVersion,
-          new: serverVersion
+          new: serverVersion,
+          buildDate: serverBuildDate
         });
-        this.showUpdateNotification(serverVersion);
+
+        // Update stored version BEFORE showing notification
+        // so subsequent checks don't keep showing the notification
+        const oldVersion = this.currentVersion;
+        this.currentVersion = serverVersion;
+        localStorage.setItem(CURRENT_VERSION_KEY, serverVersion);
+        localStorage.setItem(LAST_CHECK_KEY, serverBuildDate);
+
+        this.showUpdateNotification(serverVersion, oldVersion);
       }
     } catch (error) {
       console.log('Version check: Error checking version', error.message);
@@ -82,11 +112,13 @@ class VersionCheckService {
   /**
    * Show update notification to user
    */
-  showUpdateNotification(newVersion) {
+  showUpdateNotification(newVersion, oldVersion = '') {
     // Check if notification already shown
-    if (document.getElementById('version-update-notification')) {
+    if (this.notificationShown || document.getElementById('version-update-notification')) {
       return;
     }
+
+    this.notificationShown = true;
 
     // Create notification element
     const notification = document.createElement('div');
@@ -108,13 +140,14 @@ class VersionCheckService {
         gap: 16px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         animation: slideUp 0.3s ease;
+        max-width: 90vw;
       ">
-        <div style="font-size: 24px;">🔄</div>
-        <div>
+        <div style="font-size: 24px;">🚀</div>
+        <div style="flex: 1;">
           <div style="font-weight: 600; margin-bottom: 4px;">New Update Available!</div>
-          <div style="font-size: 13px; opacity: 0.9;">Version ${newVersion} is ready. Refresh to get the latest features.</div>
+          <div style="font-size: 13px; opacity: 0.9;">Version ${newVersion} is ready${oldVersion ? ` (was ${oldVersion})` : ''}. Click refresh to get the latest features.</div>
         </div>
-        <button onclick="window.location.reload(true)" style="
+        <button id="version-refresh-btn" style="
           background: rgba(255,255,255,0.2);
           border: 1px solid rgba(255,255,255,0.3);
           color: white;
@@ -124,10 +157,11 @@ class VersionCheckService {
           font-weight: 600;
           font-size: 14px;
           transition: all 0.2s;
-        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+          white-space: nowrap;
+        ">
           Refresh Now
         </button>
-        <button onclick="this.parentElement.parentElement.remove()" style="
+        <button id="version-dismiss-btn" style="
           background: none;
           border: none;
           color: white;
@@ -142,10 +176,30 @@ class VersionCheckService {
           from { opacity: 0; transform: translateX(-50%) translateY(20px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
+        #version-refresh-btn:hover {
+          background: rgba(255,255,255,0.3) !important;
+        }
       </style>
     `;
 
     document.body.appendChild(notification);
+
+    // Add event listeners
+    document.getElementById('version-refresh-btn').addEventListener('click', () => {
+      // Clear all caches and reload
+      if ('caches' in window) {
+        caches.keys().then(names => {
+          names.forEach(name => caches.delete(name));
+        });
+      }
+      // Force hard reload
+      window.location.reload(true);
+    });
+
+    document.getElementById('version-dismiss-btn').addEventListener('click', () => {
+      notification.remove();
+      this.notificationShown = false;
+    });
   }
 
   /**
@@ -161,7 +215,19 @@ class VersionCheckService {
    */
   clearStoredVersion() {
     localStorage.removeItem(CURRENT_VERSION_KEY);
+    localStorage.removeItem(LAST_CHECK_KEY);
     this.currentVersion = null;
+    this.notificationShown = false;
+  }
+
+  /**
+   * Get current stored version info
+   */
+  getVersionInfo() {
+    return {
+      currentVersion: this.currentVersion,
+      lastCheck: localStorage.getItem(LAST_CHECK_KEY)
+    };
   }
 }
 
