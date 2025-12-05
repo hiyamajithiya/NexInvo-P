@@ -134,37 +134,86 @@ function Settings() {
   // Resize image to optimal dimensions for logo
   const resizeImage = (file, maxWidth = 300, maxHeight = 150) => {
     return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
+      // First try using FileReader as a more compatible approach
+      const reader = new FileReader();
 
-        // Calculate new dimensions maintaining aspect ratio
-        if (width > maxWidth || height > maxHeight) {
-          const widthRatio = maxWidth / width;
-          const heightRatio = maxHeight / height;
-          const ratio = Math.min(widthRatio, heightRatio);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
+      reader.onload = (e) => {
+        const img = new Image();
 
-        // Create canvas and draw resized image
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
+        img.onload = () => {
+          try {
+            let { width, height } = img;
 
-        // Use high-quality image smoothing
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+            // Calculate new dimensions maintaining aspect ratio
+            if (width > maxWidth || height > maxHeight) {
+              const widthRatio = maxWidth / width;
+              const heightRatio = maxHeight / height;
+              const ratio = Math.min(widthRatio, heightRatio);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
 
-        ctx.drawImage(img, 0, 0, width, height);
+            // Create canvas and draw resized image
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
 
-        // Convert to base64 (use PNG for logos to preserve transparency)
-        const resizedBase64 = canvas.toDataURL('image/png', 0.9);
-        resolve(resizedBase64);
+            if (!ctx) {
+              // Canvas not supported, return original as base64
+              console.warn('Canvas not supported, using original image');
+              resolve(e.target.result);
+              return;
+            }
+
+            // Use high-quality image smoothing
+            ctx.imageSmoothingEnabled = true;
+            if (ctx.imageSmoothingQuality) {
+              ctx.imageSmoothingQuality = 'high';
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convert to base64 (use PNG for logos to preserve transparency)
+            const resizedBase64 = canvas.toDataURL('image/png', 0.9);
+
+            // Verify the output is valid
+            if (!resizedBase64 || resizedBase64 === 'data:,') {
+              console.warn('Canvas toDataURL failed, using original image');
+              resolve(e.target.result);
+              return;
+            }
+
+            resolve(resizedBase64);
+          } catch (canvasError) {
+            console.error('Canvas resize error:', canvasError);
+            // Fallback to original image if canvas fails
+            resolve(e.target.result);
+          }
+        };
+
+        img.onerror = (imgError) => {
+          console.error('Image load error:', imgError);
+          // Try to use original base64 if image load fails
+          if (e.target.result) {
+            resolve(e.target.result);
+          } else {
+            reject(new Error('Failed to load image'));
+          }
+        };
+
+        // Set crossOrigin to handle potential CORS issues
+        img.crossOrigin = 'anonymous';
+        img.src = e.target.result;
       };
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(file);
+
+      reader.onerror = (readerError) => {
+        console.error('FileReader error:', readerError);
+        reject(new Error('Failed to read image file'));
+      };
+
+      // Read the file as data URL (base64)
+      reader.readAsDataURL(file);
     });
   };
 
@@ -172,20 +221,29 @@ function Settings() {
     const file = event.target.files[0];
     if (file) {
       // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+      if (!file.type.startsWith('image/') && !validTypes.includes(file.type.toLowerCase())) {
+        setError('Please select a valid image file (PNG, JPG, GIF, WebP, or SVG)');
         return;
       }
 
       // Validate file size (max 5MB for original, will be resized)
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Logo file size should be less than 5MB');
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        setError(`Logo file size should be less than 5MB. Current: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
         return;
       }
 
       try {
+        setLoading(true);
         // Resize image to optimal dimensions (max 300x150 for logos)
         const resizedImage = await resizeImage(file, 300, 150);
+
+        // Check if resized image is valid
+        if (!resizedImage || !resizedImage.startsWith('data:')) {
+          throw new Error('Invalid image data');
+        }
+
         setLogoPreview(resizedImage);
         setCompanyInfo({
           ...companyInfo,
@@ -193,8 +251,10 @@ function Settings() {
         });
         showSuccess('Logo uploaded and optimized successfully');
       } catch (err) {
-        showError('Failed to process image. Please try again.');
-        console.error('Logo resize error:', err);
+        console.error('Logo upload error:', err);
+        showError('Failed to process image. Please try a different image or smaller file.');
+      } finally {
+        setLoading(false);
       }
     }
   };
