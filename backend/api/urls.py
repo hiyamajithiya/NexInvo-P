@@ -56,4 +56,10 @@ urlpatterns = [
     # DPDP Act compliance endpoints
     path('profile/delete-account/', views.delete_account_view, name='delete-account'),
     path('profile/export-data/', views.export_personal_data_view, name='export-personal-data'),
+    # Tally Sync endpoints
+    path('tally-sync/check-connection/', views.tally_check_connection, name='tally-check-connection'),
+    path('tally-sync/tally-ledgers/', views.tally_get_ledgers, name='tally-get-ledgers'),
+    path('tally-sync/mappings/', views.tally_mappings, name='tally-mappings'),
+    path('tally-sync/sync-invoices/', views.tally_sync_invoices, name='tally-sync-invoices'),
+    path('tally-sync/sync-history/', views.tally_sync_history, name='tally-sync-history'),
 ]

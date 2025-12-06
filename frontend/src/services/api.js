@@ -238,4 +238,17 @@ export const subscriptionAPI = {
   rejectUpgradeRequest: (id, data) => api.post(`/subscription-upgrade-requests/${id}/reject/`, data),
 };
 
+// Tally Sync APIs
+export const tallySyncAPI = {
+  checkConnection: (data) => api.post('/tally-sync/check-connection/', data || {}),
+  getTallyLedgers: () => api.get('/tally-sync/tally-ledgers/'),
+  getMappings: () => api.get('/tally-sync/mappings/'),
+  saveMappings: (data) => api.post('/tally-sync/mappings/', data),
+  syncInvoices: (startDate, endDate) => api.post('/tally-sync/sync-invoices/', {
+    start_date: startDate,
+    end_date: endDate
+  }),
+  getSyncHistory: () => api.get('/tally-sync/sync-history/'),
+};
+
 export default api;

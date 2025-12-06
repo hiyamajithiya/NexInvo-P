@@ -4515,3 +4515,259 @@ def superadmin_email_send_quick(request):
     fake_request.user = request.user
 
     return superadmin_email_send_campaign(fake_request, campaign.id)
+
+
+# =============================================================================
+# TALLY SYNC API ENDPOINTS
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_check_connection(request):
+    """Check connection to Tally"""
+    from .tally_sync import TallyConnector
+    from .models import TallyMapping
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response(
+            {'error': 'Organization not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Get Tally settings
+    host = request.data.get('host', 'localhost')
+    port = request.data.get('port', 9000)
+
+    connector = TallyConnector(host=host, port=port)
+    result = connector.check_connection()
+
+    # Save connection info if successful
+    if result['connected']:
+        mapping, created = TallyMapping.objects.get_or_create(
+            organization=org,
+            defaults={
+                'tally_host': host,
+                'tally_port': port
+            }
+        )
+        if not created:
+            mapping.tally_host = host
+            mapping.tally_port = port
+
+        mapping.tally_company_name = result.get('company_name', '')
+        mapping.tally_version = result.get('tally_version', '')
+        mapping.save()
+
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_get_ledgers(request):
+    """Get list of ledgers from Tally"""
+    from .tally_sync import TallyConnector
+    from .models import TallyMapping
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response(
+            {'error': 'Organization not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Try to get mapping for host/port, use defaults if not exists
+    try:
+        mapping = TallyMapping.objects.get(organization=org)
+        host = mapping.tally_host
+        port = mapping.tally_port
+    except TallyMapping.DoesNotExist:
+        # Use defaults - Tally typically runs on localhost:9000
+        host = 'localhost'
+        port = 9000
+
+    connector = TallyConnector(host=host, port=port)
+    ledgers = connector.get_ledgers()
+
+    return Response({'ledgers': ledgers})
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def tally_mappings(request):
+    """Get or save Tally ledger mappings"""
+    from .models import TallyMapping
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response(
+            {'error': 'Organization not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        try:
+            mapping = TallyMapping.objects.get(organization=org)
+            return Response({
+                'mappings': {
+                    'salesLedger': mapping.sales_ledger,
+                    'cgstLedger': mapping.cgst_ledger,
+                    'sgstLedger': mapping.sgst_ledger,
+                    'igstLedger': mapping.igst_ledger,
+                    'roundOffLedger': mapping.round_off_ledger,
+                    'discountLedger': mapping.discount_ledger,
+                    'defaultPartyGroup': mapping.default_party_group,
+                }
+            })
+        except TallyMapping.DoesNotExist:
+            return Response({'mappings': None})
+
+    elif request.method == 'POST':
+        data = request.data
+        mapping, created = TallyMapping.objects.get_or_create(
+            organization=org,
+            defaults={
+                'sales_ledger': data.get('salesLedger', 'Sales'),
+                'cgst_ledger': data.get('cgstLedger', 'CGST'),
+                'sgst_ledger': data.get('sgstLedger', 'SGST'),
+                'igst_ledger': data.get('igstLedger', 'IGST'),
+                'round_off_ledger': data.get('roundOffLedger', 'Round Off'),
+                'discount_ledger': data.get('discountLedger', 'Discount Allowed'),
+                'default_party_group': data.get('defaultPartyGroup', 'Sundry Debtors'),
+            }
+        )
+
+        if not created:
+            mapping.sales_ledger = data.get('salesLedger', mapping.sales_ledger)
+            mapping.cgst_ledger = data.get('cgstLedger', mapping.cgst_ledger)
+            mapping.sgst_ledger = data.get('sgstLedger', mapping.sgst_ledger)
+            mapping.igst_ledger = data.get('igstLedger', mapping.igst_ledger)
+            mapping.round_off_ledger = data.get('roundOffLedger', mapping.round_off_ledger)
+            mapping.discount_ledger = data.get('discountLedger', mapping.discount_ledger)
+            mapping.default_party_group = data.get('defaultPartyGroup', mapping.default_party_group)
+            mapping.save()
+
+        return Response({'success': True, 'message': 'Mappings saved successfully'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_sync_invoices(request):
+    """Sync invoices to Tally"""
+    from .tally_sync import sync_invoices_to_tally
+    from .models import TallyMapping
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        org = Organization.objects.get(id=org_id)
+        mapping = TallyMapping.objects.get(organization=org)
+    except Organization.DoesNotExist:
+        return Response(
+            {'error': 'Organization not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except TallyMapping.DoesNotExist:
+        return Response(
+            {'error': 'Please configure Tally mappings first'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    start_date = request.data.get('start_date')
+    end_date = request.data.get('end_date')
+
+    if not start_date or not end_date:
+        return Response(
+            {'error': 'Start date and end date are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Convert string dates to date objects
+    try:
+        from datetime import datetime
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    except ValueError:
+        return Response(
+            {'error': 'Invalid date format. Use YYYY-MM-DD'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Perform sync
+    result = sync_invoices_to_tally(
+        organization=org,
+        user=request.user,
+        start_date=start_date,
+        end_date=end_date,
+        mapping=mapping
+    )
+
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_sync_history(request):
+    """Get Tally sync history"""
+    from .models import TallySyncHistory
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response(
+            {'error': 'Organization not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    history = TallySyncHistory.objects.filter(organization=org).order_by('-sync_started_at')[:50]
+
+    history_data = []
+    for record in history:
+        history_data.append({
+            'sync_date': record.sync_started_at.isoformat(),
+            'start_date': record.start_date.strftime('%Y-%m-%d'),
+            'end_date': record.end_date.strftime('%Y-%m-%d'),
+            'invoices_synced': record.invoices_synced,
+            'invoices_failed': record.invoices_failed,
+            'total_amount': str(record.total_amount),
+            'status': record.status,
+            'user': record.user.username if record.user else 'Unknown',
+        })
+
+    return Response({'history': history_data})

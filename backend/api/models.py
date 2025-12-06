@@ -1534,3 +1534,135 @@ class EmailOTP(models.Model):
         from datetime import timedelta
         cutoff = timezone.now() - timedelta(hours=1)
         cls.objects.filter(created_at__lt=cutoff).delete()
+
+
+# =============================================================================
+# TALLY SYNC MODELS
+# =============================================================================
+
+class TallyMapping(models.Model):
+    """
+    Stores the mapping between NexInvo accounts and Tally ledgers.
+    This mapping is saved per organization and used for all invoice syncs.
+    """
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='tally_mapping'
+    )
+
+    # Tally Connection Settings
+    tally_host = models.CharField(max_length=255, default='localhost')
+    tally_port = models.IntegerField(default=9000)
+
+    # Ledger Mappings
+    sales_ledger = models.CharField(max_length=255, default='Sales')
+    cgst_ledger = models.CharField(max_length=255, default='CGST')
+    sgst_ledger = models.CharField(max_length=255, default='SGST')
+    igst_ledger = models.CharField(max_length=255, default='IGST')
+    round_off_ledger = models.CharField(max_length=255, default='Round Off', blank=True)
+    discount_ledger = models.CharField(max_length=255, default='Discount Allowed', blank=True)
+
+    # Party/Client Settings
+    default_party_group = models.CharField(max_length=255, default='Sundry Debtors')
+
+    # Tally Company Info (cached from last connection)
+    tally_company_name = models.CharField(max_length=255, blank=True)
+    tally_version = models.CharField(max_length=50, blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Tally Mapping"
+        verbose_name_plural = "Tally Mappings"
+
+    def __str__(self):
+        return f"Tally Mapping for {self.organization.name}"
+
+
+class TallySyncHistory(models.Model):
+    """
+    Records the history of invoice syncs to Tally.
+    Helps track what was synced and when.
+    """
+    STATUS_CHOICES = [
+        ('success', 'Success'),
+        ('partial', 'Partial Success'),
+        ('failed', 'Failed'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='tally_sync_history'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='tally_syncs'
+    )
+
+    # Sync Parameters
+    start_date = models.DateField(help_text='Start date of invoice period synced')
+    end_date = models.DateField(help_text='End date of invoice period synced')
+
+    # Results
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='success')
+    invoices_synced = models.IntegerField(default=0)
+    invoices_failed = models.IntegerField(default=0)
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    # Error Details
+    error_message = models.TextField(blank=True)
+    failed_invoice_ids = models.JSONField(default=list, blank=True)
+
+    # Tally Response
+    tally_response = models.TextField(blank=True, help_text='Raw response from Tally')
+
+    # Timestamps
+    sync_started_at = models.DateTimeField(auto_now_add=True)
+    sync_completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Tally Sync History"
+        verbose_name_plural = "Tally Sync Histories"
+        ordering = ['-sync_started_at']
+
+    def __str__(self):
+        return f"Sync {self.start_date} to {self.end_date} - {self.status}"
+
+
+class InvoiceTallySync(models.Model):
+    """
+    Tracks which invoices have been synced to Tally.
+    Prevents duplicate posting of the same invoice.
+    """
+    invoice = models.OneToOneField(
+        'Invoice',
+        on_delete=models.CASCADE,
+        related_name='tally_sync'
+    )
+    sync_history = models.ForeignKey(
+        TallySyncHistory,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='invoice_syncs'
+    )
+
+    # Sync Status
+    synced = models.BooleanField(default=True)
+    synced_at = models.DateTimeField(auto_now_add=True)
+
+    # Tally Reference
+    tally_voucher_number = models.CharField(max_length=100, blank=True)
+    tally_voucher_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Invoice Tally Sync"
+        verbose_name_plural = "Invoice Tally Syncs"
+
+    def __str__(self):
+        return f"Invoice {self.invoice.invoice_number} - Synced: {self.synced}"

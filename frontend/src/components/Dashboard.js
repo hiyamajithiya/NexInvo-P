@@ -16,6 +16,7 @@ const PricingPlans = lazy(() => import('./PricingPlans'));
 const MySubscription = lazy(() => import('./MySubscription'));
 const HelpCenter = lazy(() => import('./HelpCenter'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
+const TallySyncCorner = lazy(() => import('./TallySyncCorner'));
 
 // Component loading spinner
 const ComponentLoader = () => (
@@ -146,6 +147,8 @@ function Dashboard({ user, onLogout }) {
         return <MySubscription onNavigate={setActiveMenu} />;
       case 'help':
         return <HelpCenter />;
+      case 'tally-sync':
+        return <TallySyncCorner />;
       case 'profile':
         return <Profile onLogout={onLogout} />;
       default:
@@ -356,6 +359,7 @@ function Dashboard({ user, onLogout }) {
       case 'pricing': return 'Subscription Plans';
       case 'subscription': return 'My Subscription';
       case 'help': return 'Help Center';
+      case 'tally-sync': return 'Tally Sync Corner';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
     }
@@ -478,6 +482,14 @@ function Dashboard({ user, onLogout }) {
           >
             <span className="nav-icon">💼</span>
             <span className="nav-text">My Subscription</span>
+          </a>
+          <a
+            href="#tally-sync"
+            className={`nav-item ${activeMenu === 'tally-sync' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('tally-sync'); }}
+          >
+            <span className="nav-icon">🔄</span>
+            <span className="nav-text">Tally Sync Corner</span>
           </a>
           <a
             href="#help"
