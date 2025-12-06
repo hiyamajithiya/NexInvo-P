@@ -34,7 +34,8 @@ function TallySyncCorner() {
   // Sync state
   const [syncParams, setSyncParams] = useState({
     startDate: '',
-    endDate: ''
+    endDate: '',
+    forceResync: false
   });
   const [syncProgress, setSyncProgress] = useState({
     inProgress: false,
@@ -202,7 +203,7 @@ function TallySyncCorner() {
     setLoading(true);
 
     try {
-      const response = await tallySyncAPI.syncInvoices(syncParams.startDate, syncParams.endDate);
+      const response = await tallySyncAPI.syncInvoices(syncParams.startDate, syncParams.endDate, syncParams.forceResync);
       const result = response.data;
 
       setSyncProgress({
@@ -213,7 +214,11 @@ function TallySyncCorner() {
       });
 
       if (result.success) {
-        showSuccess(`Successfully synced ${result.synced_count} invoices to Tally!`);
+        if (result.skipped_existing > 0) {
+          showSuccess(`Synced ${result.synced_count} invoices. ${result.skipped_existing} already exist in Tally.`);
+        } else {
+          showSuccess(`Successfully synced ${result.synced_count} invoices to Tally!`);
+        }
         loadSyncHistory();
       } else {
         showError(result.message || 'Sync completed with errors');
@@ -842,6 +847,31 @@ function TallySyncCorner() {
                             style={{ background: 'white' }}
                           />
                         </div>
+                      </div>
+
+                      {/* Force Re-sync Option */}
+                      <div style={{
+                        marginTop: '16px',
+                        padding: '12px 16px',
+                        background: 'rgba(255,255,255,0.6)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}>
+                        <input
+                          type="checkbox"
+                          id="forceResync"
+                          checked={syncParams.forceResync}
+                          onChange={(e) => setSyncParams({ ...syncParams, forceResync: e.target.checked })}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="forceResync" style={{ color: '#5b21b6', cursor: 'pointer', flex: 1 }}>
+                          <strong>Force Re-sync</strong>
+                          <span style={{ display: 'block', fontSize: '12px', color: '#6d28d9', marginTop: '2px' }}>
+                            Re-sync invoices even if previously synced. Use this if you deleted vouchers from Tally and want to re-import them.
+                          </span>
+                        </label>
                       </div>
                     </div>
 

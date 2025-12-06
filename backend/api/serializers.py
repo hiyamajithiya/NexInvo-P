@@ -5,7 +5,8 @@ from .models import (
     Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
     Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings,
     InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon,
-    CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification
+    CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification,
+    ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog
 )
 
 
@@ -543,3 +544,116 @@ class SuperAdminNotificationSerializer(serializers.ModelSerializer):
         if obj.user:
             return obj.user.get_full_name() or obj.user.username
         return None
+
+
+# =============================================================================
+# SCHEDULED INVOICE SERIALIZERS
+# =============================================================================
+
+class ScheduledInvoiceItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScheduledInvoiceItem
+        fields = ['id', 'description', 'hsn_sac', 'gst_rate', 'taxable_amount', 'total_amount']
+        read_only_fields = ['id']
+
+
+class ScheduledInvoiceLogSerializer(serializers.ModelSerializer):
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
+
+    class Meta:
+        model = ScheduledInvoiceLog
+        fields = ['id', 'invoice', 'invoice_number', 'status', 'generation_date',
+                  'error_message', 'email_sent', 'email_sent_at', 'email_error', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ScheduledInvoiceSerializer(serializers.ModelSerializer):
+    items = ScheduledInvoiceItemSerializer(many=True)
+    client_name = serializers.CharField(source='client.name', read_only=True)
+    client_email = serializers.CharField(source='client.email', read_only=True)
+    payment_term_name = serializers.CharField(source='payment_term.term_name', read_only=True, allow_null=True)
+    frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    total_amount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScheduledInvoice
+        fields = [
+            'id', 'name', 'client', 'client_name', 'client_email', 'invoice_type',
+            'frequency', 'frequency_display', 'day_of_month', 'day_of_week', 'month_of_year',
+            'start_date', 'end_date', 'max_occurrences',
+            'payment_term', 'payment_term_name', 'notes',
+            'auto_send_email', 'email_subject', 'email_body',
+            'status', 'status_display', 'occurrences_generated',
+            'last_generated_date', 'next_generation_date',
+            'items', 'total_amount',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'occurrences_generated', 'last_generated_date',
+                           'next_generation_date', 'created_at', 'updated_at']
+
+    def get_total_amount(self, obj):
+        """Calculate total amount from items"""
+        return sum(item.total_amount for item in obj.items.all())
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        request = self.context.get('request')
+
+        # Set organization and created_by
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
+        scheduled_invoice = ScheduledInvoice.objects.create(**validated_data)
+
+        # Create items
+        for item_data in items_data:
+            ScheduledInvoiceItem.objects.create(scheduled_invoice=scheduled_invoice, **item_data)
+
+        return scheduled_invoice
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop('items', None)
+
+        # Update scheduled invoice fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update items if provided
+        if items_data is not None:
+            # Delete existing items
+            instance.items.all().delete()
+            # Create new items
+            for item_data in items_data:
+                ScheduledInvoiceItem.objects.create(scheduled_invoice=instance, **item_data)
+
+        return instance
+
+
+class ScheduledInvoiceListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for list views"""
+    client_name = serializers.CharField(source='client.name', read_only=True)
+    frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    total_amount = serializers.SerializerMethodField()
+    items_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScheduledInvoice
+        fields = [
+            'id', 'name', 'client', 'client_name', 'invoice_type',
+            'frequency', 'frequency_display', 'day_of_month',
+            'start_date', 'end_date', 'status', 'status_display',
+            'occurrences_generated', 'next_generation_date',
+            'auto_send_email', 'total_amount', 'items_count',
+            'created_at'
+        ]
+
+    def get_total_amount(self, obj):
+        return sum(item.total_amount for item in obj.items.all())
+
+    def get_items_count(self, obj):
+        return obj.items.count()

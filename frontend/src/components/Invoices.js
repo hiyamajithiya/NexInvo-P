@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { invoiceAPI } from '../services/api';
 import './Pages.css';
 import InvoiceForm from './InvoiceForm';
+import ScheduledInvoices from './ScheduledInvoices';
 
 function Invoices() {
   const [invoices, setInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [showScheduledInvoices, setShowScheduledInvoices] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -346,6 +348,11 @@ function Invoices() {
     }
   };
 
+  // Show Scheduled Invoices page
+  if (showScheduledInvoices) {
+    return <ScheduledInvoices onBack={() => setShowScheduledInvoices(false)} />;
+  }
+
   if (showForm) {
     return <InvoiceForm
       invoice={editingInvoice}
@@ -365,6 +372,10 @@ function Invoices() {
           <p className="page-description">Manage all your invoices</p>
         </div>
         <div className="page-header-right">
+          <button className="btn-secondary" onClick={() => setShowScheduledInvoices(true)}>
+            <span className="btn-icon">📅</span>
+            Scheduled Invoices
+          </button>
           <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
             <span className="btn-icon">📥</span>
             Import Invoices

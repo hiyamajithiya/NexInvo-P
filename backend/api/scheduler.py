@@ -180,6 +180,15 @@ def delete_old_job_executions(max_age=604_800):
     DjangoJobExecution.objects.delete_old_job_executions(max_age)
 
 
+def process_scheduled_invoices_job():
+    """
+    Process all scheduled invoices that are due today.
+    This is called automatically by the scheduler.
+    """
+    from api.scheduled_invoice_generator import process_scheduled_invoices
+    return process_scheduled_invoices()
+
+
 def start_scheduler():
     """
     Start the background scheduler with payment reminder job.
@@ -211,6 +220,19 @@ def start_scheduler():
         replace_existing=True,
     )
     logger.info("Job execution cleanup scheduled for weekly on Sunday at midnight")
+
+    # Schedule invoice generation - runs daily at configured time (same as payment reminders)
+    scheduled_invoice_hour = getattr(settings, 'SCHEDULED_INVOICE_HOUR', reminder_hour)
+    scheduled_invoice_minute = getattr(settings, 'SCHEDULED_INVOICE_MINUTE', reminder_minute + 5)
+
+    scheduler.add_job(
+        process_scheduled_invoices_job,
+        trigger=CronTrigger(hour=scheduled_invoice_hour, minute=scheduled_invoice_minute),
+        id="process_scheduled_invoices",
+        max_instances=1,
+        replace_existing=True,
+    )
+    logger.info(f"Scheduled invoice job set to run daily at {scheduled_invoice_hour:02d}:{scheduled_invoice_minute:02d}")
 
     try:
         logger.info("Starting background scheduler...")

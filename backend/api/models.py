@@ -1666,3 +1666,263 @@ class InvoiceTallySync(models.Model):
 
     def __str__(self):
         return f"Invoice {self.invoice.invoice_number} - Synced: {self.synced}"
+
+
+# =============================================================================
+# SCHEDULED/RECURRING INVOICES
+# =============================================================================
+
+class ScheduledInvoice(models.Model):
+    """
+    Scheduled/Recurring Invoice configuration.
+    Allows users to configure invoices that are automatically generated
+    on a recurring basis (daily, weekly, monthly, yearly).
+    """
+    FREQUENCY_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('yearly', 'Yearly'),
+    ]
+
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('paused', 'Paused'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    DAY_OF_WEEK_CHOICES = [
+        (0, 'Monday'),
+        (1, 'Tuesday'),
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='scheduled_invoices')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_scheduled_invoices')
+
+    # Schedule Name/Description
+    name = models.CharField(max_length=255, help_text='Name for this scheduled invoice (e.g., "Monthly Retainer - ABC Corp")')
+
+    # Client
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='scheduled_invoices')
+
+    # Invoice Type
+    invoice_type = models.CharField(max_length=20, choices=[
+        ('proforma', 'Proforma Invoice'),
+        ('tax', 'Tax Invoice'),
+    ], default='proforma')
+
+    # Recurrence Settings
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='monthly')
+    day_of_month = models.IntegerField(default=1, help_text='Day of month for monthly/yearly (1-28)')
+    day_of_week = models.IntegerField(choices=DAY_OF_WEEK_CHOICES, null=True, blank=True, help_text='Day of week for weekly')
+    month_of_year = models.IntegerField(null=True, blank=True, help_text='Month for yearly (1-12)')
+
+    # Schedule Period
+    start_date = models.DateField(help_text='Start date for scheduled invoices')
+    end_date = models.DateField(null=True, blank=True, help_text='End date (leave blank for indefinite)')
+    max_occurrences = models.IntegerField(null=True, blank=True, help_text='Maximum number of invoices to generate (leave blank for unlimited)')
+
+    # Invoice Content
+    payment_term = models.ForeignKey('PaymentTerm', on_delete=models.SET_NULL, null=True, blank=True, related_name='scheduled_invoices')
+    notes = models.TextField(blank=True, help_text='Notes to include on generated invoices')
+
+    # Email Settings
+    auto_send_email = models.BooleanField(default=True, help_text='Automatically email invoice to client after generation')
+    email_subject = models.CharField(max_length=255, blank=True, help_text='Custom email subject (leave blank for default)')
+    email_body = models.TextField(blank=True, help_text='Custom email body (leave blank for default)')
+
+    # Status and Tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    occurrences_generated = models.IntegerField(default=0, help_text='Number of invoices generated so far')
+    last_generated_date = models.DateField(null=True, blank=True, help_text='Date of last generated invoice')
+    next_generation_date = models.DateField(null=True, blank=True, help_text='Next scheduled generation date')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Scheduled Invoice"
+        verbose_name_plural = "Scheduled Invoices"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - {self.client.name} ({self.frequency})"
+
+    def calculate_next_generation_date(self, from_date=None):
+        """Calculate the next date when invoice should be generated"""
+        from datetime import date, timedelta
+        from dateutil.relativedelta import relativedelta
+
+        if from_date is None:
+            from_date = date.today()
+
+        # If schedule hasn't started yet, return start_date
+        if from_date < self.start_date:
+            return self.start_date
+
+        # Check if max occurrences reached
+        if self.max_occurrences and self.occurrences_generated >= self.max_occurrences:
+            return None
+
+        # Check if end date passed
+        if self.end_date and from_date > self.end_date:
+            return None
+
+        if self.frequency == 'daily':
+            next_date = from_date + timedelta(days=1)
+
+        elif self.frequency == 'weekly':
+            # Find next occurrence of the specified day of week
+            days_ahead = self.day_of_week - from_date.weekday()
+            if days_ahead <= 0:  # Target day already happened this week
+                days_ahead += 7
+            next_date = from_date + timedelta(days=days_ahead)
+
+        elif self.frequency == 'monthly':
+            # Next month on the specified day
+            next_date = from_date + relativedelta(months=1)
+            # Handle months with fewer days
+            day = min(self.day_of_month, 28)
+            next_date = next_date.replace(day=day)
+
+        elif self.frequency == 'quarterly':
+            # Every 3 months on the specified day
+            next_date = from_date + relativedelta(months=3)
+            day = min(self.day_of_month, 28)
+            next_date = next_date.replace(day=day)
+
+        elif self.frequency == 'yearly':
+            # Next year on the specified month and day
+            next_date = from_date + relativedelta(years=1)
+            month = self.month_of_year or 1
+            day = min(self.day_of_month, 28)
+            next_date = next_date.replace(month=month, day=day)
+
+        else:
+            return None
+
+        # Check end date
+        if self.end_date and next_date > self.end_date:
+            return None
+
+        return next_date
+
+    def should_generate_today(self):
+        """Check if an invoice should be generated today"""
+        from datetime import date
+        today = date.today()
+
+        # Check status
+        if self.status != 'active':
+            return False
+
+        # Check start date
+        if today < self.start_date:
+            return False
+
+        # Check end date
+        if self.end_date and today > self.end_date:
+            return False
+
+        # Check max occurrences
+        if self.max_occurrences and self.occurrences_generated >= self.max_occurrences:
+            return False
+
+        # Check if already generated today
+        if self.last_generated_date == today:
+            return False
+
+        # Check if today matches the schedule
+        if self.frequency == 'daily':
+            return True
+
+        elif self.frequency == 'weekly':
+            return today.weekday() == self.day_of_week
+
+        elif self.frequency == 'monthly':
+            day = min(self.day_of_month, 28)
+            return today.day == day
+
+        elif self.frequency == 'quarterly':
+            day = min(self.day_of_month, 28)
+            # Quarterly months: 1, 4, 7, 10 (Jan, Apr, Jul, Oct)
+            return today.day == day and today.month in [1, 4, 7, 10]
+
+        elif self.frequency == 'yearly':
+            day = min(self.day_of_month, 28)
+            month = self.month_of_year or 1
+            return today.day == day and today.month == month
+
+        return False
+
+    def save(self, *args, **kwargs):
+        # Calculate next generation date if not set
+        if not self.next_generation_date:
+            self.next_generation_date = self.calculate_next_generation_date(self.start_date)
+        super().save(*args, **kwargs)
+
+
+class ScheduledInvoiceItem(models.Model):
+    """
+    Line items for scheduled invoices.
+    These are copied to the generated invoice.
+    """
+    scheduled_invoice = models.ForeignKey(ScheduledInvoice, on_delete=models.CASCADE, related_name='items')
+    description = models.CharField(max_length=500)
+    hsn_sac = models.CharField(max_length=50, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Scheduled Invoice Item"
+        verbose_name_plural = "Scheduled Invoice Items"
+
+    def __str__(self):
+        return f"{self.description} - {self.scheduled_invoice.name}"
+
+
+class ScheduledInvoiceLog(models.Model):
+    """
+    Log of all invoices generated from scheduled invoices.
+    Helps track the history and troubleshoot issues.
+    """
+    STATUS_CHOICES = [
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+        ('email_failed', 'Invoice Created, Email Failed'),
+    ]
+
+    scheduled_invoice = models.ForeignKey(ScheduledInvoice, on_delete=models.CASCADE, related_name='generation_logs')
+    invoice = models.ForeignKey(Invoice, on_delete=models.SET_NULL, null=True, blank=True, related_name='scheduled_log')
+
+    # Generation Details
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='success')
+    generation_date = models.DateField()
+    error_message = models.TextField(blank=True)
+
+    # Email Status
+    email_sent = models.BooleanField(default=False)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_error = models.TextField(blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Scheduled Invoice Log"
+        verbose_name_plural = "Scheduled Invoice Logs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.scheduled_invoice.name} - {self.generation_date} ({self.status})"

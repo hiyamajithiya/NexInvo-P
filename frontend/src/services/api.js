@@ -244,11 +244,27 @@ export const tallySyncAPI = {
   getTallyLedgers: () => api.get('/tally-sync/tally-ledgers/'),
   getMappings: () => api.get('/tally-sync/mappings/'),
   saveMappings: (data) => api.post('/tally-sync/mappings/', data),
-  syncInvoices: (startDate, endDate) => api.post('/tally-sync/sync-invoices/', {
+  syncInvoices: (startDate, endDate, forceResync = false) => api.post('/tally-sync/sync-invoices/', {
     start_date: startDate,
-    end_date: endDate
+    end_date: endDate,
+    force_resync: forceResync
   }),
   getSyncHistory: () => api.get('/tally-sync/sync-history/'),
+};
+
+// Scheduled Invoice APIs
+export const scheduledInvoiceAPI = {
+  getAll: (params) => api.get('/scheduled-invoices/', { params }),
+  getById: (id) => api.get(`/scheduled-invoices/${id}/`),
+  create: (data) => api.post('/scheduled-invoices/', data),
+  update: (id, data) => api.put(`/scheduled-invoices/${id}/`, data),
+  delete: (id) => api.delete(`/scheduled-invoices/${id}/`),
+  pause: (id) => api.post(`/scheduled-invoices/${id}/pause/`),
+  resume: (id) => api.post(`/scheduled-invoices/${id}/resume/`),
+  cancel: (id) => api.post(`/scheduled-invoices/${id}/cancel/`),
+  getLogs: (id) => api.get(`/scheduled-invoices/${id}/logs/`),
+  generateNow: (id) => api.post(`/scheduled-invoices/${id}/generate_now/`),
+  getStats: () => api.get('/scheduled-invoices/stats/'),
 };
 
 export default api;

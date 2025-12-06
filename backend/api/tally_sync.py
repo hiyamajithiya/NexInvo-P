@@ -426,7 +426,7 @@ class TallyConnector:
 <VOUCHERNUMBER>{invoice.invoice_number}</VOUCHERNUMBER>
 <REFERENCE>{invoice.invoice_number}</REFERENCE>
 <PARTYLEDGERNAME>{party_name}</PARTYLEDGERNAME>
-<NARRATION>Invoice {invoice.invoice_number} - Synced from NexInvo</NARRATION>
+<NARRATION>{self._build_narration(invoice)}</NARRATION>
 <ISINVOICE>Yes</ISINVOICE>
 <EFFECTIVEDATE>{invoice_date}</EFFECTIVEDATE>
 {ledger_entries_xml}
@@ -440,6 +440,59 @@ class TallyConnector:
         print(f"Generated Voucher XML for {invoice.invoice_number}:")
         print(voucher_xml)
         return voucher_xml
+
+    def _build_narration(self, invoice):
+        """
+        Build narration text for Tally voucher.
+        Includes invoice notes if available.
+        """
+        narration_parts = []
+
+        # Add invoice notes if available
+        if invoice.notes and invoice.notes.strip():
+            # Escape XML special characters in notes
+            notes = invoice.notes.strip()
+            notes = notes.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            notes = notes.replace('\n', ' ').replace('\r', '')  # Remove newlines
+            narration_parts.append(notes)
+
+        # Add NexInvo reference at the end
+        narration_parts.append(f"[Invoice {invoice.invoice_number} - Imported from NexInvo]")
+
+        return ' | '.join(narration_parts) if len(narration_parts) > 1 else narration_parts[0]
+
+    def check_voucher_exists(self, voucher_number, voucher_date):
+        """
+        Check if a voucher with the given number already exists in Tally.
+        Returns True if exists, False otherwise.
+        """
+        date_str = voucher_date.strftime('%Y%m%d')
+
+        xml_request = f"""<ENVELOPE>
+<HEADER>
+<TALLYREQUEST>Export Data</TALLYREQUEST>
+</HEADER>
+<BODY>
+<EXPORTDATA>
+<REQUESTDESC>
+<REPORTNAME>Voucher Register</REPORTNAME>
+<STATICVARIABLES>
+<SVFROMDATE>{date_str}</SVFROMDATE>
+<SVTODATE>{date_str}</SVTODATE>
+<SVCURRENTCOMPANY>##SVCurrentCompany</SVCURRENTCOMPANY>
+</STATICVARIABLES>
+</REQUESTDESC>
+</EXPORTDATA>
+</BODY>
+</ENVELOPE>"""
+
+        try:
+            response = self._send_request(xml_request)
+            # Check if the voucher number appears in the response
+            return voucher_number in response
+        except Exception as e:
+            print(f"Error checking voucher existence: {e}")
+            return False  # Assume doesn't exist if we can't check
 
     def create_party_ledger(self, client, mapping):
         """
@@ -542,13 +595,21 @@ class TallyConnector:
             }
 
 
-def sync_invoices_to_tally(organization, user, start_date, end_date, mapping):
+def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, force_resync=False):
     """
     Main function to sync invoices to Tally.
+
+    Args:
+        organization: Organization to sync
+        user: User performing the sync
+        start_date: Start date for invoice filter
+        end_date: End date for invoice filter
+        mapping: TallyMapping configuration
+        force_resync: If True, re-sync invoices even if already synced (for when deleted from Tally)
     """
     from .models import Invoice, TallySyncHistory, InvoiceTallySync
 
-    print(f"Starting Tally sync for org {organization.id} from {start_date} to {end_date}")
+    print(f"Starting Tally sync for org {organization.id} from {start_date} to {end_date} (force_resync={force_resync})")
 
     # Create sync history record
     sync_history = TallySyncHistory.objects.create(
@@ -564,14 +625,20 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping):
 
     # Get invoices to sync - include all tax invoices with statuses that make sense
     # (draft, sent, paid, overdue, partially_paid)
-    invoices = Invoice.objects.filter(
+    invoices_query = Invoice.objects.filter(
         organization=organization,
         invoice_date__gte=start_date,
         invoice_date__lte=end_date,
         invoice_type='tax'
-    ).exclude(
-        tally_sync__synced=True  # Exclude already synced invoices
     )
+
+    if force_resync:
+        # Include all invoices, even already synced ones
+        invoices = invoices_query
+        print("Force resync enabled - including previously synced invoices")
+    else:
+        # Exclude already synced invoices
+        invoices = invoices_query.exclude(tally_sync__synced=True)
 
     total_count = invoices.count()
     print(f"Found {total_count} tax invoices to sync")
@@ -590,10 +657,29 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping):
     failed_count = 0
     failed_ids = []
     total_amount = Decimal('0')
+    skipped_existing = 0  # Invoices that still exist in Tally (for force_resync)
 
     for invoice in invoices:
         try:
             print(f"Syncing invoice {invoice.invoice_number} (status: {invoice.status})")
+
+            # Check if invoice was previously synced
+            existing_sync = InvoiceTallySync.objects.filter(invoice=invoice).first()
+
+            # If force_resync and previously synced, check if still exists in Tally
+            if force_resync and existing_sync:
+                voucher_exists = connector.check_voucher_exists(
+                    invoice.invoice_number,
+                    invoice.invoice_date
+                )
+                if voucher_exists:
+                    print(f"Invoice {invoice.invoice_number} already exists in Tally - skipping")
+                    skipped_existing += 1
+                    continue
+                else:
+                    print(f"Invoice {invoice.invoice_number} not found in Tally - will re-sync")
+                    # Delete old sync record to allow re-creation
+                    existing_sync.delete()
 
             # Create party ledger first (if needed)
             if invoice.client:
@@ -641,11 +727,16 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping):
 
     sync_history.save()
 
+    message = f'Synced {synced_count} of {total_count} invoices'
+    if skipped_existing > 0:
+        message += f' ({skipped_existing} already exist in Tally)'
+
     return {
-        'success': synced_count > 0,
+        'success': synced_count > 0 or (force_resync and skipped_existing > 0),
         'total_count': total_count,
         'synced_count': synced_count,
         'failed_count': failed_count,
+        'skipped_existing': skipped_existing,
         'total_amount': str(total_amount),
-        'message': f'Synced {synced_count} of {total_count} invoices'
+        'message': message
     }
