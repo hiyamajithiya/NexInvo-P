@@ -63,7 +63,7 @@ function TallySyncCorner() {
         setLedgersFetched(true);
       }
     } catch (err) {
-      console.log('No saved mappings found');
+      // No saved mappings - expected on first load
     }
   };
 
@@ -72,7 +72,7 @@ function TallySyncCorner() {
       const response = await tallySyncAPI.getSyncHistory();
       setSyncHistory(response.data.history || []);
     } catch (err) {
-      console.log('No sync history found');
+      // No sync history - expected on first use
     }
   };
 
@@ -113,7 +113,7 @@ function TallySyncCorner() {
         setLedgersFetched(true);
       }
     } catch (err) {
-      console.log('Silent ledger fetch failed');
+      // Silent ledger fetch failed - expected when Tally not running
     }
   };
 

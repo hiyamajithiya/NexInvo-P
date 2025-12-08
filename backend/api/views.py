@@ -1210,7 +1210,9 @@ class ClientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Client.objects.filter(organization=self.request.organization)
+        return Client.objects.filter(
+            organization=self.request.organization
+        ).select_related('organization').prefetch_related('invoices')
 
     def perform_create(self, serializer):
         serializer.save(organization=self.request.organization)
@@ -1345,7 +1347,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Invoice.objects.filter(organization=self.request.organization)
+        queryset = Invoice.objects.filter(
+            organization=self.request.organization
+        ).select_related(
+            'client', 'organization', 'created_by', 'payment_term', 'parent_proforma'
+        ).prefetch_related('items', 'payments')
 
         # Filter by search term
         search = self.request.query_params.get('search', None)
@@ -1590,7 +1596,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Payment.objects.filter(organization=self.request.organization)
+        return Payment.objects.filter(
+            organization=self.request.organization
+        ).select_related('invoice', 'invoice__client', 'organization', 'created_by')
 
     def perform_create(self, serializer):
         payment = serializer.save(organization=self.request.organization, created_by=self.request.user)
@@ -1800,7 +1808,11 @@ class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Receipt.objects.filter(organization=self.request.organization)
+        queryset = Receipt.objects.filter(
+            organization=self.request.organization
+        ).select_related(
+            'invoice', 'invoice__client', 'payment', 'organization', 'created_by'
+        )
 
         # Filter by invoice if specified
         invoice_id = self.request.query_params.get('invoice', None)

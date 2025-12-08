@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { invoiceAPI } from '../services/api';
 import './Pages.css';
 import InvoiceForm from './InvoiceForm';
@@ -21,11 +21,16 @@ function Invoices() {
   const [taxInvoiceCount, setTaxInvoiceCount] = useState(0);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadInvoices();
     loadInvoiceCounts();
     setSelectedInvoices([]); // Clear selection when tab changes
+    return () => {
+      isMountedRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -44,23 +49,35 @@ function Invoices() {
       params.invoice_type = activeTab;
 
       const response = await invoiceAPI.getAll(params);
-      setInvoices(response.data.results || response.data || []);
+      if (isMountedRef.current) {
+        setInvoices(response.data.results || response.data || []);
+      }
     } catch (err) {
-      console.error('Error loading invoices:', err);
+      if (isMountedRef.current) {
+        console.error('Error loading invoices:', err);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   const loadInvoiceCounts = async () => {
     try {
       const proformaResponse = await invoiceAPI.getAll({ invoice_type: 'proforma' });
-      setProformaCount((proformaResponse.data.results || proformaResponse.data || []).length);
+      if (isMountedRef.current) {
+        setProformaCount((proformaResponse.data.results || proformaResponse.data || []).length);
+      }
 
       const taxResponse = await invoiceAPI.getAll({ invoice_type: 'tax' });
-      setTaxInvoiceCount((taxResponse.data.results || taxResponse.data || []).length);
+      if (isMountedRef.current) {
+        setTaxInvoiceCount((taxResponse.data.results || taxResponse.data || []).length);
+      }
     } catch (err) {
-      console.error('Error loading invoice counts:', err);
+      if (isMountedRef.current) {
+        console.error('Error loading invoice counts:', err);
+      }
     }
   };
 

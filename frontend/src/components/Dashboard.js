@@ -50,6 +50,7 @@ function Dashboard({ user, onLogout }) {
   // Ref for dropdown auto-hide timeout
   const dropdownTimeoutRef = useRef(null);
   const dropdownRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // Auto-hide dropdown after 5 seconds of inactivity
   const resetDropdownTimer = useCallback(() => {
@@ -97,6 +98,14 @@ function Dashboard({ user, onLogout }) {
     loadCompanyLogo();
   }, [activeMenu]);
 
+  // Track mounted state for async operations
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Check if onboarding should be shown (first-time users)
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem('onboarding_completed');
@@ -108,20 +117,26 @@ function Dashboard({ user, onLogout }) {
   const loadStats = async () => {
     try {
       const response = await dashboardAPI.getStats();
-      setStats(response.data);
+      if (isMountedRef.current) {
+        setStats(response.data);
+      }
     } catch (err) {
-      console.error('Error loading stats:', err);
+      if (isMountedRef.current) {
+        console.error('Error loading stats:', err);
+      }
     }
   };
 
   const loadCompanyLogo = async () => {
     try {
       const response = await settingsAPI.getCompanySettings();
-      if (response.data && response.data.logo) {
+      if (isMountedRef.current && response.data && response.data.logo) {
         setCompanyLogo(response.data.logo);
       }
     } catch (err) {
-      console.error('Error loading company logo:', err);
+      if (isMountedRef.current) {
+        console.error('Error loading company logo:', err);
+      }
     }
   };
 

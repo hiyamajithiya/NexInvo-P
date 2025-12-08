@@ -70,7 +70,7 @@ class VersionCheckService {
       });
 
       if (!response.ok) {
-        console.log('Version check: Could not fetch version info');
+        // Version info not available
         return;
       }
 
@@ -83,17 +83,13 @@ class VersionCheckService {
         this.currentVersion = serverVersion;
         localStorage.setItem(CURRENT_VERSION_KEY, serverVersion);
         localStorage.setItem(LAST_CHECK_KEY, serverBuildDate);
-        console.log('Version check: Initial version stored:', serverVersion);
+        // Initial version stored
         return;
       }
 
       // Check if version has changed
       if (serverVersion !== this.currentVersion) {
-        console.log('Version check: New version available!', {
-          current: this.currentVersion,
-          new: serverVersion,
-          buildDate: serverBuildDate
-        });
+        // New version available
 
         // Update stored version BEFORE showing notification
         // so subsequent checks don't keep showing the notification
@@ -105,7 +101,7 @@ class VersionCheckService {
         this.showUpdateNotification(serverVersion, oldVersion);
       }
     } catch (error) {
-      console.log('Version check: Error checking version', error.message);
+      // Silent fail on version check errors
     }
   }
 
