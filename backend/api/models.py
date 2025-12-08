@@ -326,16 +326,29 @@ class Invoice(models.Model):
                     prefix = settings.invoicePrefix  # Tax Invoice prefix (e.g., 'INV-')
                     starting_num = settings.startingNumber
 
-                # Get last invoice of same type with locking to prevent race conditions
-                last_invoice = Invoice.objects.filter(
+                # Find the highest invoice number by extracting numeric part from all matching invoices
+                # This ensures we always get the next number in sequence regardless of creation order
+                matching_invoices = Invoice.objects.filter(
                     organization=self.organization,
                     invoice_type=self.invoice_type,
                     invoice_number__startswith=prefix
-                ).order_by('-created_at').first()
+                )
 
-                if last_invoice:
-                    last_num = int(last_invoice.invoice_number.replace(prefix, ''))
-                    new_num = last_num + 1
+                max_num = 0
+                for inv in matching_invoices:
+                    try:
+                        # Extract numeric part after prefix
+                        num_str = inv.invoice_number.replace(prefix, '')
+                        num = int(num_str)
+                        if num > max_num:
+                            max_num = num
+                    except (ValueError, TypeError):
+                        # Skip invoices with non-numeric suffixes
+                        continue
+
+                # Determine new number: max found + 1, or starting number if none found
+                if max_num > 0:
+                    new_num = max_num + 1
                 else:
                     new_num = starting_num
 
