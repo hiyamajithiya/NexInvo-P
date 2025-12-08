@@ -1939,3 +1939,65 @@ class ScheduledInvoiceLog(models.Model):
 
     def __str__(self):
         return f"{self.scheduled_invoice.name} - {self.generation_date} ({self.status})"
+
+
+# =============================================================================
+# USER SESSION TRACKING - SINGLE DEVICE LOGIN
+# =============================================================================
+
+class UserSession(models.Model):
+    """
+    Tracks active user sessions to enforce single device login.
+    Only one active session per user is allowed at a time.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='active_session')
+    session_token = models.CharField(max_length=64, unique=True)
+    device_info = models.CharField(max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_activity = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Session"
+        verbose_name_plural = "User Sessions"
+
+    def __str__(self):
+        return f"{self.user.email} - {self.created_at}"
+
+    @classmethod
+    def create_session(cls, user, device_info='', ip_address=None):
+        """
+        Create a new session for user, invalidating any existing session.
+        Returns the new session token.
+        """
+        import secrets
+        
+        # Delete existing session (if any) to enforce single device
+        cls.objects.filter(user=user).delete()
+        
+        # Create new session with unique token
+        session_token = secrets.token_hex(32)
+        session = cls.objects.create(
+            user=user,
+            session_token=session_token,
+            device_info=device_info,
+            ip_address=ip_address
+        )
+        return session_token
+
+    @classmethod
+    def validate_session(cls, user, session_token):
+        """
+        Validate if the session token is valid for the user.
+        Returns True if valid, False otherwise.
+        """
+        try:
+            session = cls.objects.get(user=user)
+            return session.session_token == session_token
+        except cls.DoesNotExist:
+            return False
+
+    @classmethod
+    def invalidate_session(cls, user):
+        """Invalidate user's session (logout)"""
+        cls.objects.filter(user=user).delete()

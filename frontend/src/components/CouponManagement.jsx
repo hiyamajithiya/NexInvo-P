@@ -86,7 +86,7 @@ const CouponManagement = () => {
   const loadCoupons = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/coupons/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -101,7 +101,7 @@ const CouponManagement = () => {
 
   const loadPlans = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -202,7 +202,7 @@ const CouponManagement = () => {
 
   const handleSubmit = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
 
       if (!formData.discount_types || formData.discount_types.length === 0) {
         showSnackbar('Please select at least one discount type', 'error');
@@ -258,7 +258,7 @@ const CouponManagement = () => {
     }
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.delete(`${API_BASE_URL}/coupons/${couponId}/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -272,7 +272,7 @@ const CouponManagement = () => {
 
   const handleDeactivate = async (couponId) => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.post(
         `${API_BASE_URL}/coupons/${couponId}/deactivate/`,
         {},

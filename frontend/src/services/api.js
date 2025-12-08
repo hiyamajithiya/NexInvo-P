@@ -10,12 +10,18 @@ const api = axios.create({
   },
 });
 
-// Add token and organization context to requests
+// Add token, session token, and organization context to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = sessionStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Add session token for single device login validation
+    const sessionToken = sessionStorage.getItem('session_token');
+    if (sessionToken) {
+      config.headers['X-Session-Token'] = sessionToken;
     }
 
     // Add organization context header
@@ -31,30 +37,47 @@ api.interceptors.request.use(
   }
 );
 
-// Handle token refresh on 401 errors
+// Handle token refresh on 401 errors and session invalidation
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
+    // Check for session invalidation (logged in from another device)
+    if (error.response?.status === 401 && error.response?.data?.error === 'session_invalid') {
+      // Clear all auth data
+      sessionStorage.removeItem('access_token');
+      sessionStorage.removeItem('refresh_token');
+      sessionStorage.removeItem('session_token');
+      localStorage.removeItem('current_org_id');
+      
+      // Store the logout reason to show message on login page
+      localStorage.setItem('logout_reason', 'session_invalid');
+      
+      // Redirect to login page
+      window.location.href = '/';
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
+        const refreshToken = sessionStorage.getItem('refresh_token');
         const response = await axios.post(`${API_BASE_URL}/token/refresh/`, {
           refresh: refreshToken,
         });
 
         const { access } = response.data;
-        localStorage.setItem('access_token', access);
+        sessionStorage.setItem('access_token', access);
 
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
       } catch (refreshError) {
         // Refresh token failed, logout user
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        sessionStorage.removeItem('access_token');
+        sessionStorage.removeItem('refresh_token');
+        sessionStorage.removeItem('session_token');
         window.location.href = '/';
         return Promise.reject(refreshError);
       }

@@ -209,7 +209,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const loadData = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
 
       // Get superadmin statistics
       const statsResponse = await axios.get(`${API_BASE_URL}/superadmin/stats/`, {
@@ -232,7 +232,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/users/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -246,7 +246,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const loadSubscriptionPlans = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -258,7 +258,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const loadEmailConfig = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/superadmin/email-config/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -425,7 +425,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const handlePlanChangeSubmit = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.patch(
         `${API_BASE_URL}/organizations/${selectedOrg.id}/`,
         { plan: selectedPlan },
@@ -442,7 +442,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const handleToggleOrgStatus = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.patch(
         `${API_BASE_URL}/organizations/${selectedOrg.id}/`,
         { is_active: !selectedOrg.is_active },
@@ -462,7 +462,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
 
   const handleToggleUserStatus = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.patch(
         `${API_BASE_URL}/users/${selectedUser.id}/`,
         { is_active: !selectedUser.is_active },
@@ -488,7 +488,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const handleViewOrgMembers = async () => {
     handleOrgMenuClose();
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(
         `${API_BASE_URL}/organizations/${selectedOrg.id}/members/`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -509,7 +509,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const handleViewUserOrganizations = async () => {
     handleUserMenuClose();
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(
         `${API_BASE_URL}/users/${selectedUser.id}/organizations/`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -525,7 +525,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const handleResetPassword = async () => {
     handleUserMenuClose();
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.post(
         `${API_BASE_URL}/users/${selectedUser.id}/reset-password/`,
         {},
@@ -1520,7 +1520,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const handleSaveEmailConfig = async () => {
     setSavingEmail(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.post(
         `${API_BASE_URL}/superadmin/email-config/`,
         emailConfig,
@@ -1542,7 +1542,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
     setSendingTestEmail(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.post(
         `${API_BASE_URL}/superadmin/email-config/test/`,
         { recipient_email: testEmailRecipient },

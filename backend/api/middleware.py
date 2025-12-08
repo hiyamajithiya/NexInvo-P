@@ -4,9 +4,10 @@ Sets the current organization context for each request.
 """
 from django.utils.deprecation import MiddlewareMixin
 from django.contrib.auth.models import AnonymousUser
+from django.http import JsonResponse
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-from .models import OrganizationMembership
+from .models import OrganizationMembership, UserSession
 
 
 class OrganizationMiddleware(MiddlewareMixin):
@@ -34,6 +35,22 @@ class OrganizationMiddleware(MiddlewareMixin):
                 validated_token = jwt_auth.get_validated_token(auth_header.split(' ')[1])
                 user = jwt_auth.get_user(validated_token)
                 request.user = user
+                
+                # Validate session token for single device login
+                session_token = request.headers.get('X-Session-Token')
+                if session_token:
+                    if not UserSession.validate_session(user, session_token):
+                        # Session is invalid (user logged in from another device)
+                        return JsonResponse({
+                            'error': 'session_invalid',
+                            'detail': 'Your session has been terminated because you logged in from another device.'
+                        }, status=401)
+                    # Update last activity
+                    try:
+                        session = UserSession.objects.get(user=user)
+                        session.save()  # Updates last_activity via auto_now
+                    except UserSession.DoesNotExist:
+                        pass
             except (AuthenticationFailed, Exception):
                 # Authentication failed, user will remain unauthenticated
                 pass

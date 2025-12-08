@@ -68,6 +68,53 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        from .models import UserSession
+        
+        # Check if force_login is requested
+        force_login = request.data.get('force_login', False)
+        
+        # First validate credentials without generating tokens
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            return Response(
+                {'detail': str(e.detail) if hasattr(e, 'detail') else 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        user = serializer.user
+        
+        # Check if user already has an active session
+        try:
+            existing_session = UserSession.objects.get(user=user)
+            if not force_login:
+                # User is already logged in elsewhere, ask for confirmation
+                return Response({
+                    'error': 'already_logged_in',
+                    'detail': 'You are already logged in on another device. Do you want to logout from the other device and login here?',
+                    'device_info': existing_session.device_info[:50] if existing_session.device_info else 'Unknown device',
+                    'last_activity': existing_session.last_activity.strftime('%Y-%m-%d %H:%M:%S') if existing_session.last_activity else None
+                }, status=status.HTTP_409_CONFLICT)
+        except UserSession.DoesNotExist:
+            # No existing session, proceed normally
+            pass
+        
+        # Generate tokens (call parent's post logic)
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            # Create a new session token (invalidates any existing session)
+            device_info = request.META.get('HTTP_USER_AGENT', '')[:255]
+            ip_address = request.META.get('REMOTE_ADDR')
+            session_token = UserSession.create_session(user, device_info, ip_address)
+            
+            # Add session token to response
+            response.data['session_token'] = session_token
+        
+        return response
+
 
 # =============================================================================
 # EMAIL OTP VERIFICATION VIEWS

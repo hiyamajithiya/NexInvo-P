@@ -108,7 +108,7 @@ const BulkEmailManager = () => {
 
   const getAuthHeaders = () => ({
     headers: {
-      Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+      Authorization: `Bearer ${sessionStorage.getItem('access_token')}`,
     },
   });
 

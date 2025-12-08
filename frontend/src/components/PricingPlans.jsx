@@ -51,7 +51,7 @@ const PricingPlans = ({ onNavigate }) => {
   const loadPlans = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/subscription-plans/public/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -88,7 +88,7 @@ const PricingPlans = ({ onNavigate }) => {
 
     setValidatingCoupon(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.post(
         `${API_BASE_URL}/coupons/validate/`,
         {
@@ -114,7 +114,7 @@ const PricingPlans = ({ onNavigate }) => {
   const handleSubscribe = async () => {
     setSubscribing(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.post(
         `${API_BASE_URL}/subscription-upgrade-requests/`,
         {

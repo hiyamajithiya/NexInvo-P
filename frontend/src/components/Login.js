@@ -24,6 +24,18 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   const [otpSent, setOtpSent] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  const [logoutMessage, setLogoutMessage] = useState('');
+  const [showForceLoginDialog, setShowForceLoginDialog] = useState(false);
+  const [existingSessionInfo, setExistingSessionInfo] = useState(null);
+
+  // Check for logout reason on mount
+  useEffect(() => {
+    const logoutReason = localStorage.getItem('logout_reason');
+    if (logoutReason === 'session_invalid') {
+      setLogoutMessage('You have been logged out because your account was accessed from another device.');
+      localStorage.removeItem('logout_reason');
+    }
+  }, []);
 
   // Timer for resend OTP
   useEffect(() => {
@@ -149,22 +161,65 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
         // After successful registration, auto-login
         const response = await authAPI.login({ email: username, password });
-        localStorage.setItem('access_token', response.data.access);
-        localStorage.setItem('refresh_token', response.data.refresh);
+        sessionStorage.setItem('access_token', response.data.access);
+        sessionStorage.setItem('refresh_token', response.data.refresh);
+        if (response.data.session_token) {
+          sessionStorage.setItem('session_token', response.data.session_token);
+        }
         onLogin(response.data);
       } else {
         // Login existing user
         const response = await authAPI.login({ email: username, password });
-        localStorage.setItem('access_token', response.data.access);
-        localStorage.setItem('refresh_token', response.data.refresh);
+        sessionStorage.setItem('access_token', response.data.access);
+        sessionStorage.setItem('refresh_token', response.data.refresh);
+        if (response.data.session_token) {
+          sessionStorage.setItem('session_token', response.data.session_token);
+        }
         onLogin(response.data);
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.detail ||
-        (isRegisterMode ? 'Registration failed' : 'Invalid username or password'));
+      // Check if user is already logged in on another device
+      if (err.response?.status === 409 && err.response?.data?.error === 'already_logged_in') {
+        setExistingSessionInfo({
+          deviceInfo: err.response.data.device_info,
+          lastActivity: err.response.data.last_activity
+        });
+        setShowForceLoginDialog(true);
+        setError('');
+      } else {
+        setError(err.response?.data?.error || err.response?.data?.detail ||
+          (isRegisterMode ? 'Registration failed' : 'Invalid username or password'));
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle force login when user confirms
+  const handleForceLogin = async () => {
+    setLoading(true);
+    setShowForceLoginDialog(false);
+    setError('');
+
+    try {
+      const response = await authAPI.login({ email: username, password, force_login: true });
+      sessionStorage.setItem('access_token', response.data.access);
+      sessionStorage.setItem('refresh_token', response.data.refresh);
+      if (response.data.session_token) {
+        sessionStorage.setItem('session_token', response.data.session_token);
+      }
+      onLogin(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancel force login
+  const handleCancelForceLogin = () => {
+    setShowForceLoginDialog(false);
+    setExistingSessionInfo(null);
   };
 
   const toggleMode = () => {
@@ -184,6 +239,9 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
     setOtpSent(false);
     setEmailVerified(false);
     setResendTimer(0);
+    // Reset force login states
+    setShowForceLoginDialog(false);
+    setExistingSessionInfo(null);
   };
 
   // Go back to previous step in registration
@@ -223,6 +281,124 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   };
 
   return (
+    <>
+      {/* Force Login Confirmation Dialog */}
+      {showForceLoginDialog && (
+        <div className="force-login-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="force-login-dialog" style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '420px',
+            width: '90%',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)'
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ 
+                width: '60px', 
+                height: '60px', 
+                backgroundColor: '#fef3c7', 
+                borderRadius: '50%', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <span style={{ fontSize: '28px' }}>⚠️</span>
+              </div>
+              <h3 style={{ margin: '0 0 8px', color: '#1f2937', fontSize: '18px' }}>
+                Already Logged In
+              </h3>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>
+                You are currently logged in on another device.
+              </p>
+            </div>
+            
+            {existingSessionInfo && (
+              <div style={{
+                backgroundColor: '#f3f4f6',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '20px',
+                fontSize: '13px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#6b7280' }}>Device:</span>
+                  <span style={{ color: '#374151', fontWeight: '500' }}>
+                    {existingSessionInfo.deviceInfo || 'Unknown'}
+                  </span>
+                </div>
+                {existingSessionInfo.lastActivity && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6b7280' }}>Last Active:</span>
+                    <span style={{ color: '#374151', fontWeight: '500' }}>
+                      {existingSessionInfo.lastActivity}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <p style={{ 
+              color: '#6b7280', 
+              fontSize: '14px', 
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}>
+              Do you want to logout from the other device and login here?
+            </p>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={handleCancelForceLogin}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForceLogin}
+                disabled={loading}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                {loading ? 'Logging in...' : 'Login Here'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
     <div className="login-split-container">
       {/* Left Panel - Features */}
       <div className="login-features-panel">
@@ -359,6 +535,23 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
+            {logoutMessage && (
+              <div className="info-message" style={{
+                backgroundColor: '#fef3c7',
+                color: '#92400e',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '18px' }}>⚠️</span>
+                {logoutMessage}
+              </div>
+            )}
+
             {error && (
               <div className="error-message">
                 {error}
@@ -837,6 +1030,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         </div>
       )}
     </div>
+    </>
   );
 };
 

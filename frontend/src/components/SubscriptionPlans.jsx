@@ -74,7 +74,7 @@ const SubscriptionPlans = () => {
   const loadPlans = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -146,7 +146,7 @@ const SubscriptionPlans = () => {
 
   const handleSubmit = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
 
       // Convert features from string to array
       const featuresArray = formData.features
@@ -196,7 +196,7 @@ const SubscriptionPlans = () => {
     }
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.delete(`${API_BASE_URL}/subscription-plans/${planId}/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -210,7 +210,7 @@ const SubscriptionPlans = () => {
 
   const handleToggleActive = async (plan) => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.patch(
         `${API_BASE_URL}/subscription-plans/${plan.id}/`,
         { is_active: !plan.is_active },
@@ -226,7 +226,7 @@ const SubscriptionPlans = () => {
 
   const handleToggleVisible = async (plan) => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token');
       await axios.patch(
         `${API_BASE_URL}/subscription-plans/${plan.id}/`,
         { is_visible: !plan.is_visible },

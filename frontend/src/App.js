@@ -43,7 +43,7 @@ function App() {
 
   // Check for existing authentication on mount
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
+    const token = sessionStorage.getItem('access_token');
     if (token) {
       checkUserStatus(token);
       setShowLanding(false); // Skip landing if already logged in
@@ -76,8 +76,8 @@ function App() {
       } else if (error.response?.status === 401) {
         // Only logout on 401 (Unauthorized - invalid/expired token)
         setIsAuthenticated(false);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        sessionStorage.removeItem('access_token');
+        sessionStorage.removeItem('refresh_token');
       } else {
         // For other errors (500, network issues, etc.), assume regular user
         // Don't logout - the token might still be valid
@@ -91,8 +91,11 @@ function App() {
   };
 
   const handleLogin = async (userData) => {
-    localStorage.setItem('access_token', userData.access);
-    localStorage.setItem('refresh_token', userData.refresh);
+    sessionStorage.setItem('access_token', userData.access);
+    sessionStorage.setItem('refresh_token', userData.refresh);
+    if (userData.session_token) {
+      sessionStorage.setItem('session_token', userData.session_token);
+    }
 
     // Check if logged in user is superadmin
     await checkUserStatus(userData.access);
@@ -106,8 +109,9 @@ function App() {
     setIsSuperAdmin(false);
     setUser(null);
     setShowLanding(true); // Show landing page after logout
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('refresh_token');
+    sessionStorage.removeItem('session_token');
     localStorage.removeItem('current_org_id');
     // Clear onboarding state so next user sees wizard from start
     localStorage.removeItem('onboarding_wizard_seen');
