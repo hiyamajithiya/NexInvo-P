@@ -4977,3 +4977,146 @@ def scheduled_invoice_stats(request):
     }
 
     return Response(stats)
+
+
+
+# ==================== GST CORRECTION ENDPOINTS ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_gst_corrections(request):
+    """
+    Check for invoices that may have incorrect GST type (CGST/SGST vs IGST).
+    This compares the client's state with the company's state and identifies
+    invoices that might need correction.
+    """
+    organization = getattr(request, 'organization', None)
+    if not organization:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Get company state code
+        try:
+            company_settings = CompanySettings.objects.get(organization=organization)
+            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+        except CompanySettings.DoesNotExist:
+            return Response({
+                'needs_correction': False,
+                'message': 'Company settings not found. Please configure company settings first.',
+                'invoices': []
+            })
+        
+        if not company_state_code:
+            return Response({
+                'needs_correction': False,
+                'message': 'Company state code not configured. Please set your state code in Company Settings.',
+                'invoices': []
+            })
+        
+        # Get all invoices for this organization that have GST applied
+        invoices = Invoice.objects.filter(
+            organization=organization,
+            tax_amount__gt=0
+        ).select_related('client').prefetch_related('items')
+        
+        invoices_needing_correction = []
+        
+        for invoice in invoices:
+            if not invoice.client:
+                continue
+            
+            # Determine client state code
+            client_state_code = ''
+            if invoice.client.stateCode:
+                client_state_code = str(invoice.client.stateCode).strip()
+            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                client_state_code = str(invoice.client.gstin[:2]).strip()
+            
+            if not client_state_code:
+                # Cannot determine client state, skip
+                continue
+            
+            # Determine what GST type SHOULD be
+            should_be_interstate = company_state_code != client_state_code
+            
+            # Check current GST type by looking at items
+            items = invoice.items.all()
+            if not items:
+                continue
+            
+            # Calculate current GST breakdown
+            total_gst = float(invoice.tax_amount)
+            if total_gst <= 0:
+                continue
+            
+            invoices_needing_correction.append({
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'invoice_type': invoice.invoice_type,
+                'invoice_date': invoice.invoice_date.strftime('%Y-%m-%d'),
+                'client_name': invoice.client.name,
+                'client_state_code': client_state_code,
+                'company_state_code': company_state_code,
+                'subtotal': float(invoice.subtotal),
+                'tax_amount': float(invoice.tax_amount),
+                'total_amount': float(invoice.total_amount),
+                'correct_gst_type': 'IGST' if should_be_interstate else 'CGST/SGST',
+                'is_interstate': should_be_interstate
+            })
+        
+        return Response({
+            'needs_correction': len(invoices_needing_correction) > 0,
+            'company_state_code': company_state_code,
+            'total_invoices_checked': invoices.count(),
+            'invoices_to_review': len(invoices_needing_correction),
+            'invoices': invoices_needing_correction,
+            'message': f'Found {len(invoices_needing_correction)} invoices that may need GST type review.' if invoices_needing_correction else 'All invoices appear to have correct GST types.'
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def acknowledge_gst_corrections(request):
+    """
+    Acknowledge that the user has reviewed the GST corrections.
+    The actual GST calculation happens during PDF generation.
+    """
+    organization = getattr(request, 'organization', None)
+    if not organization:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        invoice_ids = request.data.get('invoice_ids', [])
+        
+        if not invoice_ids:
+            return Response({
+                'success': True,
+                'message': 'No invoices selected.',
+                'updated_count': 0
+            })
+        
+        invoices = Invoice.objects.filter(
+            id__in=invoice_ids,
+            organization=organization
+        )
+        
+        updated_count = invoices.count()
+        
+        return Response({
+            'success': True,
+            'message': f'Acknowledged {updated_count} invoices. GST will be correctly calculated when PDFs are regenerated.',
+            'updated_count': updated_count,
+            'note': 'Please regenerate the PDF for each invoice to get the corrected GST breakdown.'
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
