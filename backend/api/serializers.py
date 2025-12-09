@@ -52,7 +52,10 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
         fields = ['id', 'invoicePrefix', 'startingNumber', 'proformaPrefix',
                   'proformaStartingNumber', 'receiptPrefix', 'receiptStartingNumber',
                   'gstEnabled', 'defaultGstRate', 'paymentDueDays',
-                  'termsAndConditions', 'notes', 'created_at', 'updated_at']
+                  'termsAndConditions', 'notes',
+                  'enablePaymentReminders', 'reminderFrequencyDays',
+                  'reminderEmailSubject', 'reminderEmailBody',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 

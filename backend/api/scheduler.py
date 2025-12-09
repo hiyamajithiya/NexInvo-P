@@ -189,6 +189,62 @@ def process_scheduled_invoices_job():
     return process_scheduled_invoices()
 
 
+def check_and_send_pending_reminders():
+    """
+    Check if there are any pending payment reminders that are due and send them.
+    This is called on server startup to catch any missed reminders.
+    """
+    from api.models import Invoice, InvoiceSettings
+    import threading
+
+    def _send_pending():
+        try:
+            # Check if there are any due reminders
+            orgs_with_reminders = InvoiceSettings.objects.filter(enablePaymentReminders=True)
+            pending_count = 0
+
+            for invoice_settings in orgs_with_reminders:
+                if not invoice_settings.organization_id:
+                    continue
+
+                organization = invoice_settings.organization
+                frequency_days = invoice_settings.reminderFrequencyDays
+
+                # Get unpaid proforma invoices
+                unpaid_proformas = Invoice.objects.filter(
+                    organization=organization,
+                    invoice_type='proforma',
+                    status__in=['draft', 'sent']
+                ).exclude(status='paid').exclude(status='cancelled')
+
+                for invoice in unpaid_proformas:
+                    should_send = False
+                    if invoice.last_reminder_sent is None:
+                        days_since_invoice = (timezone.now().date() - invoice.invoice_date).days
+                        if days_since_invoice >= frequency_days:
+                            should_send = True
+                    else:
+                        days_since_last = (timezone.now() - invoice.last_reminder_sent).days
+                        if days_since_last >= frequency_days:
+                            should_send = True
+
+                    if should_send:
+                        pending_count += 1
+
+            if pending_count > 0:
+                logger.info(f"Found {pending_count} pending payment reminders on startup. Sending now...")
+                send_payment_reminders()
+            else:
+                logger.info("No pending payment reminders found on startup.")
+
+        except Exception as e:
+            logger.error(f"Error checking pending reminders on startup: {str(e)}")
+
+    # Run in a separate thread to not block server startup
+    thread = threading.Thread(target=_send_pending, daemon=True)
+    thread.start()
+
+
 def start_scheduler():
     """
     Start the background scheduler with payment reminder job.
@@ -237,6 +293,11 @@ def start_scheduler():
     try:
         logger.info("Starting background scheduler...")
         scheduler.start()
+
+        # Check and send any pending reminders on startup
+        # This runs after scheduler starts to catch any missed reminders after deployment
+        check_and_send_pending_reminders()
+
     except KeyboardInterrupt:
         logger.info("Stopping scheduler...")
         scheduler.shutdown()

@@ -65,7 +65,7 @@ MIDDLEWARE = [
 ]
 
 # CORS settings - Parse from comma-separated string
-cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
+cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3001,http://127.0.0.1:3002')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -82,6 +82,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-organization-id',  # Custom header for multi-tenant organization context
+    'x-session-token',  # Custom header for single device login session tracking
 ]
 
 # REST Framework settings
