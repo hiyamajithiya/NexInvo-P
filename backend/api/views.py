@@ -1825,6 +1825,18 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         invoice.save()
 
+        # If this is a tax invoice converted from proforma, also update the parent proforma status
+        if invoice.parent_proforma:
+            parent_proforma = invoice.parent_proforma
+            # If no payments remain on the tax invoice, revert proforma status to 'sent'
+            if total_paid == 0:
+                parent_proforma.status = 'sent'
+            elif total_paid >= parent_proforma.total_amount:
+                parent_proforma.status = 'paid'
+            else:
+                parent_proforma.status = 'sent'
+            parent_proforma.save()
+
 
 class ReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     """
