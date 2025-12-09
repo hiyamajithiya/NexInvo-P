@@ -296,45 +296,52 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
 
     # Table rows
     for idx, item in enumerate(invoice.items.all(), 1):
-        gst_amount = item.total_amount - item.taxable_amount
-
-        # Determine if CGST/SGST or IGST based on state codes
-        # Logic: Compare company state with client state
-        # - If states match (local) -> CGST + SGST (split equally)
-        # - If states differ (interstate) -> IGST (full amount)
-        is_interstate = True  # Default to IGST if unable to determine
-        try:
-            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
-
-            # Get client state code - prefer stateCode field, fallback to first 2 digits of GSTIN
-            client_state_code = ''
-            if invoice.client.stateCode:
-                client_state_code = str(invoice.client.stateCode).strip()
-            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
-                client_state_code = str(invoice.client.gstin[:2]).strip()
-
-            # Compare state codes to determine if interstate
-            if company_state_code and client_state_code:
-                is_interstate = company_state_code != client_state_code
-            elif not company_state_code:
-                # If company doesn't have state code, default to IGST
-                is_interstate = True
-            elif not client_state_code:
-                # If client doesn't have state code, default to IGST
-                is_interstate = True
-        except Exception as e:
-            # If any error, default to IGST
-            is_interstate = True
-
-        cgst = 0
-        sgst = 0
-        igst = 0
-
-        if is_interstate:
-            igst = gst_amount
+        # Use stored GST values if available, otherwise calculate
+        if hasattr(item, 'cgst_amount') and hasattr(item, 'sgst_amount') and hasattr(item, 'igst_amount'):
+            cgst = float(item.cgst_amount) if item.cgst_amount else 0
+            sgst = float(item.sgst_amount) if item.sgst_amount else 0
+            igst = float(item.igst_amount) if item.igst_amount else 0
+            
+            # If all are zero but there's tax, fall back to calculation
+            if cgst == 0 and sgst == 0 and igst == 0:
+                gst_amount = float(item.total_amount) - float(item.taxable_amount)
+                if gst_amount > 0:
+                    # Use invoice.is_interstate if available
+                    if hasattr(invoice, 'is_interstate') and invoice.is_interstate is not None:
+                        is_interstate = invoice.is_interstate
+                    else:
+                        # Fall back to state code comparison
+                        is_interstate = True
+                        try:
+                            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+                            client_state_code = ''
+                            if invoice.client.stateCode:
+                                client_state_code = str(invoice.client.stateCode).strip()
+                            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                                client_state_code = str(invoice.client.gstin[:2]).strip()
+                            if company_state_code and client_state_code:
+                                is_interstate = company_state_code != client_state_code
+                        except:
+                            pass
+                    
+                    if is_interstate:
+                        igst = gst_amount
+                    else:
+                        cgst = gst_amount / 2
+                        sgst = gst_amount / 2
         else:
-            cgst = gst_amount / 2
-            sgst = gst_amount / 2
+            # Legacy: calculate GST breakdown
+            gst_amount = float(item.total_amount) - float(item.taxable_amount)
+            cgst = 0
+            sgst = 0
+            igst = 0
+            if gst_amount > 0:
+                is_interstate = getattr(invoice, 'is_interstate', True)
+                if is_interstate:
+                    igst = gst_amount
+                else:
+                    cgst = gst_amount / 2
+                    sgst = gst_amount / 2
 
         table_data.append([
             str(idx),
@@ -346,7 +353,7 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
             f"{item.total_amount:,.2f}"
         ])
 
-    # Calculate totals
+    # Calculate totals from table data
     total_cgst = sum([float(row[3].replace(',', '')) for row in table_data[1:] if row[3] != '-'])
     total_sgst = sum([float(row[4].replace(',', '')) for row in table_data[1:] if row[4] != '-'])
     total_igst = sum([float(row[5].replace(',', '')) for row in table_data[1:] if row[5] != '-'])

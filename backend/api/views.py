@@ -5111,8 +5111,8 @@ def check_gst_corrections(request):
 @permission_classes([IsAuthenticated])
 def acknowledge_gst_corrections(request):
     """
-    Acknowledge that the user has reviewed the GST corrections.
-    The actual GST calculation happens during PDF generation.
+    Fix GST breakdown for selected invoices.
+    Updates the invoice and invoice items with correct CGST/SGST or IGST amounts.
     """
     organization = getattr(request, 'organization', None)
     if not organization:
@@ -5128,18 +5128,76 @@ def acknowledge_gst_corrections(request):
                 'updated_count': 0
             })
         
+        # Get company state code
+        try:
+            company_settings = CompanySettings.objects.get(organization=organization)
+            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+        except CompanySettings.DoesNotExist:
+            return Response({'error': 'Company settings not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not company_state_code:
+            return Response({'error': 'Company state code not configured'}, status=status.HTTP_400_BAD_REQUEST)
+        
         invoices = Invoice.objects.filter(
             id__in=invoice_ids,
             organization=organization
-        )
+        ).select_related('client').prefetch_related('items')
         
-        updated_count = invoices.count()
+        updated_count = 0
+        
+        for invoice in invoices:
+            if not invoice.client:
+                continue
+            
+            # Determine client state code
+            client_state_code = ''
+            if invoice.client.stateCode:
+                client_state_code = str(invoice.client.stateCode).strip()
+            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                client_state_code = str(invoice.client.gstin[:2]).strip()
+            
+            if not client_state_code:
+                continue
+            
+            # Determine if interstate
+            is_interstate = company_state_code != client_state_code
+            
+            # Calculate GST breakdown for invoice
+            total_cgst = 0
+            total_sgst = 0
+            total_igst = 0
+            
+            # Update each invoice item
+            for item in invoice.items.all():
+                gst_amount = float(item.total_amount) - float(item.taxable_amount)
+                
+                if is_interstate:
+                    item.cgst_amount = 0
+                    item.sgst_amount = 0
+                    item.igst_amount = gst_amount
+                    total_igst += gst_amount
+                else:
+                    item.cgst_amount = gst_amount / 2
+                    item.sgst_amount = gst_amount / 2
+                    item.igst_amount = 0
+                    total_cgst += gst_amount / 2
+                    total_sgst += gst_amount / 2
+                
+                item.save()
+            
+            # Update invoice totals
+            invoice.is_interstate = is_interstate
+            invoice.cgst_amount = total_cgst
+            invoice.sgst_amount = total_sgst
+            invoice.igst_amount = total_igst
+            invoice.save()
+            
+            updated_count += 1
         
         return Response({
             'success': True,
-            'message': f'Acknowledged {updated_count} invoices. GST will be correctly calculated when PDFs are regenerated.',
-            'updated_count': updated_count,
-            'note': 'Please regenerate the PDF for each invoice to get the corrected GST breakdown.'
+            'message': f'Successfully corrected GST breakdown for {updated_count} invoices.',
+            'updated_count': updated_count
         })
         
     except Exception as e:

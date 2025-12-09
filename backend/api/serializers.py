@@ -96,8 +96,8 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceItem
         fields = ['id', 'description', 'hsn_sac', 'gst_rate',
-                  'taxable_amount', 'total_amount']
-        read_only_fields = ['id']
+                  'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount']
+        read_only_fields = ['id', 'cgst_amount', 'sgst_amount', 'igst_amount']
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -109,16 +109,20 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = ['id', 'client', 'client_name', 'invoice_number', 'invoice_type',
-                  'invoice_date', 'status', 'subtotal', 'tax_amount', 'round_off', 'total_amount',
+                  'invoice_date', 'status', 'subtotal', 'tax_amount',
+                  'cgst_amount', 'sgst_amount', 'igst_amount', 'is_interstate',
+                  'round_off', 'total_amount',
                   'payment_term', 'payment_term_name', 'payment_term_description',
                   'payment_terms', 'notes', 'parent_proforma', 'is_emailed', 'emailed_at',
                   'items', 'created_at', 'updated_at']
         read_only_fields = ['id', 'invoice_number', 'client_name', 'payment_term_name',
                            'payment_term_description', 'is_emailed', 'emailed_at',
+                           'cgst_amount', 'sgst_amount', 'igst_amount', 'is_interstate',
                            'created_at', 'updated_at']
 
     def create(self, validated_data):
         from decimal import Decimal
+        from .models import CompanySettings
 
         items_data = validated_data.pop('items')
         invoice = Invoice.objects.create(**validated_data)
@@ -126,18 +130,61 @@ class InvoiceSerializer(serializers.ModelSerializer):
         # Check if GST should be applied to this invoice
         should_apply_gst = invoice.should_apply_gst()
 
+        # Determine if interstate (IGST) or local (CGST+SGST)
+        is_interstate = True  # Default to IGST
+        try:
+            company_settings = CompanySettings.objects.get(organization=invoice.organization)
+            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+
+            client_state_code = ''
+            if invoice.client.stateCode:
+                client_state_code = str(invoice.client.stateCode).strip()
+            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                client_state_code = str(invoice.client.gstin[:2]).strip()
+
+            if company_state_code and client_state_code:
+                is_interstate = company_state_code != client_state_code
+        except CompanySettings.DoesNotExist:
+            pass
+
+        invoice.is_interstate = is_interstate
+
+        # Track GST totals
+        total_cgst = Decimal('0.00')
+        total_sgst = Decimal('0.00')
+        total_igst = Decimal('0.00')
+
         for item_data in items_data:
             # If GST should not be applied, set gst_rate to 0 and recalculate amounts
             if not should_apply_gst:
                 item_data['gst_rate'] = Decimal('0.00')
-                # Recalculate total_amount without GST
                 item_data['total_amount'] = item_data['taxable_amount']
+                item_data['cgst_amount'] = Decimal('0.00')
+                item_data['sgst_amount'] = Decimal('0.00')
+                item_data['igst_amount'] = Decimal('0.00')
+            else:
+                # Calculate GST breakdown for this item
+                gst_amount = Decimal(str(item_data['total_amount'])) - Decimal(str(item_data['taxable_amount']))
+                if is_interstate:
+                    item_data['cgst_amount'] = Decimal('0.00')
+                    item_data['sgst_amount'] = Decimal('0.00')
+                    item_data['igst_amount'] = gst_amount
+                    total_igst += gst_amount
+                else:
+                    item_data['cgst_amount'] = gst_amount / 2
+                    item_data['sgst_amount'] = gst_amount / 2
+                    item_data['igst_amount'] = Decimal('0.00')
+                    total_cgst += gst_amount / 2
+                    total_sgst += gst_amount / 2
 
             InvoiceItem.objects.create(invoice=invoice, **item_data)
 
         # Recalculate invoice totals with rounding
         invoice.subtotal = sum(item.taxable_amount for item in invoice.items.all())
         invoice.tax_amount = sum(item.total_amount - item.taxable_amount for item in invoice.items.all())
+        invoice.cgst_amount = total_cgst
+        invoice.sgst_amount = total_sgst
+        invoice.igst_amount = total_igst
 
         # Calculate total before rounding
         total_before_round = invoice.subtotal + invoice.tax_amount
@@ -152,6 +199,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         from decimal import Decimal
+        from .models import CompanySettings
 
         items_data = validated_data.pop('items', None)
 
@@ -165,6 +213,30 @@ class InvoiceSerializer(serializers.ModelSerializer):
             # Check if GST should be applied to this invoice
             should_apply_gst = instance.should_apply_gst()
 
+            # Determine if interstate (IGST) or local (CGST+SGST)
+            is_interstate = True  # Default to IGST
+            try:
+                company_settings = CompanySettings.objects.get(organization=instance.organization)
+                company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+
+                client_state_code = ''
+                if instance.client.stateCode:
+                    client_state_code = str(instance.client.stateCode).strip()
+                elif instance.client.gstin and len(instance.client.gstin) >= 2:
+                    client_state_code = str(instance.client.gstin[:2]).strip()
+
+                if company_state_code and client_state_code:
+                    is_interstate = company_state_code != client_state_code
+            except CompanySettings.DoesNotExist:
+                pass
+
+            instance.is_interstate = is_interstate
+
+            # Track GST totals
+            total_cgst = Decimal('0.00')
+            total_sgst = Decimal('0.00')
+            total_igst = Decimal('0.00')
+
             # Delete existing items
             instance.items.all().delete()
             # Create new items
@@ -172,14 +244,33 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 # If GST should not be applied, set gst_rate to 0 and recalculate amounts
                 if not should_apply_gst:
                     item_data['gst_rate'] = Decimal('0.00')
-                    # Recalculate total_amount without GST
                     item_data['total_amount'] = item_data['taxable_amount']
+                    item_data['cgst_amount'] = Decimal('0.00')
+                    item_data['sgst_amount'] = Decimal('0.00')
+                    item_data['igst_amount'] = Decimal('0.00')
+                else:
+                    # Calculate GST breakdown for this item
+                    gst_amount = Decimal(str(item_data['total_amount'])) - Decimal(str(item_data['taxable_amount']))
+                    if is_interstate:
+                        item_data['cgst_amount'] = Decimal('0.00')
+                        item_data['sgst_amount'] = Decimal('0.00')
+                        item_data['igst_amount'] = gst_amount
+                        total_igst += gst_amount
+                    else:
+                        item_data['cgst_amount'] = gst_amount / 2
+                        item_data['sgst_amount'] = gst_amount / 2
+                        item_data['igst_amount'] = Decimal('0.00')
+                        total_cgst += gst_amount / 2
+                        total_sgst += gst_amount / 2
 
                 InvoiceItem.objects.create(invoice=instance, **item_data)
 
             # Recalculate invoice totals with rounding
             instance.subtotal = sum(item.taxable_amount for item in instance.items.all())
             instance.tax_amount = sum(item.total_amount - item.taxable_amount for item in instance.items.all())
+            instance.cgst_amount = total_cgst
+            instance.sgst_amount = total_sgst
+            instance.igst_amount = total_igst
 
             # Calculate total before rounding
             total_before_round = instance.subtotal + instance.tax_amount
