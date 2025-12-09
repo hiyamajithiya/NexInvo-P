@@ -109,6 +109,18 @@ function Invoices() {
     }
   };
 
+  const handleViewPDF = async (id) => {
+    try {
+      const response = await invoiceAPI.generatePDF(id);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err) {
+      console.error('Error viewing PDF:', err);
+      alert('Failed to view PDF');
+    }
+  };
+
   const handleSendEmail = async (id) => {
     try {
       const response = await invoiceAPI.sendEmail(id);
@@ -755,6 +767,13 @@ function Invoices() {
                     <td>₹{parseFloat(invoice.total_amount).toFixed(2)}</td>
                     <td><span className={`status-badge ${invoice.status}`}>{invoice.status}</span></td>
                     <td>
+                      <button
+                        className="btn-icon-small"
+                        onClick={() => handleViewPDF(invoice.id)}
+                        title="View"
+                      >
+                        👁️
+                      </button>
                       <button
                         className="btn-icon-small"
                         onClick={() => handleEdit(invoice.id)}

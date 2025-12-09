@@ -132,6 +132,23 @@ function Receipts() {
     }
   };
 
+  const handleViewReceipt = async (receiptId) => {
+    if (!receiptId) {
+      setError('No receipt available');
+      return;
+    }
+
+    try {
+      const response = await receiptAPI.download(receiptId);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err) {
+      console.error('Error viewing receipt:', err);
+      setError('Failed to view receipt');
+    }
+  };
+
   const handleSaveReceipt = async () => {
     setLoading(true);
     setError('');
@@ -712,14 +729,23 @@ function Receipts() {
                         <td>{receipt.reference_number || '-'}</td>
                         <td>
                           {receipt.receipt_id && (
-                            <button
-                              className="btn-icon-small"
-                              onClick={() => handleDownloadReceipt(receipt.receipt_id)}
-                              title="Download Receipt"
-                              disabled={downloadingReceipt === receipt.receipt_id}
-                            >
-                              {downloadingReceipt === receipt.receipt_id ? '⏳' : '📄'}
-                            </button>
+                            <>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleViewReceipt(receipt.receipt_id)}
+                                title="View Receipt"
+                              >
+                                👁️
+                              </button>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleDownloadReceipt(receipt.receipt_id)}
+                                title="Download Receipt"
+                                disabled={downloadingReceipt === receipt.receipt_id}
+                              >
+                                {downloadingReceipt === receipt.receipt_id ? '⏳' : '📄'}
+                              </button>
+                            </>
                           )}
                           <button
                             className="btn-icon-small"
