@@ -20,6 +20,7 @@ import {
   CircularProgress,
   IconButton,
   Collapse,
+  LinearProgress,
 } from '@mui/material';
 import {
   Warning as WarningIcon,
@@ -27,20 +28,27 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Info as InfoIcon,
+  Download as DownloadIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { gstCorrectionAPI } from '../services/api';
+import { gstCorrectionAPI, invoiceAPI } from '../services/api';
 
 const GstCorrectionDialog = ({ open, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [correctionData, setCorrectionData] = useState(null);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
-  const [acknowledging, setAcknowledging] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadedCount, setDownloadedCount] = useState(0);
   const [error, setError] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
+  const [downloadComplete, setDownloadComplete] = useState(false);
 
   useEffect(() => {
     if (open) {
       checkGstCorrections();
+      setDownloadComplete(false);
+      setDownloadedCount(0);
     }
   }, [open]);
 
@@ -79,17 +87,61 @@ const GstCorrectionDialog = ({ open, onClose }) => {
     });
   };
 
-  const handleAcknowledge = async () => {
+  const downloadSinglePDF = async (invoiceId, invoiceNumber) => {
     try {
-      setAcknowledging(true);
-      await gstCorrectionAPI.acknowledgeCorrections(selectedInvoices);
-      // Mark as checked in localStorage
-      localStorage.setItem('gst_correction_checked', new Date().toISOString());
-      onClose(true);
+      const response = await invoiceAPI.generatePDF(invoiceId);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoice_${invoiceNumber}_Corrected.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return true;
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to acknowledge corrections');
-    } finally {
-      setAcknowledging(false);
+      console.error(`Failed to download invoice ${invoiceNumber}:`, err);
+      return false;
+    }
+  };
+
+  const handleDownloadSelected = async () => {
+    if (selectedInvoices.length === 0) {
+      setError('Please select at least one invoice to download');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadProgress(0);
+    setDownloadedCount(0);
+    setError(null);
+
+    const selectedInvoiceDetails = correctionData.invoices.filter(inv =>
+      selectedInvoices.includes(inv.id)
+    );
+
+    let successCount = 0;
+    for (let i = 0; i < selectedInvoiceDetails.length; i++) {
+      const invoice = selectedInvoiceDetails[i];
+      const success = await downloadSinglePDF(invoice.id, invoice.invoice_number);
+      if (success) successCount++;
+      setDownloadedCount(i + 1);
+      setDownloadProgress(((i + 1) / selectedInvoiceDetails.length) * 100);
+      // Small delay between downloads to prevent overwhelming the browser
+      if (i < selectedInvoiceDetails.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    setDownloading(false);
+    setDownloadComplete(true);
+
+    if (successCount === selectedInvoiceDetails.length) {
+      // All downloads successful - mark as checked
+      localStorage.setItem('gst_correction_checked', new Date().toISOString());
+    } else {
+      setError(`Downloaded ${successCount} of ${selectedInvoiceDetails.length} invoices. Some downloads failed.`);
     }
   };
 
@@ -97,6 +149,11 @@ const GstCorrectionDialog = ({ open, onClose }) => {
     // Mark as checked in localStorage even if skipped
     localStorage.setItem('gst_correction_checked', new Date().toISOString());
     onClose(false);
+  };
+
+  const handleClose = () => {
+    localStorage.setItem('gst_correction_checked', new Date().toISOString());
+    onClose(true);
   };
 
   const formatCurrency = (amount) => {
@@ -149,42 +206,62 @@ const GstCorrectionDialog = ({ open, onClose }) => {
       </DialogTitle>
       <DialogContent sx={{ mt: 2 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
             {error}
+          </Alert>
+        )}
+
+        {downloadComplete && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Successfully downloaded {downloadedCount} corrected invoice PDFs! The GST breakdown (CGST/SGST or IGST) is now correct based on client state.
           </Alert>
         )}
 
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="body2">
-            <strong>Important:</strong> We found {correctionData.invoices_to_review} invoices that may have incorrect GST type.
-            The GST type (CGST/SGST vs IGST) is determined by comparing your company state code
-            (<strong>{correctionData.company_state_code}</strong>) with the client's state code.
+            <strong>Important:</strong> We found {correctionData.invoices_to_review} invoices that need GST type correction.
+            Your company state code is <strong>{correctionData.company_state_code}</strong>.
+            Download the corrected PDFs below to get invoices with proper GST breakdown.
           </Typography>
         </Alert>
 
         <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
           <Typography variant="subtitle2" gutterBottom>
             <InfoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 1 }} />
-            GST Rules:
+            GST Rules Applied:
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            - <strong>Same State (Local)</strong>: CGST + SGST (tax split equally)
+            - <strong>Same State (Local)</strong>: CGST + SGST (tax split 50-50)
             <br />
             - <strong>Different State (Interstate)</strong>: IGST (full tax amount)
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
-            Invoices to Review ({correctionData.invoices.length})
+        {downloading && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" gutterBottom>
+              Downloading invoices... ({downloadedCount} of {selectedInvoices.length})
+            </Typography>
+            <LinearProgress variant="determinate" value={downloadProgress} />
+          </Box>
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, justifyContent: 'space-between' }}>
+          <Typography variant="subtitle1">
+            Invoices to Correct ({correctionData.invoices.length})
           </Typography>
-          <IconButton onClick={() => setShowDetails(!showDetails)} size="small">
-            {showDetails ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
+          <Box>
+            <IconButton onClick={checkGstCorrections} size="small" title="Refresh list">
+              <RefreshIcon />
+            </IconButton>
+            <IconButton onClick={() => setShowDetails(!showDetails)} size="small">
+              {showDetails ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
         </Box>
 
         <Collapse in={showDetails}>
-          <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
+          <TableContainer component={Paper} sx={{ maxHeight: 350 }}>
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
@@ -193,6 +270,7 @@ const GstCorrectionDialog = ({ open, onClose }) => {
                       checked={selectedInvoices.length === correctionData.invoices.length}
                       indeterminate={selectedInvoices.length > 0 && selectedInvoices.length < correctionData.invoices.length}
                       onChange={handleSelectAll}
+                      disabled={downloading}
                     />
                   </TableCell>
                   <TableCell>Invoice #</TableCell>
@@ -200,8 +278,8 @@ const GstCorrectionDialog = ({ open, onClose }) => {
                   <TableCell>Date</TableCell>
                   <TableCell>Client</TableCell>
                   <TableCell>Client State</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                  <TableCell>Correct GST</TableCell>
+                  <TableCell align="right">Tax Amount</TableCell>
+                  <TableCell>Correct GST Type</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -209,17 +287,21 @@ const GstCorrectionDialog = ({ open, onClose }) => {
                   <TableRow
                     key={invoice.id}
                     hover
-                    onClick={() => handleSelectInvoice(invoice.id)}
-                    sx={{ cursor: 'pointer' }}
+                    selected={selectedInvoices.includes(invoice.id)}
+                    onClick={() => !downloading && handleSelectInvoice(invoice.id)}
+                    sx={{ cursor: downloading ? 'default' : 'pointer' }}
                   >
                     <TableCell padding="checkbox">
                       <Checkbox
                         checked={selectedInvoices.includes(invoice.id)}
+                        disabled={downloading}
                         onClick={(e) => e.stopPropagation()}
                         onChange={() => handleSelectInvoice(invoice.id)}
                       />
                     </TableCell>
-                    <TableCell>{invoice.invoice_number}</TableCell>
+                    <TableCell>
+                      <strong>{invoice.invoice_number}</strong>
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={invoice.invoice_type === 'proforma' ? 'Proforma' : 'Tax'}
@@ -229,14 +311,20 @@ const GstCorrectionDialog = ({ open, onClose }) => {
                     </TableCell>
                     <TableCell>{invoice.invoice_date}</TableCell>
                     <TableCell>{invoice.client_name}</TableCell>
-                    <TableCell>{invoice.client_state_code}</TableCell>
-                    <TableCell align="right">{formatCurrency(invoice.total_amount)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={invoice.client_state_code}
+                        size="small"
+                        variant="outlined"
+                        color={invoice.client_state_code === correctionData.company_state_code ? 'success' : 'error'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">{formatCurrency(invoice.tax_amount)}</TableCell>
                     <TableCell>
                       <Chip
                         label={invoice.correct_gst_type}
                         size="small"
                         color={invoice.is_interstate ? 'error' : 'success'}
-                        variant="outlined"
                       />
                     </TableCell>
                   </TableRow>
@@ -246,34 +334,34 @@ const GstCorrectionDialog = ({ open, onClose }) => {
           </TableContainer>
         </Collapse>
 
-        {!showDetails && (
-          <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-            <Typography variant="body2" color="text.secondary">
-              Click the expand button above to see the full list of {correctionData.invoices.length} invoices.
-            </Typography>
-          </Paper>
-        )}
-
         <Alert severity="warning" sx={{ mt: 2 }}>
           <Typography variant="body2">
-            <strong>Action Required:</strong> Please regenerate/download the PDF for these invoices to get the corrected GST breakdown.
-            The system will now automatically calculate the correct GST type based on client state.
+            <strong>Action:</strong> Click "Download Corrected PDFs" to download invoices with the correct GST breakdown.
+            If you've already sent invoices to clients, you may need to re-send the corrected versions.
           </Typography>
         </Alert>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Button onClick={handleSkip} color="inherit">
+        <Button onClick={handleSkip} color="inherit" disabled={downloading}>
           Skip for Now
         </Button>
         <Button
-          onClick={handleAcknowledge}
+          onClick={handleDownloadSelected}
           variant="contained"
           color="primary"
-          disabled={acknowledging || selectedInvoices.length === 0}
+          disabled={downloading || selectedInvoices.length === 0}
+          startIcon={downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
         >
-          {acknowledging ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-          Acknowledge & Continue ({selectedInvoices.length} selected)
+          {downloading
+            ? `Downloading (${downloadedCount}/${selectedInvoices.length})...`
+            : `Download Corrected PDFs (${selectedInvoices.length})`
+          }
         </Button>
+        {downloadComplete && (
+          <Button onClick={handleClose} variant="contained" color="success">
+            Done
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
