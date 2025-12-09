@@ -299,14 +299,32 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
         gst_amount = item.total_amount - item.taxable_amount
 
         # Determine if CGST/SGST or IGST based on state codes
-        is_interstate = False
+        # Logic: Compare company state with client state
+        # - If states match (local) -> CGST + SGST (split equally)
+        # - If states differ (interstate) -> IGST (full amount)
+        is_interstate = True  # Default to IGST if unable to determine
         try:
-            if company_settings.stateCode and invoice.client.gstin:
-                company_state_code = str(company_settings.stateCode).strip()
+            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
+
+            # Get client state code - prefer stateCode field, fallback to first 2 digits of GSTIN
+            client_state_code = ''
+            if invoice.client.stateCode:
+                client_state_code = str(invoice.client.stateCode).strip()
+            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
                 client_state_code = str(invoice.client.gstin[:2]).strip()
+
+            # Compare state codes to determine if interstate
+            if company_state_code and client_state_code:
                 is_interstate = company_state_code != client_state_code
-        except:
-            pass
+            elif not company_state_code:
+                # If company doesn't have state code, default to IGST
+                is_interstate = True
+            elif not client_state_code:
+                # If client doesn't have state code, default to IGST
+                is_interstate = True
+        except Exception as e:
+            # If any error, default to IGST
+            is_interstate = True
 
         cgst = 0
         sgst = 0

@@ -327,9 +327,28 @@ class TallyConnector:
         invoice_date = invoice.invoice_date.strftime('%Y%m%d')
 
         # Determine if inter-state or intra-state
-        company_state = invoice.organization.companysettings.state if hasattr(invoice.organization, 'companysettings') else ''
-        client_state = invoice.client.state if invoice.client else ''
-        is_interstate = company_state.lower() != client_state.lower() if company_state and client_state else False
+        # Determine if interstate (IGST) or local (CGST/SGST)
+        # Priority: stateCode > state field
+        company_state_code = ''
+        client_state_code = ''
+        
+        if hasattr(invoice.organization, 'company_settings'):
+            cs = invoice.organization.company_settings
+            company_state_code = str(cs.stateCode).strip() if cs.stateCode else ''
+            if not company_state_code:
+                company_state_code = str(cs.state).strip().lower() if cs.state else ''
+        
+        if invoice.client:
+            client_state_code = str(invoice.client.stateCode).strip() if invoice.client.stateCode else ''
+            if not client_state_code and invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                client_state_code = str(invoice.client.gstin[:2]).strip()
+            if not client_state_code:
+                client_state_code = str(invoice.client.state).strip().lower() if invoice.client.state else ''
+        
+        # Default to IGST if unable to determine states
+        is_interstate = True
+        if company_state_code and client_state_code:
+            is_interstate = company_state_code.lower() != client_state_code.lower()
 
         # Calculate amounts from Invoice model
         subtotal = invoice.subtotal or Decimal('0')
