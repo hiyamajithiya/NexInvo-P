@@ -166,7 +166,7 @@ class InvoiceSettings(models.Model):
     enablePaymentReminders = models.BooleanField(default=True)
     reminderFrequencyDays = models.IntegerField(default=3, help_text='Send reminders every X days for unpaid proforma invoices')
     reminderEmailSubject = models.CharField(max_length=255, default='Payment Reminder for Invoice {invoice_number}')
-    reminderEmailBody = models.TextField(default='Dear {client_name},\n\nThis is a friendly reminder that payment for {invoice_number} dated {invoice_date} is pending.\n\nAmount Due: ₹{total_amount}\n\nPlease make the payment at your earliest convenience.\n\nThank you!')
+    reminderEmailBody = models.TextField(default='Dear {client_name},\n\nThis is a friendly reminder that payment for {invoice_number} dated {invoice_date} is pending.\n\nAmount Due: Rs. {total_amount}\n\nPlease make the payment at your earliest convenience.\n\nThank you!')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1861,7 +1861,12 @@ class ScheduledInvoice(models.Model):
         if self.last_generated_date == today:
             return False
 
-        # Check if today matches the schedule
+        # Use next_generation_date for reliable scheduling
+        # This is the most reliable way to check as it's calculated correctly
+        if self.next_generation_date:
+            return today >= self.next_generation_date
+
+        # Fallback: Check if today matches the schedule pattern
         if self.frequency == 'daily':
             return True
 
@@ -1874,8 +1879,14 @@ class ScheduledInvoice(models.Model):
 
         elif self.frequency == 'quarterly':
             day = min(self.day_of_month, 28)
-            # Quarterly months: 1, 4, 7, 10 (Jan, Apr, Jul, Oct)
-            return today.day == day and today.month in [1, 4, 7, 10]
+            # Check if today is the correct day and a quarterly month from start_date
+            if today.day != day:
+                return False
+            # Calculate quarterly months based on start_date's month
+            start_month = self.start_date.month
+            # Generate the 4 quarterly months based on start month
+            quarterly_months = [(start_month + i * 3 - 1) % 12 + 1 for i in range(4)]
+            return today.month in quarterly_months
 
         elif self.frequency == 'yearly':
             day = min(self.day_of_month, 28)

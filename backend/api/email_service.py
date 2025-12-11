@@ -2,6 +2,16 @@ from django.core.mail import EmailMessage, get_connection
 from django.conf import settings
 from .pdf_generator import generate_invoice_pdf, generate_receipt_pdf
 from .models import EmailSettings, InvoiceFormatSettings
+from .email_templates import (
+    get_base_email_template,
+    format_greeting,
+    format_paragraph,
+    format_info_box,
+    format_highlight_amount,
+    format_signature,
+    format_alert_box,
+    format_divider,
+)
 from datetime import datetime
 import threading
 
@@ -108,10 +118,59 @@ def send_invoice_email(invoice, company_settings, connection=None):
         # Email body
         invoice_type_name = "Proforma Invoice" if invoice.invoice_type == 'proforma' else "Tax Invoice"
 
-        # Include email signature if available
-        signature = f"\n\n{email_settings.email_signature}" if email_settings.email_signature else ""
+        # Build professional HTML email content
+        content = format_greeting(invoice.client.name)
+        content += format_paragraph(
+            f"Please find attached <strong>{invoice_type_name} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d %B %Y')}.",
+            style="lead"
+        )
 
-        body = f"""
+        # Invoice details info box
+        invoice_details = [
+            ("Invoice Number", invoice.invoice_number),
+            ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
+            ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+        ]
+        content += format_info_box("Invoice Details", invoice_details)
+
+        # Amount highlight
+        content += format_highlight_amount(invoice.total_amount, "Total Amount")
+
+        # Payment terms if available
+        if invoice.payment_terms:
+            content += format_alert_box(f"<strong>Payment Terms:</strong> {invoice.payment_terms}", "info")
+
+        # Notes if available
+        if invoice.notes:
+            content += format_paragraph(f"<em>Notes:</em> {invoice.notes}", style="small")
+
+        content += format_divider()
+        content += format_paragraph("Thank you for your business! We appreciate your trust in our services.", style="normal")
+
+        # Signature
+        content += format_signature(
+            name=email_settings.from_name if email_settings.from_name else company_settings.companyName,
+            company=company_settings.companyName,
+            phone=company_settings.phone if company_settings.phone else None,
+            email=email_settings.from_email
+        )
+
+        # Include custom email signature if available
+        if email_settings.email_signature:
+            content += format_paragraph(email_settings.email_signature, style="small")
+
+        # Generate full HTML email with dual branding
+        html_body = get_base_email_template(
+            subject=invoice_type_name,
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+            tenant_company_name=company_settings.companyName if company_settings else None,
+            tenant_tagline=company_settings.tradingName if company_settings and company_settings.tradingName else None,
+        )
+
+        # Plain text fallback
+        plain_body = f"""
 Dear {invoice.client.name},
 
 Please find attached {invoice_type_name} {invoice.invoice_number} dated {invoice.invoice_date.strftime('%d-%b-%Y')}.
@@ -119,10 +178,9 @@ Please find attached {invoice_type_name} {invoice.invoice_number} dated {invoice
 Invoice Details:
 - Invoice Number: {invoice.invoice_number}
 - Invoice Date: {invoice.invoice_date.strftime('%d-%b-%Y')}
-- Total Amount: ₹{invoice.total_amount}
+- Total Amount: Rs. {invoice.total_amount:,.2f}
 
 {invoice.payment_terms if invoice.payment_terms else ''}
-
 {invoice.notes if invoice.notes else ''}
 
 Thank you for your business!
@@ -131,7 +189,7 @@ Best Regards,
 {email_settings.from_name if email_settings.from_name else company_settings.companyName}
 {company_settings.phone if company_settings.phone else ''}
 {email_settings.from_email}
-{signature}
+{email_settings.email_signature if email_settings.email_signature else ''}
         """.strip()
 
         # Use provided connection or create new one with timeout
@@ -146,16 +204,16 @@ Best Regards,
                 timeout=30,  # 30 second timeout
             )
 
-        # Create email with UTF-8 encoding
+        # Create email with HTML content and UTF-8 encoding
         email = EmailMessage(
             subject=subject,
-            body=body,
+            body=html_body,
             from_email=email_settings.from_email,
             to=[invoice.client.email],
             reply_to=[company_settings.email] if company_settings.email else [],
             connection=connection
         )
-        email.content_subtype = "plain"
+        email.content_subtype = "html"
         email.encoding = 'utf-8'
 
         # Attach PDF
@@ -331,10 +389,64 @@ def send_receipt_email(receipt, tax_invoice, company_settings):
         # Email subject and body
         subject = f"Tax Invoice & Receipt - {tax_invoice.invoice_number}"
 
-        # Include email signature if available
-        signature = f"\n\n{email_settings.email_signature}" if email_settings.email_signature else ""
+        # Build professional HTML email content
+        content = format_greeting(client.name)
+        content += format_paragraph(
+            "Thank you for your payment! We have received your payment and are pleased to provide you with the following documents.",
+            style="lead"
+        )
 
-        body = f"""Dear {client.name},
+        # Attachments info
+        content += format_info_box("Attached Documents", [
+            ("Tax Invoice", tax_invoice.invoice_number),
+            ("Payment Receipt", receipt.receipt_number),
+        ], bg_color="#f0fdf4", border_color="#10b981", title_color="#065f46")
+
+        # Payment details
+        payment_details = [
+            ("Amount Received", f"Rs. {receipt.amount_received:,.2f}"),
+            ("Payment Date", receipt.receipt_date.strftime('%d %B %Y')),
+            ("Payment Method", receipt.payment.get_payment_method_display()),
+        ]
+        content += format_info_box("Payment Details", payment_details)
+
+        # Amount highlight
+        content += format_highlight_amount(receipt.amount_received, "Payment Confirmed")
+
+        content += format_alert_box(
+            "Your payment has been successfully processed. Thank you for your prompt payment!",
+            "success"
+        )
+
+        content += format_divider()
+        content += format_paragraph(
+            "If you have any questions regarding this transaction, please don't hesitate to contact us.",
+            style="normal"
+        )
+
+        # Signature
+        content += format_signature(
+            name=company_settings.companyName,
+            phone=company_settings.phone,
+            email=company_settings.email
+        )
+
+        # Include custom email signature if available
+        if email_settings.email_signature:
+            content += format_paragraph(email_settings.email_signature, style="small")
+
+        # Generate full HTML email with dual branding
+        html_body = get_base_email_template(
+            subject="Payment Confirmation",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+            tenant_company_name=company_settings.companyName if company_settings else None,
+            tenant_tagline=company_settings.tradingName if company_settings and company_settings.tradingName else None,
+        )
+
+        # Plain text fallback
+        plain_body = f"""Dear {client.name},
 
 Thank you for your payment.
 
@@ -343,7 +455,7 @@ Please find attached:
 2. Payment Receipt: {receipt.receipt_number}
 
 Payment Details:
-- Amount Received: ₹{receipt.amount_received:,.2f}
+- Amount Received: Rs. {receipt.amount_received:,.2f}
 - Payment Date: {receipt.receipt_date.strftime('%d %B %Y')}
 - Payment Method: {receipt.payment.get_payment_method_display()}
 
@@ -353,7 +465,7 @@ Best regards,
 {company_settings.companyName}
 {company_settings.email}
 {company_settings.phone}
-{signature}
+{email_settings.email_signature if email_settings.email_signature else ''}
         """.strip()
 
         # Configure SMTP connection
@@ -366,16 +478,16 @@ Best regards,
             use_tls=email_settings.use_tls,
         )
 
-        # Create email
+        # Create email with HTML content
         email = EmailMessage(
             subject=subject,
-            body=body,
+            body=html_body,
             from_email=f"{email_settings.from_name} <{email_settings.from_email}>" if email_settings.from_name else email_settings.from_email,
             to=[client.email],
             reply_to=[email_settings.from_email],
             connection=connection
         )
-        email.content_subtype = "plain"
+        email.content_subtype = "html"
         email.encoding = 'utf-8'
 
         # Attach PDFs

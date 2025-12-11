@@ -318,27 +318,70 @@ class ReceiptSerializer(serializers.ModelSerializer):
                             'payment_reference', 'created_at', 'updated_at']
 
 
-class EmailSettingsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EmailSettings
-        fields = ['id', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
-                  'from_email', 'from_name', 'use_tls', 'email_signature',
-                  'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'smtp_password': {'write_only': True}  # Don't expose password in GET requests
-        }
+class EmailSettingsSerializer(serializers.Serializer):
+    """
+    Custom serializer for EmailSettings to handle encrypted smtp_password properly.
+    We use a plain Serializer instead of ModelSerializer to avoid property introspection issues.
+    """
+    id = serializers.IntegerField(read_only=True)
+    smtp_host = serializers.CharField(max_length=255, required=False, default='smtp.gmail.com')
+    smtp_port = serializers.IntegerField(required=False, default=587)
+    smtp_username = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    smtp_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    from_email = serializers.EmailField(required=False, allow_blank=True)
+    from_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    use_tls = serializers.BooleanField(required=False, default=True)
+    email_signature = serializers.CharField(required=False, allow_blank=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        from .models import EmailSettings
+        return EmailSettings.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        instance.smtp_host = validated_data.get('smtp_host', instance.smtp_host)
+        instance.smtp_port = validated_data.get('smtp_port', instance.smtp_port)
+        instance.smtp_username = validated_data.get('smtp_username', instance.smtp_username)
+        if 'smtp_password' in validated_data and validated_data['smtp_password']:
+            instance.smtp_password = validated_data['smtp_password']
+        instance.from_email = validated_data.get('from_email', instance.from_email)
+        instance.from_name = validated_data.get('from_name', instance.from_name)
+        instance.use_tls = validated_data.get('use_tls', instance.use_tls)
+        instance.email_signature = validated_data.get('email_signature', instance.email_signature)
+        instance.save()
+        return instance
 
 
-class SystemEmailSettingsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SystemEmailSettings
-        fields = ['id', 'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
-                  'from_email', 'use_tls', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'smtp_password': {'write_only': True}  # Don't expose password in GET requests
-        }
+class SystemEmailSettingsSerializer(serializers.Serializer):
+    """
+    Custom serializer for SystemEmailSettings to handle encrypted smtp_password properly.
+    We use a plain Serializer instead of ModelSerializer to avoid property introspection issues.
+    """
+    id = serializers.IntegerField(read_only=True)
+    smtp_host = serializers.CharField(max_length=255, required=False, default='smtp.gmail.com')
+    smtp_port = serializers.IntegerField(required=False, default=587)
+    smtp_username = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    smtp_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    from_email = serializers.EmailField(required=False, allow_blank=True)
+    use_tls = serializers.BooleanField(required=False, default=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        from .models import SystemEmailSettings
+        return SystemEmailSettings.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        instance.smtp_host = validated_data.get('smtp_host', instance.smtp_host)
+        instance.smtp_port = validated_data.get('smtp_port', instance.smtp_port)
+        instance.smtp_username = validated_data.get('smtp_username', instance.smtp_username)
+        if 'smtp_password' in validated_data and validated_data['smtp_password']:
+            instance.smtp_password = validated_data['smtp_password']
+        instance.from_email = validated_data.get('from_email', instance.from_email)
+        instance.use_tls = validated_data.get('use_tls', instance.use_tls)
+        instance.save()
+        return instance
 
 
 class InvoiceFormatSettingsSerializer(serializers.ModelSerializer):
@@ -669,6 +712,10 @@ class ScheduledInvoiceSerializer(serializers.ModelSerializer):
     frequency_display = serializers.CharField(source='get_frequency_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     total_amount = serializers.SerializerMethodField()
+    # Add field with validation - limit to 1-28 to handle all months safely
+    day_of_month = serializers.IntegerField(min_value=1, max_value=28, default=1)
+    day_of_week = serializers.IntegerField(min_value=0, max_value=6, default=0)
+    month_of_year = serializers.IntegerField(min_value=1, max_value=12, default=1, required=False, allow_null=True)
 
     class Meta:
         model = ScheduledInvoice
@@ -685,6 +732,26 @@ class ScheduledInvoiceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'occurrences_generated', 'last_generated_date',
                            'next_generation_date', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        """Validate schedule configuration based on frequency"""
+        frequency = data.get('frequency', self.instance.frequency if self.instance else None)
+
+        # Validate day_of_week is only required for weekly
+        if frequency == 'weekly':
+            if 'day_of_week' not in data and (not self.instance or self.instance.day_of_week is None):
+                raise serializers.ValidationError({
+                    'day_of_week': 'Day of week is required for weekly schedules (0=Monday, 6=Sunday)'
+                })
+
+        # Validate month_of_year is only required for yearly
+        if frequency == 'yearly':
+            if not data.get('month_of_year') and (not self.instance or not self.instance.month_of_year):
+                raise serializers.ValidationError({
+                    'month_of_year': 'Month of year is required for yearly schedules (1=January, 12=December)'
+                })
+
+        return data
 
     def get_total_amount(self, obj):
         """Calculate total amount from items"""

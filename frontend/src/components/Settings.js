@@ -1003,67 +1003,6 @@ function Settings() {
                   </div>
                 </div>
 
-                {/* Payment Reminder Settings */}
-                <h2 className="section-title" style={{marginTop: '32px'}}>Payment Reminder Settings</h2>
-                <div className="form-grid">
-                  <div className="form-field">
-                    <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                      <input
-                        type="checkbox"
-                        checked={invoiceSettings.enablePaymentReminders}
-                        onChange={(e) => handleInvoiceChange('enablePaymentReminders', e.target.checked)}
-                        style={{width: 'auto', height: 'auto'}}
-                      />
-                      Enable Automatic Payment Reminders
-                    </label>
-                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
-                      Automatically send payment reminders for unpaid proforma invoices
-                    </small>
-                  </div>
-                  <div className="form-field">
-                    <label>Reminder Frequency (Days)</label>
-                    <input
-                      type="number"
-                      value={invoiceSettings.reminderFrequencyDays}
-                      onChange={(e) => handleInvoiceChange('reminderFrequencyDays', parseInt(e.target.value) || 3)}
-                      className="form-input"
-                      min="1"
-                      disabled={!invoiceSettings.enablePaymentReminders}
-                    />
-                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
-                      Send reminders every X days until payment is received
-                    </small>
-                  </div>
-                  <div className="form-field full-width">
-                    <label>Email Subject Template</label>
-                    <input
-                      type="text"
-                      value={invoiceSettings.reminderEmailSubject}
-                      onChange={(e) => handleInvoiceChange('reminderEmailSubject', e.target.value)}
-                      className="form-input"
-                      placeholder="Payment Reminder for Invoice {invoice_number}"
-                      disabled={!invoiceSettings.enablePaymentReminders}
-                    />
-                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
-                      Available placeholders: {'{invoice_number}'}, {'{client_name}'}, {'{invoice_date}'}, {'{total_amount}'}
-                    </small>
-                  </div>
-                  <div className="form-field full-width">
-                    <label>Email Body Template</label>
-                    <textarea
-                      rows="6"
-                      value={invoiceSettings.reminderEmailBody}
-                      onChange={(e) => handleInvoiceChange('reminderEmailBody', e.target.value)}
-                      className="form-input"
-                      placeholder="Dear {client_name},..."
-                      disabled={!invoiceSettings.enablePaymentReminders}
-                    ></textarea>
-                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
-                      Available placeholders: {'{invoice_number}'}, {'{client_name}'}, {'{invoice_date}'}, {'{total_amount}'}, {'{reminder_count}'}
-                    </small>
-                  </div>
-                </div>
-
                 <div className="form-actions">
                   <button className="btn-create" onClick={handleSaveInvoice} disabled={loading}>
                     <span className="btn-icon">💾</span>
@@ -1169,6 +1108,74 @@ function Settings() {
                     </table>
                   </div>
                 )}
+
+                {/* Payment Reminder Settings */}
+                <h2 className="section-title" style={{marginTop: '32px'}}>Payment Reminder Settings</h2>
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                      <input
+                        type="checkbox"
+                        checked={invoiceSettings.enablePaymentReminders}
+                        onChange={(e) => handleInvoiceChange('enablePaymentReminders', e.target.checked)}
+                        style={{width: 'auto', height: 'auto'}}
+                      />
+                      Enable Automatic Payment Reminders
+                    </label>
+                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
+                      Automatically send payment reminders for unpaid proforma invoices
+                    </small>
+                  </div>
+                  <div className="form-field">
+                    <label>Reminder Frequency (Days)</label>
+                    <input
+                      type="number"
+                      value={invoiceSettings.reminderFrequencyDays}
+                      onChange={(e) => handleInvoiceChange('reminderFrequencyDays', parseInt(e.target.value) || 3)}
+                      className="form-input"
+                      min="1"
+                      disabled={!invoiceSettings.enablePaymentReminders}
+                    />
+                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
+                      Send reminders every X days until payment is received
+                    </small>
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Email Subject Template</label>
+                    <input
+                      type="text"
+                      value={invoiceSettings.reminderEmailSubject}
+                      onChange={(e) => handleInvoiceChange('reminderEmailSubject', e.target.value)}
+                      className="form-input"
+                      placeholder="Payment Reminder for Invoice {invoice_number}"
+                      disabled={!invoiceSettings.enablePaymentReminders}
+                    />
+                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
+                      Available placeholders: {'{invoice_number}'}, {'{client_name}'}, {'{invoice_date}'}, {'{total_amount}'}
+                    </small>
+                  </div>
+                  <div className="form-field full-width">
+                    <label>Email Body Template</label>
+                    <textarea
+                      rows="6"
+                      value={invoiceSettings.reminderEmailBody}
+                      onChange={(e) => handleInvoiceChange('reminderEmailBody', e.target.value)}
+                      className="form-input"
+                      placeholder="Dear {client_name},..."
+                      disabled={!invoiceSettings.enablePaymentReminders}
+                    ></textarea>
+                    <small style={{color: '#6b7280', display: 'block', marginTop: '4px'}}>
+                      Available placeholders: {'{invoice_number}'}, {'{client_name}'}, {'{invoice_date}'}, {'{total_amount}'}, {'{reminder_count}'}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button className="btn-create" onClick={handleSaveInvoice} disabled={loading}>
+                    <span className="btn-icon">💾</span>
+                    {loading ? 'Saving...' : 'Save Reminder Settings'}
+                  </button>
+                </div>
               </div>
             )}
 

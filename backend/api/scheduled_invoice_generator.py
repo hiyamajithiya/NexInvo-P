@@ -177,56 +177,107 @@ def send_scheduled_invoice_email(invoice, scheduled_invoice, organization):
     """
     from .models import EmailSettings, CompanySettings
     from .pdf_generator import generate_invoice_pdf
+    from .email_templates import (
+        get_base_email_template,
+        format_greeting,
+        format_paragraph,
+        format_info_box,
+        format_highlight_amount,
+        format_alert_box,
+        format_divider,
+        format_signature,
+    )
 
     # Get email settings
     try:
         email_settings = EmailSettings.objects.get(organization=organization)
     except EmailSettings.DoesNotExist:
-        email_settings = None
+        logger.warning(f"Email settings not found for organization {organization.id}")
+        return False
 
     # Get company settings for PDF
     try:
         company_settings = CompanySettings.objects.get(organization=organization)
     except CompanySettings.DoesNotExist:
-        company_settings = None
+        logger.warning(f"Company settings not found for organization {organization.id}")
+        return False
+
+    # Validate required email settings
+    if not email_settings.smtp_username or not email_settings.smtp_password:
+        logger.warning(f"SMTP credentials not configured for organization {organization.id}")
+        return False
 
     # Prepare email
     client = invoice.client
+    company_name = company_settings.companyName or 'Our Company'
 
     # Subject
     if scheduled_invoice.email_subject:
         subject = scheduled_invoice.email_subject.format(
             invoice_number=invoice.invoice_number,
             client_name=client.name,
-            company_name=company_settings.companyName if company_settings else 'Our Company'
+            company_name=company_name
         )
     else:
         invoice_type_display = 'Tax Invoice' if invoice.invoice_type == 'tax' else 'Proforma Invoice'
-        subject = f'{invoice_type_display} {invoice.invoice_number} from {company_settings.companyName if company_settings else "Our Company"}'
+        subject = f'{invoice_type_display} {invoice.invoice_number} from {company_name}'
 
-    # Body
+    # Build professional HTML email content
+    content = format_greeting(client.name)
+
+    # Custom message from scheduled invoice or default
     if scheduled_invoice.email_body:
-        body = scheduled_invoice.email_body.format(
+        custom_message = scheduled_invoice.email_body.format(
             invoice_number=invoice.invoice_number,
             client_name=client.name,
-            company_name=company_settings.companyName if company_settings else 'Our Company',
-            total_amount=f"{invoice.total_amount:,.2f}",
-            invoice_date=invoice.invoice_date.strftime('%d-%m-%Y')
+            company_name=company_name,
+            total_amount=f"Rs. {invoice.total_amount:,.2f}",
+            invoice_date=invoice.invoice_date.strftime('%d %B %Y')
         )
+        content += format_paragraph(custom_message, style="lead")
     else:
-        body = f"""Dear {client.name},
+        invoice_type_display = 'Tax Invoice' if invoice.invoice_type == 'tax' else 'Proforma Invoice'
+        content += format_paragraph(
+            f"Please find attached your <strong>{invoice_type_display} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d %B %Y')}.",
+            style="lead"
+        )
 
-Please find attached your invoice {invoice.invoice_number} dated {invoice.invoice_date.strftime('%d-%m-%Y')}.
+    # Invoice details info box
+    invoice_details = [
+        ("Invoice Number", invoice.invoice_number),
+        ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
+        ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+    ]
+    content += format_info_box("Invoice Details", invoice_details)
 
-Invoice Amount: ₹{invoice.total_amount:,.2f}
+    # Amount highlight
+    content += format_highlight_amount(float(invoice.total_amount), "Invoice Amount")
 
-This is an automatically generated invoice as per your recurring billing arrangement.
+    content += format_alert_box(
+        "This is an automatically generated invoice as per your recurring billing arrangement.",
+        "info"
+    )
 
-Thank you for your business!
+    content += format_divider()
+    content += format_paragraph("Thank you for your business! We appreciate your trust in our services.", style="normal")
 
-Best regards,
-{company_settings.companyName if company_settings else 'Our Company'}
-"""
+    # Signature
+    content += format_signature(
+        name=email_settings.from_name if email_settings.from_name else company_name,
+        company=company_name,
+        phone=company_settings.phone if company_settings.phone else None,
+        email=email_settings.from_email if email_settings.from_email else settings.DEFAULT_FROM_EMAIL
+    )
+
+    # Generate full HTML email with dual branding
+    html_body = get_base_email_template(
+        subject=subject,
+        content=content,
+        company_name="NexInvo",
+        company_tagline="Invoice Management System",
+        tenant_company_name=company_name if company_name != "NexInvo" else None,
+        tenant_tagline=company_settings.tradingName if company_settings and company_settings.tradingName else None,
+    )
 
     # From email
     if email_settings and email_settings.from_email:
@@ -234,13 +285,27 @@ Best regards,
     else:
         from_email = settings.DEFAULT_FROM_EMAIL
 
-    # Create email
+    # Create SMTP connection
+    from django.core.mail import get_connection
+    connection = get_connection(
+        backend='django.core.mail.backends.smtp.EmailBackend',
+        host=email_settings.smtp_host,
+        port=email_settings.smtp_port,
+        username=email_settings.smtp_username,
+        password=email_settings.smtp_password,
+        use_tls=email_settings.use_tls,
+        timeout=30,
+    )
+
+    # Create email with HTML content
     email = EmailMessage(
         subject=subject,
-        body=body,
+        body=html_body,
         from_email=from_email,
-        to=[client.email]
+        to=[client.email],
+        connection=connection
     )
+    email.content_subtype = "html"
     email.encoding = 'utf-8'
 
     # Generate and attach PDF
@@ -256,10 +321,11 @@ Best regards,
         except Exception as e:
             logger.warning(f"Could not generate PDF for {invoice.invoice_number}: {str(e)}")
 
-    # Send email
-    email.send()
+    # Send email and verify success
+    sent_count = email.send(fail_silently=False)
 
-    return True
+    # email.send() returns 1 if successful, 0 if failed
+    return sent_count == 1
 
 
 def process_scheduled_invoices():

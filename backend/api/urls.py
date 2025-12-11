@@ -65,7 +65,4 @@ urlpatterns = [
     path('tally-sync/mappings/', views.tally_mappings, name='tally-mappings'),
     path('tally-sync/sync-invoices/', views.tally_sync_invoices, name='tally-sync-invoices'),
     path('tally-sync/sync-history/', views.tally_sync_history, name='tally-sync-history'),
-    # GST Correction endpoints
-    path('gst-corrections/check/', views.check_gst_corrections, name='check-gst-corrections'),
-    path('gst-corrections/acknowledge/', views.acknowledge_gst_corrections, name='acknowledge-gst-corrections'),
 ]

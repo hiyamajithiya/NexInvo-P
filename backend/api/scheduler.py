@@ -17,6 +17,17 @@ from django_apscheduler.jobstores import DjangoJobStore
 from django_apscheduler.models import DjangoJobExecution
 from django_apscheduler import util
 
+from .email_templates import (
+    get_base_email_template,
+    format_greeting,
+    format_paragraph,
+    format_info_box,
+    format_highlight_amount,
+    format_alert_box,
+    format_divider,
+    format_signature,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,21 +124,12 @@ def send_reminder_email(invoice, invoice_settings, organization):
     except CompanySettings.DoesNotExist:
         company_settings = None
 
-    # Prepare email subject with placeholders
+    # Prepare email subject with placeholders (use Rs. instead of rupee symbol for better compatibility)
     subject = invoice_settings.reminderEmailSubject.format(
         invoice_number=invoice.invoice_number,
         client_name=invoice.client.name,
         invoice_date=invoice.invoice_date.strftime('%d-%m-%Y'),
-        total_amount=f"{invoice.total_amount:,.2f}"
-    )
-
-    # Prepare email body with placeholders
-    message = invoice_settings.reminderEmailBody.format(
-        invoice_number=invoice.invoice_number,
-        client_name=invoice.client.name,
-        invoice_date=invoice.invoice_date.strftime('%d-%m-%Y'),
-        total_amount=f"{invoice.total_amount:,.2f}",
-        reminder_count=invoice.reminder_count + 1
+        total_amount=f"Rs. {invoice.total_amount:,.2f}"
     )
 
     # Get recipient email
@@ -135,11 +137,88 @@ def send_reminder_email(invoice, invoice_settings, organization):
     if not recipient_email:
         raise ValueError(f"Client {invoice.client.name} has no email address")
 
-    # Determine from email
+    # Determine from email and company name
     if email_settings and email_settings.from_email:
         from_email = email_settings.from_email
     else:
         from_email = settings.DEFAULT_FROM_EMAIL
+
+    company_name = company_settings.companyName if company_settings else "NexInvo"
+
+    # Build professional HTML email content
+    content = format_greeting(invoice.client.name)
+
+    # Custom message from invoice settings
+    custom_message = invoice_settings.reminderEmailBody.format(
+        invoice_number=invoice.invoice_number,
+        client_name=invoice.client.name,
+        invoice_date=invoice.invoice_date.strftime('%d %B %Y'),
+        total_amount=f"Rs. {invoice.total_amount:,.2f}",
+        reminder_count=invoice.reminder_count + 1
+    )
+    content += format_paragraph(custom_message, style="lead")
+
+    # Invoice details info box
+    invoice_details = [
+        ("Invoice Number", invoice.invoice_number),
+        ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
+        ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+        ("Reminder #", str(invoice.reminder_count + 1)),
+    ]
+    content += format_info_box("Invoice Details", invoice_details)
+
+    # Amount highlight
+    content += format_highlight_amount(invoice.total_amount, "Amount Due")
+
+    content += format_alert_box(
+        "Please make the payment at your earliest convenience. The invoice PDF is attached for your reference.",
+        "warning"
+    )
+
+    content += format_divider()
+    content += format_paragraph(
+        "Thank you for your business! If you have already made the payment, please disregard this reminder.",
+        style="normal"
+    )
+
+    # Signature
+    content += format_signature(
+        name=email_settings.from_name if email_settings and email_settings.from_name else company_name,
+        company=company_name,
+        phone=company_settings.phone if company_settings and company_settings.phone else None,
+        email=from_email
+    )
+
+    # Generate full HTML email with dual branding
+    html_body = get_base_email_template(
+        subject="Payment Reminder",
+        content=content,
+        company_name="NexInvo",
+        company_tagline="Invoice Management System",
+        tenant_company_name=company_name if company_name != "NexInvo" else None,
+        tenant_tagline=None,
+    )
+
+    # Plain text fallback
+    plain_body = f"""
+Dear {invoice.client.name},
+
+{custom_message}
+
+Invoice Details:
+- Invoice Number: {invoice.invoice_number}
+- Invoice Date: {invoice.invoice_date.strftime('%d %B %Y')}
+- Amount Due: Rs. {invoice.total_amount:,.2f}
+- Reminder #: {invoice.reminder_count + 1}
+
+Please make the payment at your earliest convenience.
+
+Thank you for your business!
+
+Best Regards,
+{company_name}
+{from_email}
+    """.strip()
 
     # Generate PDF attachment
     pdf_content = None
@@ -151,14 +230,14 @@ def send_reminder_email(invoice, invoice_settings, organization):
         except Exception as e:
             logger.warning(f'Warning: Could not generate PDF for {invoice.invoice_number}: {str(e)}')
 
-    # Send email
+    # Send email with HTML content
     email = EmailMessage(
         subject=subject,
-        body=message,
+        body=html_body,
         from_email=from_email,
         to=[recipient_email],
     )
-    # Set encoding to UTF-8 for proper Unicode support (rupee symbol, etc.)
+    email.content_subtype = "html"
     email.encoding = 'utf-8'
 
     if pdf_content:

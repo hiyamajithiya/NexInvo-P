@@ -7,6 +7,18 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.utils.crypto import get_random_string
 import logging
+from .email_templates import (
+    get_base_email_template,
+    format_greeting,
+    format_paragraph,
+    format_info_box,
+    format_cta_button,
+    format_alert_box,
+    format_code_block,
+    format_list,
+    format_divider,
+    format_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,129 +126,97 @@ def send_welcome_email_to_user(user, organization=None, temporary_password=None)
     try:
         subject = 'Welcome to NexInvo - Invoice Management System'
 
-        context = {
-            'user': user,
-            'organization': organization,
-            'temporary_password': temporary_password,
-            'login_url': f'{FRONTEND_URL}/login',
-            'support_email': SUPPORT_EMAIL,
-        }
+        login_url = f'{FRONTEND_URL}/login'
 
-        # Create email body
+        # Create email body using professional templates
         if temporary_password:
             # User added by organization admin
-            html_message = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-                    <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px;">
-                        Welcome to NexInvo!
-                    </h2>
+            content = format_greeting(user.username, "Welcome")
+            content += format_paragraph(
+                f"You have been added as a user to <strong>{organization.name}</strong> on NexInvo Invoice Management System.",
+                style="lead"
+            )
 
-                    <p>Dear {user.username},</p>
+            # Login credentials info box
+            credentials = [
+                ("Username", user.username),
+                ("Email", user.email),
+                ("Temporary Password", f"<code style='background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-family: monospace;'>{temporary_password}</code>"),
+                ("Organization", organization.name),
+            ]
+            content += format_info_box("Your Login Credentials", credentials)
 
-                    <p>You have been added as a user to <strong>{organization.name}</strong> on NexInvo Invoice Management System.</p>
+            content += format_alert_box(
+                "<strong>Important:</strong> Please change your password after your first login for security purposes.",
+                "warning"
+            )
 
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                        <h3 style="margin-top: 0; color: #1e3a8a;">Your Login Credentials:</h3>
-                        <p><strong>Username:</strong> {user.username}</p>
-                        <p><strong>Email:</strong> {user.email}</p>
-                        <p><strong>Temporary Password:</strong> <code style="background-color: #fff; padding: 2px 6px; border-radius: 3px;">{temporary_password}</code></p>
-                        <p><strong>Organization:</strong> {organization.name}</p>
-                    </div>
+            content += format_cta_button("Login to Your Account", login_url)
 
-                    <p style="color: #ef4444; font-weight: bold;">Important: Please change your password after your first login for security purposes.</p>
+            # What's next list
+            content += format_paragraph("<strong>What's Next?</strong>", style="normal")
+            content += format_list([
+                "Login to your account using the credentials above",
+                "Change your password in Profile settings",
+                "Explore the invoice management features",
+                "Contact your organization admin for any questions"
+            ])
 
-                    <div style="margin: 30px 0;">
-                        <a href="{context['login_url']}"
-                           style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                            Login to Your Account
-                        </a>
-                    </div>
-
-                    <h3 style="color: #1e3a8a;">What's Next?</h3>
-                    <ul>
-                        <li>Login to your account using the credentials above</li>
-                        <li>Change your password in Profile settings</li>
-                        <li>Explore the invoice management features</li>
-                        <li>Contact your organization admin for any questions</li>
-                    </ul>
-
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                    <p style="font-size: 12px; color: #666;">
-                        If you have any questions, please contact support at
-                        <a href="mailto:{context['support_email']}">{context['support_email']}</a>
-                    </p>
-
-                    <p style="font-size: 12px; color: #666;">
-                        © {2025} Chinmay Technosoft Private Limited. All rights reserved.
-                    </p>
-                </div>
-            </body>
-            </html>
-            """
         else:
             # Self-registered user
-            html_message = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-                    <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px;">
-                        Welcome to NexInvo!
-                    </h2>
+            content = format_greeting(user.username, "Welcome")
+            content += format_paragraph(
+                "Thank you for registering with NexInvo Invoice Management System. Your account has been successfully created!",
+                style="lead"
+            )
 
-                    <p>Dear {user.username},</p>
+            # Account details info box
+            account_details = [
+                ("Username", user.username),
+                ("Email", user.email),
+            ]
+            if organization:
+                account_details.append(("Organization", organization.name))
+            content += format_info_box("Your Account Details", account_details)
 
-                    <p>Thank you for registering with NexInvo Invoice Management System. Your account has been successfully created!</p>
+            content += format_cta_button("Login to Your Account", login_url)
 
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                        <h3 style="margin-top: 0; color: #1e3a8a;">Your Account Details:</h3>
-                        <p><strong>Username:</strong> {user.username}</p>
-                        <p><strong>Email:</strong> {user.email}</p>
-                        {f"<p><strong>Organization:</strong> {organization.name}</p>" if organization else ""}
-                    </div>
+            # Getting started list
+            content += format_paragraph("<strong>Getting Started:</strong>", style="normal")
+            content += format_list([
+                "Create your organization or join an existing one",
+                "Set up your company details and preferences",
+                "Add clients and service items",
+                "Start creating and managing invoices",
+                "Choose a subscription plan that fits your needs"
+            ])
 
-                    <div style="margin: 30px 0;">
-                        <a href="{context['login_url']}"
-                           style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                            Login to Your Account
-                        </a>
-                    </div>
+            content += format_divider()
 
-                    <h3 style="color: #1e3a8a;">Getting Started:</h3>
-                    <ul>
-                        <li>Create your organization or join an existing one</li>
-                        <li>Set up your company details and preferences</li>
-                        <li>Add clients and service items</li>
-                        <li>Start creating and managing invoices</li>
-                        <li>Choose a subscription plan that fits your needs</li>
-                    </ul>
+            # Key features
+            content += format_paragraph("<strong>Key Features:</strong>", style="normal")
+            content += format_list([
+                "Professional Invoice Generation",
+                "Payment Tracking & Management",
+                "Client Management",
+                "Reports & Analytics",
+                "Multi-Organization Support",
+                "Customizable Settings"
+            ])
 
-                    <h3 style="color: #1e3a8a;">Key Features:</h3>
-                    <ul>
-                        <li>Professional Invoice Generation</li>
-                        <li>Payment Tracking & Management</li>
-                        <li>Client Management</li>
-                        <li>Reports & Analytics</li>
-                        <li>Multi-Organization Support</li>
-                        <li>Customizable Settings</li>
-                    </ul>
+        content += format_divider()
+        content += format_paragraph(
+            f"If you have any questions, please contact support at <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
 
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                    <p style="font-size: 12px; color: #666;">
-                        If you have any questions, please contact support at
-                        <a href="mailto:{context['support_email']}">{context['support_email']}</a>
-                    </p>
-
-                    <p style="font-size: 12px; color: #666;">
-                        © {2025} Chinmay Technosoft Private Limited. All rights reserved.
-                    </p>
-                </div>
-            </body>
-            </html>
-            """
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="Welcome to NexInvo!",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
 
         plain_message = strip_tags(html_message)
 
@@ -267,48 +247,41 @@ def send_user_added_notification_to_owner(owner_user, new_user, organization):
     try:
         subject = f'New User Added to {organization.name} - NexInvo'
 
-        html_message = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-                <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px;">
-                    New User Added to Your Organization
-                </h2>
+        # Build professional HTML content
+        content = format_greeting(owner_user.username)
+        content += format_paragraph(
+            f"A new user has been successfully added to your organization <strong>{organization.name}</strong>.",
+            style="lead"
+        )
 
-                <p>Dear {owner_user.username},</p>
+        # New user details info box
+        user_details = [
+            ("Username", new_user.username),
+            ("Email", new_user.email),
+            ("Date Added", new_user.date_joined.strftime('%d %B %Y at %I:%M %p')),
+        ]
+        content += format_info_box("New User Details", user_details, bg_color="#f0fdf4", border_color="#10b981", title_color="#065f46")
 
-                <p>A new user has been successfully added to your organization <strong>{organization.name}</strong>.</p>
+        content += format_alert_box(
+            "The user has been sent a welcome email with their login credentials.",
+            "success"
+        )
 
-                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">New User Details:</h3>
-                    <p><strong>Username:</strong> {new_user.username}</p>
-                    <p><strong>Email:</strong> {new_user.email}</p>
-                    <p><strong>Date Added:</strong> {new_user.date_joined.strftime('%Y-%m-%d %H:%M:%S')}</p>
-                </div>
+        content += format_cta_button("View Organization Members", f"{FRONTEND_URL}/organization")
 
-                <p>The user has been sent a welcome email with their login credentials.</p>
+        content += format_divider()
+        content += format_paragraph(
+            f"For support, contact <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
 
-                <div style="margin: 30px 0;">
-                    <a href="{FRONTEND_URL}/organization"
-                       style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                        View Organization Members
-                    </a>
-                </div>
-
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                <p style="font-size: 12px; color: #666;">
-                    This is an automated notification from NexInvo Invoice Management System.
-                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
-                </p>
-
-                <p style="font-size: 12px; color: #666;">
-                    © {2025} Chinmay Technosoft Private Limited. All rights reserved.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="New User Added",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
 
         plain_message = strip_tags(html_message)
 
@@ -348,53 +321,44 @@ def send_organization_registration_email(user, organization):
 
         subject = f'New Organization Registered - {organization.name}'
 
-        html_message = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-                <h2 style="color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px;">
-                    New Organization Registration
-                </h2>
+        # Build professional HTML content
+        content = format_greeting("Admin")
+        content += format_paragraph(
+            "A new organization has been registered on NexInvo Invoice Management System.",
+            style="lead"
+        )
 
-                <p>Dear Admin,</p>
+        # Organization details info box
+        org_details = [
+            ("Organization Name", organization.name),
+            ("Registration Date", organization.created_at.strftime('%d %B %Y at %I:%M %p')),
+            ("Status", f"<span style='color: #10b981; font-weight: 600;'>Active</span>" if organization.is_active else "<span style='color: #ef4444; font-weight: 600;'>Inactive</span>"),
+            ("Current Plan", organization.plan),
+        ]
+        content += format_info_box("Organization Details", org_details)
 
-                <p>A new organization has been registered on NexInvo Invoice Management System.</p>
+        # Owner details info box
+        owner_details = [
+            ("Username", user.username),
+            ("Email", user.email),
+        ]
+        content += format_info_box("Owner Details", owner_details, bg_color="#eff6ff", border_color="#3b82f6", title_color="#1e40af")
 
-                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">Organization Details:</h3>
-                    <p><strong>Organization Name:</strong> {organization.name}</p>
-                    <p><strong>Registration Date:</strong> {organization.created_at.strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p><strong>Status:</strong> {"Active" if organization.is_active else "Inactive"}</p>
-                    <p><strong>Current Plan:</strong> {organization.plan}</p>
-                </div>
+        content += format_cta_button("View in Admin Panel", f"{FRONTEND_URL}/superadmin")
 
-                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">Owner Details:</h3>
-                    <p><strong>Username:</strong> {user.username}</p>
-                    <p><strong>Email:</strong> {user.email}</p>
-                </div>
+        content += format_divider()
+        content += format_paragraph(
+            f"For support, contact <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
 
-                <div style="margin: 30px 0;">
-                    <a href="{FRONTEND_URL}/superadmin"
-                       style="background-color: #1e3a8a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                        View in Admin Panel
-                    </a>
-                </div>
-
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                <p style="font-size: 12px; color: #666;">
-                    This is an automated notification from NexInvo Invoice Management System.
-                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
-                </p>
-
-                <p style="font-size: 12px; color: #666;">
-                    © {2025} Chinmay Technosoft Private Limited. All rights reserved.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="New Organization Registration",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
 
         plain_message = strip_tags(html_message)
 
@@ -436,80 +400,64 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
 
         subject = f'New Subscription Upgrade Request - {upgrade_request.organization.name}'
 
-        # Calculate discount if coupon applied
-        discount_info = ""
+        # Build professional HTML content
+        content = format_greeting("Admin")
+        content += format_paragraph(
+            "A user has requested to upgrade their subscription plan. Please review and approve after payment confirmation.",
+            style="lead"
+        )
+
+        # Organization details info box
+        org_details = [
+            ("Organization Name", upgrade_request.organization.name),
+            ("Organization Status", f"<span style='color: #10b981; font-weight: 600;'>Active</span>" if upgrade_request.organization.is_active else "<span style='color: #ef4444; font-weight: 600;'>Inactive</span>"),
+        ]
+        content += format_info_box("Organization Details", org_details)
+
+        # Subscription details info box
+        subscription_details = [
+            ("Current Plan", upgrade_request.current_plan.name if upgrade_request.current_plan else "No active plan (Trial)"),
+            ("Requested Plan", f"<strong>{upgrade_request.requested_plan.name}</strong>"),
+            ("Billing Cycle", upgrade_request.requested_plan.billing_cycle.title()),
+            ("Plan Price", f"Rs. {upgrade_request.requested_plan.price:,.2f}"),
+        ]
         if upgrade_request.coupon_code:
-            discount_info = f"<p><strong>Coupon Code:</strong> {upgrade_request.coupon_code}</p>"
+            subscription_details.append(("Coupon Code", f"<span style='color: #059669; font-weight: 600;'>{upgrade_request.coupon_code}</span>"))
+        subscription_details.append(("Amount to Pay", f"<span style='font-size: 18px; color: #6366f1; font-weight: 700;'>Rs. {upgrade_request.amount:,.2f}</span>"))
+        content += format_info_box("Subscription Details", subscription_details, bg_color="#eff6ff", border_color="#6366f1", title_color="#4338ca")
 
-        html_message = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0; font-size: 28px;">New Subscription Upgrade Request</h1>
-            </div>
+        # Requested by info box
+        requester_details = [
+            ("Name", upgrade_request.requested_by.get_full_name() or upgrade_request.requested_by.username if upgrade_request.requested_by else "Unknown"),
+            ("Email", upgrade_request.requested_by.email if upgrade_request.requested_by else "N/A"),
+            ("Request Date", upgrade_request.created_at.strftime('%d %B %Y at %I:%M %p')),
+        ]
+        content += format_info_box("Requested By", requester_details)
 
-            <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-                <p style="font-size: 16px; margin-bottom: 20px;">
-                    A user has requested to upgrade their subscription plan. Please review and approve after payment confirmation.
-                </p>
+        # User notes if available
+        if upgrade_request.user_notes:
+            content += format_alert_box(f"<strong>User Notes:</strong><br>{upgrade_request.user_notes}", "warning")
 
-                <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">Organization Details:</h3>
-                    <p><strong>Organization Name:</strong> {upgrade_request.organization.name}</p>
-                    <p><strong>Organization Status:</strong> {"Active" if upgrade_request.organization.is_active else "Inactive"}</p>
-                </div>
+        content += format_alert_box(
+            "<strong>Please verify payment confirmation before approving this request.</strong>",
+            "info"
+        )
 
-                <div style="background-color: #eff6ff; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">Subscription Details:</h3>
-                    <p><strong>Current Plan:</strong> {upgrade_request.current_plan.name if upgrade_request.current_plan else "No active plan (Trial)"}</p>
-                    <p><strong>Requested Plan:</strong> {upgrade_request.requested_plan.name}</p>
-                    <p><strong>Billing Cycle:</strong> {upgrade_request.requested_plan.billing_cycle.title()}</p>
-                    <p><strong>Plan Price:</strong> ₹{upgrade_request.requested_plan.price:,.2f}</p>
-                    {discount_info}
-                    <p><strong>Amount to Pay:</strong> <span style="font-size: 20px; color: #1e3a8a; font-weight: bold;">₹{upgrade_request.amount:,.2f}</span></p>
-                </div>
+        content += format_cta_button("Review in Admin Panel", f"{FRONTEND_URL}/superadmin")
 
-                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #1e3a8a;">Requested By:</h3>
-                    <p><strong>Name:</strong> {upgrade_request.requested_by.get_full_name() or upgrade_request.requested_by.username if upgrade_request.requested_by else "Unknown"}</p>
-                    <p><strong>Email:</strong> {upgrade_request.requested_by.email if upgrade_request.requested_by else "N/A"}</p>
-                    <p><strong>Request Date:</strong> {upgrade_request.created_at.strftime('%d %B %Y at %I:%M %p')}</p>
-                </div>
+        content += format_divider()
+        content += format_paragraph(
+            f"For support, contact <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
 
-                {f'''<div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                    <h3 style="margin-top: 0; color: #92400e;">User Notes:</h3>
-                    <p style="margin: 0; white-space: pre-wrap;">{upgrade_request.user_notes}</p>
-                </div>''' if upgrade_request.user_notes else ''}
-
-                <div style="margin: 30px 0; text-align: center;">
-                    <p style="margin-bottom: 15px; font-weight: bold; color: #1e3a8a;">
-                        Please verify payment confirmation before approving this request.
-                    </p>
-                    <a href="{FRONTEND_URL}/superadmin"
-                       style="background-color: #1e3a8a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                        Review in Admin Panel
-                    </a>
-                </div>
-
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                <p style="font-size: 12px; color: #666;">
-                    This is an automated notification from NexInvo Invoice Management System.
-                    For support, contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a>
-                </p>
-
-                <p style="font-size: 12px; color: #666;">
-                    © 2025 Chinmay Technosoft Private Limited. All rights reserved.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="Subscription Upgrade Request",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
 
         plain_message = strip_tags(html_message)
 
@@ -542,60 +490,39 @@ def send_otp_email(email, otp_code):
     try:
         subject = 'NexInvo - Email Verification OTP'
 
-        html_message = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="color: white; margin: 0; font-size: 28px;">📊 NexInvo</h1>
-                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Email Verification</p>
-            </div>
+        # Build professional HTML content
+        content = format_paragraph("Hello,", style="normal")
+        content += format_paragraph(
+            "Thank you for registering with NexInvo. Please use the following OTP to verify your email address:",
+            style="lead"
+        )
 
-            <div style="background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
-                <p style="font-size: 16px; margin-bottom: 20px;">
-                    Hello,
-                </p>
+        # OTP code block
+        content += format_code_block(otp_code, "Your One-Time Password (OTP)")
 
-                <p style="font-size: 16px; margin-bottom: 20px;">
-                    Thank you for registering with NexInvo. Please use the following OTP to verify your email address:
-                </p>
+        content += format_alert_box(
+            "<strong>Important:</strong> This OTP is valid for <strong>10 minutes</strong> only. Do not share this OTP with anyone.",
+            "warning"
+        )
 
-                <div style="background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); padding: 25px; border-radius: 10px; text-align: center; margin: 30px 0;">
-                    <p style="font-size: 14px; color: #666; margin: 0 0 10px 0;">Your One-Time Password (OTP)</p>
-                    <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #6366f1; font-family: 'Courier New', monospace;">
-                        {otp_code}
-                    </div>
-                </div>
+        content += format_paragraph(
+            "If you didn't request this verification, please ignore this email. Someone might have entered your email by mistake.",
+            style="muted"
+        )
 
-                <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                    <p style="margin: 0; font-size: 14px; color: #92400e;">
-                        <strong>⚠️ Important:</strong> This OTP is valid for <strong>10 minutes</strong> only. Do not share this OTP with anyone.
-                    </p>
-                </div>
+        content += format_divider()
+        content += format_paragraph(
+            f"For support, contact <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
 
-                <p style="font-size: 14px; color: #666; margin: 20px 0;">
-                    If you didn't request this verification, please ignore this email. Someone might have entered your email by mistake.
-                </p>
-
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-
-                <p style="font-size: 12px; color: #666; text-align: center;">
-                    This is an automated message from NexInvo Invoice Management System.
-                    <br>
-                    For support, contact <a href="mailto:{SUPPORT_EMAIL}" style="color: #6366f1;">{SUPPORT_EMAIL}</a>
-                </p>
-
-                <p style="font-size: 12px; color: #666; text-align: center;">
-                    © 2025 Chinmay Technosoft Private Limited. All rights reserved.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="Email Verification",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
 
         plain_message = f"""
 NexInvo - Email Verification

@@ -17,7 +17,6 @@ const MySubscription = lazy(() => import('./MySubscription'));
 const HelpCenter = lazy(() => import('./HelpCenter'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const TallySyncCorner = lazy(() => import('./TallySyncCorner'));
-const GstCorrectionDialog = lazy(() => import('./GstCorrectionDialog'));
 
 // Component loading spinner
 const ComponentLoader = () => (
@@ -38,7 +37,6 @@ const ComponentLoader = () => (
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showGstCorrection, setShowGstCorrection] = useState(false);
   const [stats, setStats] = useState({
     totalInvoices: 0,
     revenue: 0,
@@ -113,22 +111,6 @@ function Dashboard({ user, onLogout }) {
     const onboardingCompleted = localStorage.getItem('onboarding_completed');
     if (!onboardingCompleted) {
       setShowOnboarding(true);
-    }
-  }, []);
-
-  // Check if GST correction dialog should be shown (once per day)
-  useEffect(() => {
-    const lastGstCheck = localStorage.getItem('gst_correction_checked');
-    const today = new Date().toDateString();
-    const lastCheckDate = lastGstCheck ? new Date(lastGstCheck).toDateString() : null;
-    
-    // Show dialog if never checked or last check was not today
-    if (!lastGstCheck || lastCheckDate !== today) {
-      // Delay showing to let user see dashboard first
-      const timer = setTimeout(() => {
-        setShowGstCorrection(true);
-      }, 2000);
-      return () => clearTimeout(timer);
     }
   }, []);
 
@@ -606,13 +588,6 @@ function Dashboard({ user, onLogout }) {
         </footer>
       </div>
 
-      {/* GST Correction Dialog */}
-      <Suspense fallback={null}>
-        <GstCorrectionDialog
-          open={showGstCorrection}
-          onClose={() => setShowGstCorrection(false)}
-        />
-      </Suspense>
     </div>
   );
 }

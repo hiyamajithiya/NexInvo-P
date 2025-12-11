@@ -290,10 +290,4 @@ export const scheduledInvoiceAPI = {
   getStats: () => api.get('/scheduled-invoices/stats/'),
 };
 
-// GST Correction APIs
-export const gstCorrectionAPI = {
-  checkCorrections: () => api.get('/gst-corrections/check/'),
-  acknowledgeCorrections: (invoiceIds) => api.post('/gst-corrections/acknowledge/', { invoice_ids: invoiceIds }),
-};
-
 export default api;
