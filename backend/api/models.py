@@ -2019,3 +2019,5 @@ class UserSession(models.Model):
     def invalidate_session(cls, user):
         """Invalidate user's session (logout)"""
         cls.objects.filter(user=user).delete()
+
+

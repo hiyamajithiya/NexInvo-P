@@ -309,23 +309,36 @@ def send_scheduled_invoice_email(invoice, scheduled_invoice, organization):
     email.encoding = 'utf-8'
 
     # Generate and attach PDF
+    has_pdf = False
+    attachment_names = []
     if company_settings:
         try:
             pdf_buffer = generate_invoice_pdf(invoice, company_settings)
             pdf_content = pdf_buffer.getvalue()
+            pdf_filename = f'{invoice.invoice_number}.pdf'
             email.attach(
-                f'{invoice.invoice_number}.pdf',
+                pdf_filename,
                 pdf_content,
                 'application/pdf'
             )
+            has_pdf = True
+            attachment_names.append(pdf_filename)
         except Exception as e:
             logger.warning(f"Could not generate PDF for {invoice.invoice_number}: {str(e)}")
 
     # Send email and verify success
-    sent_count = email.send(fail_silently=False)
+    try:
+        sent_count = email.send(fail_silently=False)
 
-    # email.send() returns 1 if successful, 0 if failed
-    return sent_count == 1
+        # email.send() returns 1 if successful, 0 if failed
+        if sent_count == 1:
+            return True
+        else:
+            return False
+
+    except Exception as send_error:
+        logger.error(f"Failed to send scheduled invoice email: {str(send_error)}")
+        return False
 
 
 def process_scheduled_invoices():

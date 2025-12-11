@@ -224,14 +224,18 @@ Best Regards,
         )
 
         # Send email
-        email.send(fail_silently=False)
+        try:
+            email.send(fail_silently=False)
 
-        # Update invoice email status
-        invoice.is_emailed = True
-        invoice.emailed_at = datetime.now()
-        invoice.save(update_fields=['is_emailed', 'emailed_at'])  # Only update specific fields for speed
+            # Update invoice email status
+            invoice.is_emailed = True
+            invoice.emailed_at = datetime.now()
+            invoice.save(update_fields=['is_emailed', 'emailed_at'])  # Only update specific fields for speed
 
-        return True
+            return True
+
+        except Exception as send_error:
+            raise  # Re-raise to be caught by outer exception handler
 
     except Exception as e:
         print(f"Error sending email: {str(e)}")
@@ -503,10 +507,15 @@ Best regards,
         )
 
         # Send email
-        email.send(fail_silently=False)
+        try:
+            email.send(fail_silently=False)
 
-        print(f"Receipt and Tax Invoice sent to {client.email}")
-        return True
+
+            print(f"Receipt and Tax Invoice sent to {client.email}")
+            return True
+
+        except Exception as send_error:
+            raise  # Re-raise to be caught by outer exception handler
 
     except Exception as e:
         print(f"Error sending receipt email: {str(e)}")

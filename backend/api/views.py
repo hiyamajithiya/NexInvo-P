@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status, serializers
+from rest_framework import viewsets, status, serializers, filters
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -5013,6 +5013,55 @@ def scheduled_invoice_stats(request):
             next_generation_date__lte=date.today() + timedelta(days=7),
             next_generation_date__gte=date.today()
         ).count()
+    }
+
+    return Response(stats)
+
+
+# =============================================================================
+# EMAIL LOGS
+# =============================================================================
+
+
+def email_log_stats(request):
+    """
+    Get email log statistics for the dashboard.
+    """
+    user = request.user
+
+    # Get email logs for the user's organization
+    if user.is_superuser:
+        email_logs = EmailLog.objects.all()
+    elif hasattr(request, 'organization') and request.organization:
+        email_logs = EmailLog.objects.filter(organization=request.organization)
+    else:
+        return Response({'error': 'No organization found'}, status=400)
+
+    # Calculate stats
+    total = email_logs.count()
+    success = email_logs.filter(status='success').count()
+    failed = email_logs.filter(status='failed').count()
+    pending = email_logs.filter(status='pending').count()
+
+    # Last 30 days
+    thirty_days_ago = date.today() - timedelta(days=30)
+    last_30_days = email_logs.filter(created_at__gte=thirty_days_ago).count()
+
+    # By email type
+    by_type = {}
+    for email_type, label in EmailLog.EMAIL_TYPE_CHOICES:
+        count = email_logs.filter(email_type=email_type).count()
+        if count > 0:
+            by_type[email_type] = {'label': label, 'count': count}
+
+    stats = {
+        'total': total,
+        'success': success,
+        'failed': failed,
+        'pending': pending,
+        'success_rate': round((success / total * 100) if total > 0 else 0, 1),
+        'last_30_days': last_30_days,
+        'by_type': by_type
     }
 
     return Response(stats)

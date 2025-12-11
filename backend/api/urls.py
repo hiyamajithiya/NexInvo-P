@@ -17,7 +17,6 @@ router.register(r'coupon-usages', views.CouponUsageViewSet, basename='coupon-usa
 router.register(r'subscriptions', views.SubscriptionViewSet, basename='subscription')
 router.register(r'subscription-upgrade-requests', views.SubscriptionUpgradeRequestViewSet, basename='subscription-upgrade-request')
 router.register(r'scheduled-invoices', views.ScheduledInvoiceViewSet, basename='scheduled-invoice')
-
 urlpatterns = [
     # Invoice-specific endpoints must come before router to avoid conflicts
     path('invoices/import/', views.import_invoices, name='import-invoices'),
@@ -26,8 +25,7 @@ urlpatterns = [
     path('reports/send-email/', views.send_report_email, name='send-report-email'),
     # Scheduled Invoices stats (must be before router to avoid conflict)
     path('scheduled-invoices/stats/', views.scheduled_invoice_stats, name='scheduled-invoice-stats'),
-
-    # Router URLs
+    # Email Logs stats
     path('', include(router.urls)),
 
     # Other endpoints
