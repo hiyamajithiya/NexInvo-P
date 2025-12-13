@@ -289,6 +289,27 @@ class Invoice(models.Model):
     def __str__(self):
         return f"{self.invoice_number} - {self.client.name}"
 
+    @property
+    def due_date(self):
+        """
+        Calculate the due date based on invoice_date and payment_term.
+        If payment_term is set, add those days to invoice_date.
+        Otherwise, use paymentDueDays from InvoiceSettings (default 30 days).
+        """
+        from datetime import timedelta
+
+        if self.payment_term and self.payment_term.days:
+            # Use payment term days
+            return self.invoice_date + timedelta(days=self.payment_term.days)
+        else:
+            # Fall back to organization's default payment due days
+            try:
+                invoice_settings = InvoiceSettings.objects.get(organization=self.organization)
+                return self.invoice_date + timedelta(days=invoice_settings.paymentDueDays)
+            except InvoiceSettings.DoesNotExist:
+                # Default to 30 days if no settings found
+                return self.invoice_date + timedelta(days=30)
+
     def should_apply_gst(self):
         """
         Determine if GST should be applied to this invoice based on:
