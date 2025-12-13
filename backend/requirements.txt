@@ -30,7 +30,7 @@ PyMuPDF==1.26.6
 pypdf==6.1.3
 PyPDF2==3.0.1
 pdfminer.six==20251107
-docx2pdf==0.1.8
+# docx2pdf==0.1.8  # Windows-only (requires Microsoft Word COM)
 
 # Excel/CSV/Document Processing
 openpyxl==3.1.2
@@ -178,14 +178,14 @@ zope.interface==8.1.1
 
 # Desktop GUI (Windows-only - DO NOT install on Linux servers)
 # Uncomment these only for Windows desktop development
-pywin32==311
-pypiwin32==223
-pywin32-ctypes==0.2.3
-tkcalendar==1.6.1
-tkinterdnd2==0.4.3
-ttkbootstrap==1.18.1
-plyer==2.1.0
-win10toast==0.9
+# pywin32==311
+# pypiwin32==223
+# pywin32-ctypes==0.2.3
+# tkcalendar==1.6.1
+# tkinterdnd2==0.4.3
+# ttkbootstrap==1.18.1
+# plyer==2.1.0
+# win10toast==0.9
 
 # Core Python Dependencies
 asgiref==3.10.0
