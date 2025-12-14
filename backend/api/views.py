@@ -3068,18 +3068,42 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Check if there are subscriptions linked to this plan
         plan = self.get_object()
-        if plan.subscriptions.exists():
+
+        # Check if there are active subscriptions linked to this plan
+        active_subscriptions = plan.subscriptions.filter(status__in=['active', 'trial'])
+        if active_subscriptions.exists():
+            org_names = [sub.organization.name for sub in active_subscriptions[:5]]
+            org_list = ', '.join(org_names)
+            if active_subscriptions.count() > 5:
+                org_list += f' and {active_subscriptions.count() - 5} more'
             return Response(
-                {'error': f'Cannot delete plan "{plan.name}" because it has {plan.subscriptions.count()} active subscription(s). Please reassign or cancel those subscriptions first.'},
+                {'error': f'Cannot delete plan "{plan.name}" because it has {active_subscriptions.count()} active subscription(s): {org_list}. Please reassign these organizations to a different plan first.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if there are pending upgrade requests for this plan
-        if hasattr(plan, 'upgrade_to_requests') and plan.upgrade_to_requests.exists():
+        # Check for expired/cancelled subscriptions (less critical but still linked)
+        inactive_subscriptions = plan.subscriptions.exclude(status__in=['active', 'trial'])
+        if inactive_subscriptions.exists():
+            # These can be reassigned or the user can force delete
+            org_names = [sub.organization.name for sub in inactive_subscriptions[:5]]
+            org_list = ', '.join(org_names)
             return Response(
-                {'error': f'Cannot delete plan "{plan.name}" because it has pending upgrade requests.'},
+                {'error': f'Cannot delete plan "{plan.name}" because {inactive_subscriptions.count()} organization(s) have subscription history with this plan: {org_list}. Please reassign these subscriptions to a different plan first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if there are pending upgrade requests for this plan (as target plan)
+        if hasattr(plan, 'upgrade_to_requests') and plan.upgrade_to_requests.filter(status='pending').exists():
+            return Response(
+                {'error': f'Cannot delete plan "{plan.name}" because it has pending upgrade requests targeting this plan.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if this plan is referenced as current_plan in any upgrade request
+        if hasattr(plan, 'upgrade_from_requests') and plan.upgrade_from_requests.filter(status='pending').exists():
+            return Response(
+                {'error': f'Cannot delete plan "{plan.name}" because it is referenced as the current plan in pending upgrade requests.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
