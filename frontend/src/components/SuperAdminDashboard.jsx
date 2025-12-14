@@ -1334,8 +1334,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
       'enterprise': '#f59e0b'
     };
 
-    // Build subscription plans array from plan breakdown data
-    const subscriptionPlans = Object.entries(stats?.planBreakdown || {}).map(([planKey, count]) => ({
+    // Build plan breakdown array from stats for display
+    const planBreakdownDisplay = Object.entries(stats?.planBreakdown || {}).map(([planKey, count]) => ({
       name: planKey.charAt(0).toUpperCase() + planKey.slice(1),
       users: count,
       color: planColorMap[planKey] || '#6b7280'
@@ -1405,7 +1405,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
         {/* Subscription Plans */}
         <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: '#111827' }}>Subscription Plans Overview</Typography>
-          {subscriptionPlans.length === 0 ? (
+          {planBreakdownDisplay.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <Box sx={{ mb: 3 }}>
                 <Box sx={{ display: 'inline-flex', p: 3, bgcolor: '#f3f4f6', borderRadius: '50%' }}>
@@ -1433,7 +1433,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
             </Box>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
-              {subscriptionPlans.map((plan) => (
+              {planBreakdownDisplay.map((plan) => (
                 <Paper key={plan.name} sx={{ p: 3, border: '2px solid', borderColor: plan.color, position: 'relative', overflow: 'hidden' }}>
                   <Box sx={{ position: 'absolute', top: 0, right: 0, bgcolor: plan.color, color: 'white', px: 2, py: 0.5, borderBottomLeftRadius: 2 }}>
                     <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{plan.users} Orgs</Typography>

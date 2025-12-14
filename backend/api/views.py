@@ -879,47 +879,62 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         old_plan = instance.plan
 
-        # Perform the update
+        # Check if plan is being changed
+        new_plan = request.data.get('plan')
+        if new_plan and new_plan != old_plan:
+            # Only superadmin can change plans
+            if not request.user.is_superuser:
+                return Response(
+                    {'error': 'Only superadmin can change organization plans'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Validate that the plan exists in SubscriptionPlan model
+            try:
+                subscription_plan = SubscriptionPlan.objects.get(
+                    name__iexact=new_plan,
+                    is_active=True
+                )
+            except SubscriptionPlan.DoesNotExist:
+                # Check if there's a plan with exact name match
+                available_plans = list(SubscriptionPlan.objects.filter(is_active=True).values_list('name', flat=True))
+                return Response(
+                    {'error': f'Invalid plan "{new_plan}". Available plans: {", ".join(available_plans)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update Organization.plan field (legacy field for compatibility)
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+
+            # Create or update the Subscription record
+            with transaction.atomic():
+                subscription, created = Subscription.objects.get_or_create(
+                    organization=instance,
+                    defaults={
+                        'plan': subscription_plan,
+                        'start_date': date.today(),
+                        'end_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30),
+                        'status': 'active',
+                        'amount_paid': subscription_plan.price,
+                        'auto_renew': False,
+                        'next_billing_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30)
+                    }
+                )
+
+                if not created:
+                    # Update existing subscription to the new plan
+                    subscription.plan = subscription_plan
+                    subscription.status = 'active'
+                    subscription.save()
+
+            return Response(serializer.data)
+
+        # Normal update without plan change
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-
-        # Check if plan was changed
-        new_plan = serializer.validated_data.get('plan', old_plan)
-        if new_plan != old_plan and request.user.is_superuser:
-            # Create or update subscription when superadmin changes plan
-            try:
-                with transaction.atomic():
-                    # Get the subscription plan
-                    subscription_plan = SubscriptionPlan.objects.get(
-                        name__iexact=new_plan,
-                        is_active=True
-                    )
-
-                    # Check if subscription exists
-                    subscription, created = Subscription.objects.get_or_create(
-                        organization=instance,
-                        defaults={
-                            'plan': subscription_plan,
-                            'start_date': date.today(),
-                            'end_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30),
-                            'status': 'active',
-                            'amount_paid': subscription_plan.price,
-                            'auto_renew': False,
-                            'next_billing_date': date.today() + timedelta(days=365 if subscription_plan.billing_cycle == 'yearly' else 30)
-                        }
-                    )
-
-                    if not created:
-                        # Update existing subscription
-                        subscription.plan = subscription_plan
-                        subscription.status = 'active'
-                        subscription.save()
-
-            except SubscriptionPlan.DoesNotExist:
-                # If no matching subscription plan found, skip subscription creation
-                pass
-
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
