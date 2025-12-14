@@ -73,17 +73,27 @@ def send_payment_reminders():
         for invoice in unpaid_proformas:
             # Check if reminder should be sent based on frequency
             should_send = False
+            skip_reason = None
 
             if invoice.last_reminder_sent is None:
                 # Never sent a reminder, check if invoice is old enough
                 days_since_invoice = (timezone.now().date() - invoice.invoice_date).days
                 if days_since_invoice >= frequency_days:
                     should_send = True
+                else:
+                    skip_reason = f"Invoice only {days_since_invoice} days old (needs {frequency_days} days)"
             else:
                 # Check if enough days have passed since last reminder
                 days_since_last_reminder = (timezone.now() - invoice.last_reminder_sent).days
                 if days_since_last_reminder >= frequency_days:
                     should_send = True
+                else:
+                    skip_reason = f"Last reminder {days_since_last_reminder} days ago (needs {frequency_days} days)"
+
+            # Check if client has email
+            if should_send and not invoice.client.email:
+                should_send = False
+                skip_reason = f"Client {invoice.client.name} has no email address"
 
             if should_send:
                 try:
@@ -96,12 +106,13 @@ def send_payment_reminders():
                     invoice.save()
 
                     total_sent += 1
-                    logger.info(f'[OK] Sent reminder for {invoice.invoice_number} to {invoice.client.email}')
+                    logger.info(f'[SENT] Reminder for {invoice.invoice_number} to {invoice.client.email}')
                 except Exception as e:
                     total_failed += 1
-                    logger.error(f'[FAILED] Failed to send reminder for {invoice.invoice_number}: {str(e)}')
+                    logger.error(f'[FAILED] {invoice.invoice_number}: {str(e)}')
             else:
                 total_skipped += 1
+                logger.debug(f'[SKIP] {invoice.invoice_number}: {skip_reason}')
 
     logger.info(f'Payment reminders completed: {total_sent} sent, {total_skipped} skipped, {total_failed} failed')
     return f"Sent: {total_sent}, Skipped: {total_skipped}, Failed: {total_failed}"
