@@ -12,14 +12,24 @@ from .models import (
 
 class OrganizationSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
         fields = ['id', 'name', 'slug', 'plan', 'is_active', 'member_count', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count', 'plan']
 
     def get_member_count(self, obj):
         return obj.memberships.filter(is_active=True).count()
+
+    def get_plan(self, obj):
+        """Get plan from Subscription record if exists, otherwise use legacy field"""
+        try:
+            if hasattr(obj, 'subscription_detail') and obj.subscription_detail:
+                return obj.subscription_detail.plan.name.lower()
+        except Exception:
+            pass
+        return obj.plan  # Fallback to legacy CharField
 
 
 class OrganizationMembershipSerializer(serializers.ModelSerializer):

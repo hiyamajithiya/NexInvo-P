@@ -2056,12 +2056,28 @@ def superadmin_stats(request):
         memberships__user__last_login__gte=thirty_days_ago
     ).distinct().count()
 
-    # Organizations by plan
+    # Organizations by plan - use SubscriptionPlan model for accurate counts
+    from .models import SubscriptionPlan, Subscription
     plan_breakdown = {}
-    for plan_choice in Organization._meta.get_field('plan').choices:
-        plan_code = plan_choice[0]
-        count = Organization.objects.filter(plan=plan_code, is_active=True).count()
-        plan_breakdown[plan_code] = count
+
+    # Get counts from actual Subscription records (the proper way)
+    subscription_plans = SubscriptionPlan.objects.filter(is_active=True)
+    for plan in subscription_plans:
+        # Count organizations with active subscriptions to this plan
+        count = Subscription.objects.filter(
+            plan=plan,
+            status__in=['active', 'trial']
+        ).count()
+        plan_breakdown[plan.name.lower()] = count
+
+    # Also include organizations without subscriptions (legacy 'free' plan)
+    orgs_without_subscription = Organization.objects.filter(
+        is_active=True
+    ).exclude(
+        subscription_detail__isnull=False
+    ).count()
+    if orgs_without_subscription > 0:
+        plan_breakdown['free'] = plan_breakdown.get('free', 0) + orgs_without_subscription
 
     # Recent organizations (last 7 days)
     seven_days_ago = datetime.now().date() - timedelta(days=7)
@@ -2123,11 +2139,19 @@ def superadmin_stats(request):
 
     top_organizations = []
     for org in top_orgs:
+        # Get plan from Subscription record if exists, otherwise use legacy field
+        plan_name = org.plan  # Default to legacy field
+        try:
+            if hasattr(org, 'subscription_detail') and org.subscription_detail:
+                plan_name = org.subscription_detail.plan.name.lower()
+        except (Subscription.DoesNotExist, AttributeError):
+            pass
+
         top_organizations.append({
             'id': str(org.id),
             'name': org.name,
             'slug': org.slug,
-            'plan': org.plan,
+            'plan': plan_name,
             'user_count': org.user_count or 0,
             'created_at': org.created_at.isoformat() if org.created_at else None
         })
