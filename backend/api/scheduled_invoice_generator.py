@@ -136,7 +136,17 @@ def generate_invoice_from_schedule(scheduled_invoice, manual=False):
 
     # Send email if configured
     email_sent = False
-    if scheduled_invoice.auto_send_email and scheduled_invoice.client.email:
+
+    # Check email sending conditions
+    if not scheduled_invoice.auto_send_email:
+        logger.info(f"[SKIP EMAIL] {invoice.invoice_number}: auto_send_email is disabled for this schedule")
+        log_entry.email_error = "Auto send email is disabled"
+    elif not scheduled_invoice.client.email:
+        logger.warning(f"[SKIP EMAIL] {invoice.invoice_number}: Client {scheduled_invoice.client.name} has no email address")
+        log_entry.email_error = f"Client has no email address"
+    else:
+        # All conditions met, attempt to send email
+        logger.info(f"[SENDING EMAIL] {invoice.invoice_number} to {scheduled_invoice.client.email}")
         try:
             email_sent = send_scheduled_invoice_email(
                 invoice,
@@ -152,11 +162,15 @@ def generate_invoice_from_schedule(scheduled_invoice, manual=False):
 
                 log_entry.email_sent = True
                 log_entry.email_sent_at = timezone.now()
+                logger.info(f"[EMAIL SENT] {invoice.invoice_number} successfully emailed to {scheduled_invoice.client.email}")
+            else:
+                log_entry.email_error = "Email send returned False - check SMTP settings"
+                logger.warning(f"[EMAIL FAILED] {invoice.invoice_number}: send_scheduled_invoice_email returned False")
 
         except Exception as e:
             log_entry.status = 'email_failed'
             log_entry.email_error = str(e)
-            logger.error(f"Failed to send email for invoice {invoice.invoice_number}: {str(e)}")
+            logger.error(f"[EMAIL ERROR] {invoice.invoice_number}: {str(e)}")
 
     log_entry.save()
 
@@ -192,20 +206,22 @@ def send_scheduled_invoice_email(invoice, scheduled_invoice, organization):
     try:
         email_settings = EmailSettings.objects.get(organization=organization)
     except EmailSettings.DoesNotExist:
-        logger.warning(f"Email settings not found for organization {organization.id}")
+        logger.warning(f"[EMAIL CONFIG ERROR] Email settings not found for organization {organization.name} ({organization.id})")
         return False
 
     # Get company settings for PDF
     try:
         company_settings = CompanySettings.objects.get(organization=organization)
     except CompanySettings.DoesNotExist:
-        logger.warning(f"Company settings not found for organization {organization.id}")
+        logger.warning(f"[EMAIL CONFIG ERROR] Company settings not found for organization {organization.name} ({organization.id})")
         return False
 
     # Validate required email settings
     if not email_settings.smtp_username or not email_settings.smtp_password:
-        logger.warning(f"SMTP credentials not configured for organization {organization.id}")
+        logger.warning(f"[EMAIL CONFIG ERROR] SMTP credentials not configured for organization {organization.name} ({organization.id})")
         return False
+
+    logger.info(f"[EMAIL CONFIG OK] Using SMTP: {email_settings.smtp_host}:{email_settings.smtp_port}, From: {email_settings.from_email}")
 
     # Prepare email
     client = invoice.client
