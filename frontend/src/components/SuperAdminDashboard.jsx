@@ -2065,8 +2065,17 @@ const SuperAdminDashboard = ({ onLogout }) => {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="logo">
-            <div className="logo-icon">⚡</div>
-            <h2 className="logo-text">Super Admin</h2>
+            <img
+              src="/assets/NEXINVO_logo.png"
+              alt="NexInvo Logo"
+              style={{
+                height: '60px',
+                width: 'auto',
+                objectFit: 'contain',
+                marginBottom: '8px',
+                maxWidth: '220px'
+              }}
+            />
           </div>
           <p className="company-subtitle">NexInvo - Admin Portal</p>
         </div>

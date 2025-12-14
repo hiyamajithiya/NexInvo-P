@@ -101,12 +101,12 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',       # Anonymous users: 100 requests per hour
-        'user': '1000/hour',      # Authenticated users: 1000 requests per hour
-        'login': '5/minute',      # Login attempts: 5 per minute (brute force protection)
-        'password_reset': '3/hour',  # Password reset: 3 per hour
-        'registration': '10/hour',   # Registration: 10 per hour
-        'export': '10/hour',         # Data export: 10 per hour
+        'anon': '1000/hour',      # Anonymous users: 1000 requests per hour (increased for development)
+        'user': '5000/hour',      # Authenticated users: 5000 requests per hour
+        'login': '30/minute',     # Login attempts: 30 per minute (increased for development)
+        'password_reset': '10/hour',  # Password reset: 10 per hour
+        'registration': '30/hour',    # Registration: 30 per hour
+        'export': '50/hour',          # Data export: 50 per hour
     },
 }
 

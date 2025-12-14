@@ -120,16 +120,34 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
       color: "orange"
     },
     {
+      icon: "🔄",
+      title: "Scheduled Invoices",
+      description: "Set up recurring invoices with flexible frequencies - daily, weekly, monthly, or yearly billing cycles.",
+      color: "cyan"
+    },
+    {
+      icon: "🔗",
+      title: "Tally Integration",
+      description: "Seamlessly sync invoices and receipts with Tally Prime for streamlined accounting workflows.",
+      color: "indigo"
+    },
+    {
+      icon: "🎨",
+      title: "Invoice Format Editor",
+      description: "Customize your invoice templates with logos, colors, and layouts to match your brand identity.",
+      color: "pink"
+    },
+    {
       icon: "🏢",
       title: "Multi-Organization",
       description: "Manage multiple businesses with isolated data, role-based access, and team collaboration.",
-      color: "indigo"
+      color: "violet"
     },
     {
       icon: "📧",
       title: "Email Integration",
       description: "Send invoices and receipts directly to clients with custom SMTP and branded emails.",
-      color: "pink"
+      color: "rose"
     },
     {
       icon: "🔒",
@@ -145,12 +163,12 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
     }
   ];
 
-  // Stats data
+  // Stats data - honest metrics for a growing platform
   const stats = [
-    { number: "10,000+", label: "Invoices Created", icon: "📄" },
-    { number: "500+", label: "Happy Businesses", icon: "🏢" },
-    { number: "₹5Cr+", label: "Transactions Processed", icon: "💰" },
-    { number: "99.9%", label: "Uptime Guarantee", icon: "⚡" }
+    { number: "100%", label: "GST Compliant", icon: "✓" },
+    { number: "24/7", label: "Cloud Access", icon: "☁️" },
+    { number: "Secure", label: "Data Protection", icon: "🔒" },
+    { number: "Free", label: "To Get Started", icon: "🚀" }
   ];
 
   if (showHelpCenter) {
@@ -219,27 +237,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
       <nav className={`landing-nav ${isNavScrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <div className="nav-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <div className="brand-icon">
-              <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Background with gradient */}
-                <rect width="48" height="48" rx="12" fill="url(#nav-brand-gradient)"/>
-                {/* Document shape */}
-                <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
-                <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
-                {/* Letter N */}
-                <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
-                {/* Accent line */}
-                <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
-                <defs>
-                  <linearGradient id="nav-brand-gradient" x1="0" y1="0" x2="48" y2="48">
-                    <stop stopColor="#6366f1"/>
-                    <stop offset="0.5" stopColor="#7c3aed"/>
-                    <stop offset="1" stopColor="#8b5cf6"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
-            <span className="brand-text">NexInvo</span>
+            <img src="/assets/NEXINVO_logo.png" alt="NexInvo Logo" style={{ height: '90px', width: 'auto', objectFit: 'contain', cursor: 'pointer', marginRight: '20px' }} />
           </div>
 
           <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
@@ -688,23 +686,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
           <div className="footer-main">
             <div className="footer-brand">
               <div className="footer-logo">
-                <div className="brand-icon">
-                  <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="48" height="48" rx="12" fill="url(#footer-brand-gradient)"/>
-                    <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
-                    <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
-                    <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
-                    <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
-                    <defs>
-                      <linearGradient id="footer-brand-gradient" x1="0" y1="0" x2="48" y2="48">
-                        <stop stopColor="#6366f1"/>
-                        <stop offset="0.5" stopColor="#7c3aed"/>
-                        <stop offset="1" stopColor="#8b5cf6"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                <span>NexInvo</span>
+                <img src="/assets/NEXINVO_logo.png" alt="NexInvo Logo" style={{ height: '70px', width: 'auto', objectFit: 'contain', maxWidth: '280px' }} />
               </div>
               <p className="footer-tagline">
                 Modern invoice management for growing Indian businesses. GST-compliant, secure, and easy to use.
@@ -1150,16 +1132,18 @@ function PricingPlansSection() {
       <p>NexInvo offers flexible pricing plans to suit businesses of all sizes:</p>
       <div className="table-wrapper">
         <table>
-          <thead><tr><th>Feature</th><th>Free</th><th>Professional</th><th>Enterprise</th></tr></thead>
+          <thead><tr><th>Feature</th><th>Free Trial</th><th>Professional</th></tr></thead>
           <tbody>
-            <tr><td>Invoices/Month</td><td>10</td><td>Unlimited</td><td>Unlimited</td></tr>
-            <tr><td>Users</td><td>1</td><td>5</td><td>Unlimited</td></tr>
-            <tr><td>Clients</td><td>10</td><td>Unlimited</td><td>Unlimited</td></tr>
-            <tr><td>Reports</td><td>Basic</td><td>Advanced</td><td>Advanced</td></tr>
-            <tr><td>Email Support</td><td>✓</td><td>✓</td><td>✓</td></tr>
-            <tr><td>Priority Support</td><td>-</td><td>✓</td><td>✓</td></tr>
-            <tr><td>Custom Branding</td><td>-</td><td>✓</td><td>✓</td></tr>
-            <tr><td>API Access</td><td>-</td><td>-</td><td>✓</td></tr>
+            <tr><td>Price</td><td>₹0</td><td>₹2,000/month + GST</td></tr>
+            <tr><td>Invoices/Month</td><td>50</td><td>5,000</td></tr>
+            <tr><td>Users</td><td>1</td><td>3</td></tr>
+            <tr><td>Organizations</td><td>1</td><td>10</td></tr>
+            <tr><td>Scheduled Invoices</td><td>✓</td><td>✓</td></tr>
+            <tr><td>Tally Integration</td><td>✓</td><td>✓</td></tr>
+            <tr><td>Invoice Format Editor</td><td>✓</td><td>✓</td></tr>
+            <tr><td>Email Support</td><td>✓</td><td>✓</td></tr>
+            <tr><td>Dedicated Support</td><td>-</td><td>✓</td></tr>
+            <tr><td>API Access</td><td colspan="2" style={{textAlign: 'center', fontStyle: 'italic'}}>Coming Soon</td></tr>
           </tbody>
         </table>
       </div>

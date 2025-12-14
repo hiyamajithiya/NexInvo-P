@@ -179,6 +179,10 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         onLogin(response.data);
       }
     } catch (err) {
+      console.log('Login error:', err);
+      console.log('Error response:', err.response);
+      console.log('Error data:', err.response?.data);
+
       // Check if user is already logged in on another device
       if (err.response?.status === 409 && err.response?.data?.error === 'already_logged_in') {
         setExistingSessionInfo({
@@ -188,8 +192,10 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         setShowForceLoginDialog(true);
         setError('');
       } else {
-        setError(err.response?.data?.error || err.response?.data?.detail ||
-          (isRegisterMode ? 'Registration failed' : 'Invalid username or password'));
+        const errorMessage = err.response?.data?.error || err.response?.data?.detail ||
+          (isRegisterMode ? 'Registration failed' : 'Invalid username or password');
+        console.log('Setting error message:', errorMessage);
+        setError(errorMessage);
       }
     } finally {
       setLoading(false);
@@ -406,16 +412,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         <div className="features-content">
           <div className="features-header">
             <div className="brand-logo">
-              <div className="brand-icon">
-                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="48" height="48" rx="12" fill="rgba(255,255,255,0.2)"/>
-                  <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
-                  <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
-                  <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
-                  <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
-                </svg>
-              </div>
-              <h1 className="brand-name">NexInvo</h1>
+              <img src="/assets/NEXINVO_logo.png" alt="NexInvo Logo" style={{ height: '70px', width: 'auto', objectFit: 'contain', maxWidth: '300px' }} />
             </div>
             <p className="brand-tagline">Modern Invoice Management for Growing Businesses</p>
           </div>
@@ -482,21 +479,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         <div className="form-panel-nav">
           {onBackToLanding && (
             <button type="button" onClick={onBackToLanding} className="nav-logo-link">
-              <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="nav-logo-icon">
-                <rect width="48" height="48" rx="12" fill="url(#form-nav-gradient)"/>
-                <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
-                <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
-                <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
-                <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
-                <defs>
-                  <linearGradient id="form-nav-gradient" x1="0" y1="0" x2="48" y2="48">
-                    <stop stopColor="#6366f1"/>
-                    <stop offset="0.5" stopColor="#7c3aed"/>
-                    <stop offset="1" stopColor="#8b5cf6"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-              <span className="nav-logo-text">NexInvo</span>
+              <img src="/assets/NEXINVO_logo.png" alt="NexInvo" className="nav-logo-icon" style={{ height: '80px', width: 'auto', objectFit: 'contain' }} />
             </button>
           )}
           {isRegisterMode && registrationStep > 1 && (

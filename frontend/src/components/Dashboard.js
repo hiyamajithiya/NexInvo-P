@@ -409,18 +409,17 @@ function Dashboard({ user, onLogout }) {
                 }}
               />
             ) : (
-              <>
-                <div className="logo-icon">
-                  <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="48" height="48" rx="12" fill="rgba(255,255,255,0.2)"/>
-                    <path d="M14 10h14l8 8v20a2 2 0 01-2 2H14a2 2 0 01-2-2V12a2 2 0 012-2z" fill="rgba(255,255,255,0.15)"/>
-                    <path d="M28 10v8h8" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
-                    <path d="M17 32V18h3l6 9V18h3v14h-3l-6-9v9h-3z" fill="white"/>
-                    <rect x="17" y="34" width="14" height="2" rx="1" fill="rgba(255,255,255,0.5)"/>
-                  </svg>
-                </div>
-                <h2 className="logo-text">NexInvo</h2>
-              </>
+              <img
+                src="/assets/NEXINVO_logo.png"
+                alt="NexInvo Logo"
+                style={{
+                  height: '60px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  marginBottom: '8px',
+                  maxWidth: '220px'
+                }}
+              />
             )}
           </div>
           <p className="company-subtitle">NexInvo - Invoice Management System</p>

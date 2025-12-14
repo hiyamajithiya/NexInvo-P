@@ -43,6 +43,20 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Skip interceptor logic for auth endpoints (login, register, OTP, etc.)
+    // These endpoints should pass errors directly to the calling code
+    // Note: Don't include /token/refresh/ as that's handled separately
+    const authEndpoints = ['token/', 'register/', 'send-otp/', 'verify-otp/', 'resend-otp/'];
+    const requestUrl = originalRequest.url || '';
+    const isAuthEndpoint = authEndpoints.some(endpoint =>
+      requestUrl.endsWith(endpoint) || requestUrl.includes(endpoint + '?')
+    ) && !requestUrl.includes('token/refresh');
+
+    if (isAuthEndpoint) {
+      // Don't intercept auth endpoint errors - let them bubble up to the calling code
+      return Promise.reject(error);
+    }
+
     // Check for session invalidation (logged in from another device)
     if (error.response?.status === 401 && error.response?.data?.error === 'session_invalid') {
       // Clear all auth data
@@ -50,10 +64,10 @@ api.interceptors.response.use(
       sessionStorage.removeItem('refresh_token');
       sessionStorage.removeItem('session_token');
       localStorage.removeItem('current_org_id');
-      
+
       // Store the logout reason to show message on login page
       localStorage.setItem('logout_reason', 'session_invalid');
-      
+
       // Redirect to login page
       window.location.href = '/';
       return Promise.reject(error);
