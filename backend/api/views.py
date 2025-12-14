@@ -3067,6 +3067,22 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
                 {'error': 'Only superadmin can delete subscription plans'},
                 status=status.HTTP_403_FORBIDDEN
             )
+
+        # Check if there are subscriptions linked to this plan
+        plan = self.get_object()
+        if plan.subscriptions.exists():
+            return Response(
+                {'error': f'Cannot delete plan "{plan.name}" because it has {plan.subscriptions.count()} active subscription(s). Please reassign or cancel those subscriptions first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if there are pending upgrade requests for this plan
+        if hasattr(plan, 'upgrade_to_requests') and plan.upgrade_to_requests.exists():
+            return Response(
+                {'error': f'Cannot delete plan "{plan.name}" because it has pending upgrade requests.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=['get'])
