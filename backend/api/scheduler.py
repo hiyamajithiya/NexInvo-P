@@ -122,12 +122,17 @@ def send_reminder_email(invoice, invoice_settings, organization):
     """Send payment reminder email with invoice PDF attachment"""
     from api.models import EmailSettings, CompanySettings
     from api.pdf_generator import generate_invoice_pdf
+    from django.core.mail import get_connection
 
     # Get email settings
     try:
         email_settings = EmailSettings.objects.get(organization=organization)
     except EmailSettings.DoesNotExist:
-        email_settings = None
+        raise ValueError(f"Email settings not configured for organization {organization.name}")
+
+    # Validate SMTP credentials
+    if not email_settings.smtp_username or not email_settings.smtp_password:
+        raise ValueError(f"SMTP credentials not configured for organization {organization.name}")
 
     # Get company settings for PDF generation
     try:
@@ -241,12 +246,24 @@ Best Regards,
         except Exception as e:
             logger.warning(f'Warning: Could not generate PDF for {invoice.invoice_number}: {str(e)}')
 
+    # Create explicit SMTP connection using organization's email settings
+    connection = get_connection(
+        backend='django.core.mail.backends.smtp.EmailBackend',
+        host=email_settings.smtp_host,
+        port=email_settings.smtp_port,
+        username=email_settings.smtp_username,
+        password=email_settings.smtp_password,
+        use_tls=email_settings.use_tls,
+        timeout=30,
+    )
+
     # Send email with HTML content
     email = EmailMessage(
         subject=subject,
         body=html_body,
         from_email=from_email,
         to=[recipient_email],
+        connection=connection,
     )
     email.content_subtype = "html"
     email.encoding = 'utf-8'
@@ -258,7 +275,7 @@ Best Regards,
             'application/pdf'
         )
 
-    email.send()
+    email.send(fail_silently=False)
 
 
 @util.close_old_connections
