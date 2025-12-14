@@ -239,7 +239,7 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
 
     invoice_info = [
         Paragraph(f"<b>Invoice No:</b> {invoice.invoice_number}", invoice_info_right_style),
-        Paragraph(f"<b>Invoice Date:</b> {invoice.invoice_date.strftime('%d-%b-%Y')}", invoice_info_right_style),
+        Paragraph(f"<b>Invoice Date:</b> {invoice.invoice_date.strftime('%d/%m/%Y')}", invoice_info_right_style),
     ]
 
     info_table = Table(
@@ -694,7 +694,7 @@ def generate_receipt_pdf(receipt, company_settings):
                      f"Phone: {company_settings.phone}<br/>"
                      f"Email: {company_settings.email}", normal_style),
             Paragraph(f"<b>Receipt No:</b> {receipt.receipt_number}<br/>"
-                     f"<b>Receipt Date:</b> {receipt.receipt_date.strftime('%d-%b-%Y')}<br/>"
+                     f"<b>Receipt Date:</b> {receipt.receipt_date.strftime('%d/%m/%Y')}<br/>"
                      f"<b>Invoice No:</b> {receipt.invoice.invoice_number}", normal_style)
         ]
     ]

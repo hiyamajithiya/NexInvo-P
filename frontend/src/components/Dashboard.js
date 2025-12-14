@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { dashboardAPI, settingsAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import './Dashboard.css';
 import OrganizationSwitcher from './OrganizationSwitcher';
 
@@ -315,7 +316,7 @@ function Dashboard({ user, onLogout }) {
                       <div style={{ marginTop: '10px', fontSize: '12px', color: '#64748b' }}>
                         {stats.subscription.next_billing_date && (
                           <>
-                            <div>Next Billing: {new Date(stats.subscription.next_billing_date).toLocaleDateString()}</div>
+                            <div>Next Billing: {formatDate(stats.subscription.next_billing_date)}</div>
                             <div style={{ marginTop: '5px', fontWeight: '500', color: stats.subscription.auto_renew ? '#10b981' : '#64748b' }}>
                               Auto-Renew: {stats.subscription.auto_renew ? 'ON' : 'OFF'}
                             </div>

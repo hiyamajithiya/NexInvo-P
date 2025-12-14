@@ -111,7 +111,7 @@ class Command(BaseCommand):
         subject = invoice_settings.reminderEmailSubject.format(
             invoice_number=invoice.invoice_number,
             client_name=invoice.client.name,
-            invoice_date=invoice.invoice_date.strftime('%d-%m-%Y'),
+            invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
             total_amount=f"{invoice.total_amount:,.2f}"
         )
 
@@ -119,7 +119,7 @@ class Command(BaseCommand):
         message = invoice_settings.reminderEmailBody.format(
             invoice_number=invoice.invoice_number,
             client_name=invoice.client.name,
-            invoice_date=invoice.invoice_date.strftime('%d-%m-%Y'),
+            invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
             total_amount=f"{invoice.total_amount:,.2f}",
             reminder_count=invoice.reminder_count + 1
         )

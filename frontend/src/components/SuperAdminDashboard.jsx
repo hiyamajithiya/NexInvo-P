@@ -51,6 +51,7 @@ import {
   NotificationsActive as NotificationsActiveIcon,
 } from '@mui/icons-material';
 import { superadminAPI, subscriptionAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import SubscriptionPlans from './SubscriptionPlans';
 import CouponManagement from './CouponManagement';
@@ -898,11 +899,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     />
                   </TableCell>
                   <TableCell sx={{ color: '#6b7280' }}>
-                    {new Date(org.created_at).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    })}
+                    {formatDate(org.created_at)}
                   </TableCell>
                   <TableCell>
                     <IconButton
@@ -1145,7 +1142,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                         />
                       </TableCell>
                       <TableCell sx={{ color: '#6b7280' }}>
-                        {new Date(user.date_joined).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {formatDate(user.date_joined)}
                       </TableCell>
                       <TableCell>
                         <IconButton
@@ -1316,11 +1313,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                     </TableCell>
                     <TableCell sx={{ color: '#6b7280' }}>{org.user_count || 0} users</TableCell>
                     <TableCell sx={{ color: '#6b7280' }}>
-                      {org.created_at ? new Date(org.created_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      }) : '-'}
+                      {org.created_at ? formatDate(org.created_at) : '-'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1490,7 +1483,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                         <Chip label={txn.plan} size="small" sx={{ bgcolor: '#f3f4f6' }} />
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600, color: '#111827' }}>₹{txn.amount.toLocaleString('en-IN')}</TableCell>
-                      <TableCell sx={{ color: '#6b7280' }}>{new Date(txn.date).toLocaleDateString('en-IN')}</TableCell>
+                      <TableCell sx={{ color: '#6b7280' }}>{formatDate(txn.date)}</TableCell>
                       <TableCell>
                         <Chip
                           label={txn.status.toUpperCase()}
@@ -1940,7 +1933,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                         </TableCell>
                         <TableCell sx={{ fontWeight: 600, color: '#059669' }}>₹{parseFloat(request.amount).toFixed(2)}</TableCell>
                         <TableCell>{request.coupon_code || '-'}</TableCell>
-                        <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>{formatDate(request.created_at)}</TableCell>
                         <TableCell>
                           <Box sx={{ display: 'flex', gap: 1 }}>
                             <Button
@@ -2014,7 +2007,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
                           />
                         </TableCell>
                         <TableCell>
-                          {request.approved_at ? new Date(request.approved_at).toLocaleDateString() : '-'}
+                          {request.approved_at ? formatDate(request.approved_at) : '-'}
                         </TableCell>
                         <TableCell sx={{ maxWidth: 200 }}>
                           <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

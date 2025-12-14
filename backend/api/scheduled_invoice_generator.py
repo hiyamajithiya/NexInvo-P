@@ -248,21 +248,21 @@ def send_scheduled_invoice_email(invoice, scheduled_invoice, organization):
             client_name=client.name,
             company_name=company_name,
             total_amount=f"Rs. {invoice.total_amount:,.2f}",
-            invoice_date=invoice.invoice_date.strftime('%d %B %Y')
+            invoice_date=invoice.invoice_date.strftime('%d/%m/%Y')
         )
         content += format_paragraph(custom_message, style="lead")
     else:
         invoice_type_display = 'Tax Invoice' if invoice.invoice_type == 'tax' else 'Proforma Invoice'
         content += format_paragraph(
-            f"Please find attached your <strong>{invoice_type_display} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d %B %Y')}.",
+            f"Please find attached your <strong>{invoice_type_display} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d/%m/%Y')}.",
             style="lead"
         )
 
     # Invoice details info box
     invoice_details = [
         ("Invoice Number", invoice.invoice_number),
-        ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
-        ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+        ("Invoice Date", invoice.invoice_date.strftime('%d/%m/%Y')),
+        ("Due Date", invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else "On Receipt"),
     ]
     content += format_info_box("Invoice Details", invoice_details)
 

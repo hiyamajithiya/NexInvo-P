@@ -733,7 +733,7 @@ Report Summary:
 - Report Type: {report_name}
 - Period: {date_filter}
 - Total Records: {len(report_data)}
-- Generated on: {datetime.now().strftime('%d-%b-%Y %H:%M')}
+- Generated on: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
 This report was generated from {company_name}'s NexInvo system.
 
@@ -2354,13 +2354,13 @@ def export_data(request):
                     'Invoice Number': inv.invoice_number,
                     'Type': inv.invoice_type.upper(),
                     'Client': inv.client.name if inv.client else '',
-                    'Invoice Date': inv.invoice_date.strftime('%d-%m-%Y') if inv.invoice_date else '',
-                    'Due Date': inv.due_date.strftime('%d-%m-%Y') if inv.due_date else '',
+                    'Invoice Date': inv.invoice_date.strftime('%d/%m/%Y') if inv.invoice_date else '',
+                    'Due Date': inv.due_date.strftime('%d/%m/%Y') if inv.due_date else '',
                     'Subtotal': float(inv.subtotal or 0),
                     'Tax Amount': float(inv.tax_amount or 0),
                     'Total Amount': float(inv.total_amount or 0),
                     'Status': inv.status.upper(),
-                    'Created': inv.created_at.strftime('%d-%m-%Y %H:%M') if inv.created_at else ''
+                    'Created': inv.created_at.strftime('%d/%m/%Y %H:%M') if inv.created_at else ''
                 })
             df_invoices = pd.DataFrame(invoices_data)
 
@@ -2378,7 +2378,7 @@ def export_data(request):
                     'City': client.city or '',
                     'State': client.state or '',
                     'PIN Code': client.pin_code or '',
-                    'Created': client.created_at.strftime('%d-%m-%Y') if client.created_at else ''
+                    'Created': client.created_at.strftime('%d/%m/%Y') if client.created_at else ''
                 })
             df_clients = pd.DataFrame(clients_data)
 
@@ -2390,7 +2390,7 @@ def export_data(request):
                     'Payment ID': payment.id,
                     'Invoice Number': payment.invoice.invoice_number if payment.invoice else '',
                     'Client': payment.invoice.client.name if payment.invoice and payment.invoice.client else '',
-                    'Payment Date': payment.payment_date.strftime('%d-%m-%Y') if payment.payment_date else '',
+                    'Payment Date': payment.payment_date.strftime('%d/%m/%Y') if payment.payment_date else '',
                     'Amount': float(payment.amount or 0),
                     'TDS Deducted': float(payment.tds_amount or 0),
                     'Amount Received': float(payment.amount_received or 0),

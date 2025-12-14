@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '../utils/dateFormat';
 import {
   Box,
   Container,
@@ -315,7 +316,7 @@ const OrganizationSettings = () => {
                             />
                           </TableCell>
                           <TableCell>
-                            {new Date(member.joined_at).toLocaleDateString()}
+                            {formatDate(member.joined_at)}
                           </TableCell>
                           <TableCell align="right">
                             <IconButton

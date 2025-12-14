@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '../utils/dateFormat';
 import {
   Box,
   Paper,
@@ -693,11 +694,7 @@ const BulkEmailManager = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                        {new Date(campaign.created_at).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                        {formatDate(campaign.created_at)}
                       </Typography>
                     </TableCell>
                     <TableCell>

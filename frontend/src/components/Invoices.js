@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoiceAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import './Pages.css';
 import InvoiceForm from './InvoiceForm';
 import ScheduledInvoices from './ScheduledInvoices';
@@ -762,7 +763,7 @@ function Invoices() {
                     </td>
                     <td>{invoice.invoice_number}</td>
                     <td>{invoice.client_name}</td>
-                    <td>{new Date(invoice.invoice_date).toLocaleDateString()}</td>
+                    <td>{formatDate(invoice.invoice_date)}</td>
                     <td>{invoice.invoice_type === 'tax' ? 'Tax Invoice' : 'Proforma'}</td>
                     <td>₹{parseFloat(invoice.total_amount).toFixed(2)}</td>
                     <td><span className={`status-badge ${invoice.status}`}>{invoice.status}</span></td>

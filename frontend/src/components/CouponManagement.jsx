@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { formatDate } from '../utils/dateFormat';
 import {
   Box,
   Paper,
@@ -834,7 +835,7 @@ const CouponManagement = () => {
                           Valid From
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#1f2937', fontWeight: 600 }}>
-                          {new Date(coupon.valid_from).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {formatDate(coupon.valid_from)}
                         </Typography>
                       </Box>
                       <Box sx={{ flex: 1 }}>
@@ -842,7 +843,7 @@ const CouponManagement = () => {
                           Valid Until
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#1f2937', fontWeight: 600 }}>
-                          {new Date(coupon.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {formatDate(coupon.valid_until)}
                         </Typography>
                       </Box>
                     </Box>
@@ -1335,7 +1336,7 @@ const CouponManagement = () => {
                   {formData.valid_from && formData.valid_until && (
                     <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255,255,255,0.8)', borderRadius: 2 }}>
                       <Typography variant="caption" sx={{ color: '#374151', fontWeight: 600, display: 'block' }}>
-                        Valid: {new Date(formData.valid_from).toLocaleDateString('en-IN')} - {new Date(formData.valid_until).toLocaleDateString('en-IN')}
+                        Valid: {formatDate(formData.valid_from)} - {formatDate(formData.valid_until)}
                       </Typography>
                     </Box>
                   )}

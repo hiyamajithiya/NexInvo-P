@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoiceAPI, clientAPI, paymentAPI, reportsAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import './Pages.css';
 
 function Reports() {
@@ -578,7 +579,7 @@ function Reports() {
                                     {value} days
                                   </span>
                                 ) : key === 'date' ? (
-                                  new Date(value).toLocaleDateString('en-IN')
+                                  formatDate(value)
                                 ) : (
                                   value
                                 )}

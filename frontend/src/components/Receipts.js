@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoiceAPI, clientAPI, paymentAPI, receiptAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import { useToast } from './Toast';
 import './Pages.css';
 
@@ -710,7 +711,7 @@ function Receipts() {
                         <td><strong>#{receipt.id}</strong></td>
                         <td>{receipt.invoice_number}</td>
                         <td>{receipt.client_name}</td>
-                        <td>{new Date(receipt.payment_date).toLocaleDateString('en-IN')}</td>
+                        <td>{formatDate(receipt.payment_date)}</td>
                         <td>
                           <span className="status-badge status-paid">
                             {receipt.payment_method?.replace('_', ' ').toUpperCase()}

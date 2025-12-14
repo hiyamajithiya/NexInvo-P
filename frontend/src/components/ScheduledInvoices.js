@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { scheduledInvoiceAPI, clientAPI, paymentTermAPI, serviceItemAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import { useToast } from './Toast';
 import './Pages.css';
 
@@ -309,15 +310,6 @@ function ScheduledInvoices({ onBack }) {
       currency: 'INR',
       minimumFractionDigits: 2
     }).format(amount || 0);
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
   };
 
   const getFrequencyLabel = (frequency, day_of_month, day_of_week) => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import {
   Box,
   Paper,
@@ -270,11 +271,7 @@ const MySubscription = ({ onNavigate }) => {
                 Start Date:
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>
-                {new Date(subscription.start_date).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}
+                {formatDate(subscription.start_date)}
               </Typography>
             </Box>
 
@@ -283,11 +280,7 @@ const MySubscription = ({ onNavigate }) => {
                 End Date:
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>
-                {new Date(subscription.end_date).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}
+                {formatDate(subscription.end_date)}
               </Typography>
             </Box>
 
@@ -341,7 +334,7 @@ const MySubscription = ({ onNavigate }) => {
                   Last Payment
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 600, color: '#111827' }}>
-                  {new Date(subscription.last_payment_date).toLocaleDateString('en-IN')}
+                  {formatDate(subscription.last_payment_date)}
                 </Typography>
               </Box>
             )}
@@ -412,7 +405,7 @@ const MySubscription = ({ onNavigate }) => {
             Are you sure you want to cancel your subscription?
           </Alert>
           <Typography variant="body2" sx={{ color: '#6b7280' }}>
-            Your subscription will remain active until {new Date(subscription.end_date).toLocaleDateString('en-IN')}, after which you will lose access to all premium features.
+            Your subscription will remain active until {formatDate(subscription.end_date)}, after which you will lose access to all premium features.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>

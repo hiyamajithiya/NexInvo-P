@@ -121,15 +121,15 @@ def send_invoice_email(invoice, company_settings, connection=None):
         # Build professional HTML email content
         content = format_greeting(invoice.client.name)
         content += format_paragraph(
-            f"Please find attached <strong>{invoice_type_name} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d %B %Y')}.",
+            f"Please find attached <strong>{invoice_type_name} {invoice.invoice_number}</strong> dated {invoice.invoice_date.strftime('%d/%m/%Y')}.",
             style="lead"
         )
 
         # Invoice details info box
         invoice_details = [
             ("Invoice Number", invoice.invoice_number),
-            ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
-            ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+            ("Invoice Date", invoice.invoice_date.strftime('%d/%m/%Y')),
+            ("Due Date", invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else "On Receipt"),
         ]
         content += format_info_box("Invoice Details", invoice_details)
 
@@ -173,11 +173,11 @@ def send_invoice_email(invoice, company_settings, connection=None):
         plain_body = f"""
 Dear {invoice.client.name},
 
-Please find attached {invoice_type_name} {invoice.invoice_number} dated {invoice.invoice_date.strftime('%d-%b-%Y')}.
+Please find attached {invoice_type_name} {invoice.invoice_number} dated {invoice.invoice_date.strftime('%d/%m/%Y')}.
 
 Invoice Details:
 - Invoice Number: {invoice.invoice_number}
-- Invoice Date: {invoice.invoice_date.strftime('%d-%b-%Y')}
+- Invoice Date: {invoice.invoice_date.strftime('%d/%m/%Y')}
 - Total Amount: Rs. {invoice.total_amount:,.2f}
 
 {invoice.payment_terms if invoice.payment_terms else ''}
@@ -409,7 +409,7 @@ def send_receipt_email(receipt, tax_invoice, company_settings):
         # Payment details
         payment_details = [
             ("Amount Received", f"Rs. {receipt.amount_received:,.2f}"),
-            ("Payment Date", receipt.receipt_date.strftime('%d %B %Y')),
+            ("Payment Date", receipt.receipt_date.strftime('%d/%m/%Y')),
             ("Payment Method", receipt.payment.get_payment_method_display()),
         ]
         content += format_info_box("Payment Details", payment_details)
@@ -460,7 +460,7 @@ Please find attached:
 
 Payment Details:
 - Amount Received: Rs. {receipt.amount_received:,.2f}
-- Payment Date: {receipt.receipt_date.strftime('%d %B %Y')}
+- Payment Date: {receipt.receipt_date.strftime('%d/%m/%Y')}
 - Payment Method: {receipt.payment.get_payment_method_display()}
 
 If you have any questions, please don't hesitate to contact us.

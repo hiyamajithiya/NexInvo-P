@@ -144,7 +144,7 @@ def send_reminder_email(invoice, invoice_settings, organization):
     subject = invoice_settings.reminderEmailSubject.format(
         invoice_number=invoice.invoice_number,
         client_name=invoice.client.name,
-        invoice_date=invoice.invoice_date.strftime('%d-%m-%Y'),
+        invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
         total_amount=f"Rs. {invoice.total_amount:,.2f}"
     )
 
@@ -168,7 +168,7 @@ def send_reminder_email(invoice, invoice_settings, organization):
     custom_message = invoice_settings.reminderEmailBody.format(
         invoice_number=invoice.invoice_number,
         client_name=invoice.client.name,
-        invoice_date=invoice.invoice_date.strftime('%d %B %Y'),
+        invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
         total_amount=f"Rs. {invoice.total_amount:,.2f}",
         reminder_count=invoice.reminder_count + 1
     )
@@ -177,8 +177,8 @@ def send_reminder_email(invoice, invoice_settings, organization):
     # Invoice details info box
     invoice_details = [
         ("Invoice Number", invoice.invoice_number),
-        ("Invoice Date", invoice.invoice_date.strftime('%d %B %Y')),
-        ("Due Date", invoice.due_date.strftime('%d %B %Y') if invoice.due_date else "On Receipt"),
+        ("Invoice Date", invoice.invoice_date.strftime('%d/%m/%Y')),
+        ("Due Date", invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else "On Receipt"),
         ("Reminder #", str(invoice.reminder_count + 1)),
     ]
     content += format_info_box("Invoice Details", invoice_details)
@@ -223,7 +223,7 @@ Dear {invoice.client.name},
 
 Invoice Details:
 - Invoice Number: {invoice.invoice_number}
-- Invoice Date: {invoice.invoice_date.strftime('%d %B %Y')}
+- Invoice Date: {invoice.invoice_date.strftime('%d/%m/%Y')}
 - Amount Due: Rs. {invoice.total_amount:,.2f}
 - Reminder #: {invoice.reminder_count + 1}
 

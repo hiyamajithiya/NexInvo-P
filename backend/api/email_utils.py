@@ -258,7 +258,7 @@ def send_user_added_notification_to_owner(owner_user, new_user, organization):
         user_details = [
             ("Username", new_user.username),
             ("Email", new_user.email),
-            ("Date Added", new_user.date_joined.strftime('%d %B %Y at %I:%M %p')),
+            ("Date Added", new_user.date_joined.strftime('%d/%m/%Y at %I:%M %p')),
         ]
         content += format_info_box("New User Details", user_details, bg_color="#f0fdf4", border_color="#10b981", title_color="#065f46")
 
@@ -331,7 +331,7 @@ def send_organization_registration_email(user, organization):
         # Organization details info box
         org_details = [
             ("Organization Name", organization.name),
-            ("Registration Date", organization.created_at.strftime('%d %B %Y at %I:%M %p')),
+            ("Registration Date", organization.created_at.strftime('%d/%m/%Y at %I:%M %p')),
             ("Status", f"<span style='color: #10b981; font-weight: 600;'>Active</span>" if organization.is_active else "<span style='color: #ef4444; font-weight: 600;'>Inactive</span>"),
             ("Current Plan", organization.plan),
         ]
@@ -430,7 +430,7 @@ def send_upgrade_request_notification_to_superadmin(upgrade_request):
         requester_details = [
             ("Name", upgrade_request.requested_by.get_full_name() or upgrade_request.requested_by.username if upgrade_request.requested_by else "Unknown"),
             ("Email", upgrade_request.requested_by.email if upgrade_request.requested_by else "N/A"),
-            ("Request Date", upgrade_request.created_at.strftime('%d %B %Y at %I:%M %p')),
+            ("Request Date", upgrade_request.created_at.strftime('%d/%m/%Y at %I:%M %p')),
         ]
         content += format_info_box("Requested By", requester_details)
 

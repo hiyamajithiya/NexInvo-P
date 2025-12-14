@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import './Login.css';
 
 const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
@@ -816,7 +817,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
               <button className="modal-close" onClick={() => setShowPrivacyPolicy(false)}>&times;</button>
             </div>
             <div className="modal-body">
-              <p className="legal-updated">Last Updated: {new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="legal-updated">Last Updated: {formatDate(new Date())}</p>
 
               <h3>1. Introduction</h3>
               <p>Chinmay Technosoft Private Limited ("we", "us", "our") operates NexInvo, a cloud-based invoice management application. This Privacy Policy explains how we collect, use, disclose, and safeguard your personal data in compliance with the Information Technology Act, 2000, Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011, and the Digital Personal Data Protection Act, 2023 (DPDP Act).</p>
@@ -929,7 +930,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
               <button className="modal-close" onClick={() => setShowTerms(false)}>&times;</button>
             </div>
             <div className="modal-body">
-              <p className="legal-updated">Last Updated: {new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="legal-updated">Last Updated: {formatDate(new Date())}</p>
 
               <h3>1. Acceptance of Terms</h3>
               <p>By accessing or using NexInvo ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you disagree with any part of these terms, you may not access the Service.</p>
