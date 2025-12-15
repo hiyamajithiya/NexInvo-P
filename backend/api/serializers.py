@@ -724,7 +724,7 @@ class ScheduledInvoiceSerializer(serializers.ModelSerializer):
     total_amount = serializers.SerializerMethodField()
     # Add field with validation - limit to 1-28 to handle all months safely
     day_of_month = serializers.IntegerField(min_value=1, max_value=28, default=1)
-    day_of_week = serializers.IntegerField(min_value=0, max_value=6, default=0)
+    day_of_week = serializers.IntegerField(min_value=0, max_value=6, default=0, required=False, allow_null=True)
     month_of_year = serializers.IntegerField(min_value=1, max_value=12, default=1, required=False, allow_null=True)
 
     class Meta:

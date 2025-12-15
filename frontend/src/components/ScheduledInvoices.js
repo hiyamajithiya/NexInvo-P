@@ -232,7 +232,11 @@ function ScheduledInvoices({ onBack }) {
       loadScheduledInvoices();
       loadStats();
     } catch (err) {
-      showError(err.response?.data?.detail || 'Failed to save scheduled invoice');
+      console.error('Scheduled invoice error:', err.response?.data);
+      const errorMsg = err.response?.data?.detail ||
+                      JSON.stringify(err.response?.data) ||
+                      'Failed to save scheduled invoice';
+      showError(errorMsg);
     } finally {
       setLoading(false);
     }
