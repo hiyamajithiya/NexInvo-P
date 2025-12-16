@@ -97,6 +97,13 @@ function App() {
       sessionStorage.setItem('session_token', userData.session_token);
     }
 
+    // Store subscription warning if present (for grace period)
+    if (userData.subscription_warning) {
+      sessionStorage.setItem('subscription_warning', JSON.stringify(userData.subscription_warning));
+    } else {
+      sessionStorage.removeItem('subscription_warning');
+    }
+
     // Check if logged in user is superadmin
     await checkUserStatus(userData.access);
 

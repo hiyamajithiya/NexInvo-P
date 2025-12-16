@@ -47,6 +47,8 @@ function Dashboard({ user, onLogout }) {
   });
   const [companyLogo, setCompanyLogo] = useState(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [subscriptionWarning, setSubscriptionWarning] = useState(null);
+  const [showSubscriptionWarning, setShowSubscriptionWarning] = useState(false);
 
   // Ref for dropdown auto-hide timeout
   const dropdownTimeoutRef = useRef(null);
@@ -115,6 +117,20 @@ function Dashboard({ user, onLogout }) {
     }
   }, []);
 
+  // Check for subscription warning (grace period)
+  useEffect(() => {
+    const warningData = sessionStorage.getItem('subscription_warning');
+    if (warningData) {
+      try {
+        const warning = JSON.parse(warningData);
+        setSubscriptionWarning(warning);
+        setShowSubscriptionWarning(true);
+      } catch (e) {
+        console.error('Error parsing subscription warning:', e);
+      }
+    }
+  }, []);
+
   const loadStats = async () => {
     try {
       const response = await dashboardAPI.getStats();
@@ -170,6 +186,96 @@ function Dashboard({ user, onLogout }) {
       default:
         return (
           <>
+            {/* Subscription Warning Modal */}
+            {showSubscriptionWarning && subscriptionWarning && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 9999
+              }}>
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  padding: '32px',
+                  maxWidth: '500px',
+                  width: '90%',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '64px', marginBottom: '16px' }}>⚠️</div>
+                  <h2 style={{
+                    color: '#dc2626',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    marginBottom: '16px'
+                  }}>
+                    Subscription Expired
+                  </h2>
+                  <p style={{
+                    color: '#374151',
+                    fontSize: '16px',
+                    lineHeight: '1.6',
+                    marginBottom: '24px'
+                  }}>
+                    {subscriptionWarning.message}
+                  </p>
+                  <div style={{
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '24px'
+                  }}>
+                    <p style={{ color: '#991b1b', fontWeight: '600', margin: 0 }}>
+                      ⏰ {subscriptionWarning.days_remaining} days remaining before access is blocked
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                    <button
+                      onClick={() => {
+                        setActiveMenu('subscription');
+                        setShowSubscriptionWarning(false);
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '12px 24px',
+                        borderRadius: '8px',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Renew Now
+                    </button>
+                    <button
+                      onClick={() => setShowSubscriptionWarning(false)}
+                      style={{
+                        backgroundColor: '#f3f4f6',
+                        color: '#374151',
+                        border: '1px solid #d1d5db',
+                        padding: '12px 24px',
+                        borderRadius: '8px',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Remind Me Later
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="stats-container">
               <div className="stat-card blue" onClick={() => setActiveMenu('invoices')} style={{ cursor: 'pointer' }}>
                 <div className="stat-header">
