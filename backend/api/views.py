@@ -4589,6 +4589,7 @@ def superadmin_email_send_campaign(request, campaign_id):
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
+    from .email_templates import get_base_email_template, format_paragraph, format_greeting, format_signature, format_divider
 
     sent_count = 0
     failed_count = 0
@@ -4597,13 +4598,31 @@ def superadmin_email_send_campaign(request, campaign_id):
     for recipient in campaign.recipients.filter(status='pending'):
         try:
             # Replace placeholders in body
-            body = campaign.body
-            body = body.replace('{{user_name}}', recipient.user_name)
-            body = body.replace('{{email}}', recipient.email)
+            body_content = campaign.body
+            body_content = body_content.replace('{{user_name}}', recipient.user_name)
+            body_content = body_content.replace('{{email}}', recipient.email)
             if recipient.organization:
-                body = body.replace('{{organization_name}}', recipient.organization.name)
+                body_content = body_content.replace('{{organization_name}}', recipient.organization.name)
             else:
-                body = body.replace('{{organization_name}}', 'N/A')
+                body_content = body_content.replace('{{organization_name}}', 'N/A')
+
+            # Build professional HTML email content with NexInvo branding
+            email_content = format_greeting(recipient.user_name)
+            email_content += format_paragraph(body_content, style="normal")
+            email_content += format_divider()
+            email_content += format_signature(
+                name="NexInvo Team",
+                company="NexInvo",
+                email=system_email.from_email or system_email.smtp_username
+            )
+
+            # Wrap with NexInvo branded template
+            branded_body = get_base_email_template(
+                subject=campaign.subject,
+                content=email_content,
+                company_name="NexInvo",
+                company_tagline="Invoice Management System",
+            )
 
             # Send email using system email settings
             msg = MIMEMultipart('alternative')
@@ -4611,8 +4630,8 @@ def superadmin_email_send_campaign(request, campaign_id):
             msg['From'] = system_email.from_email or system_email.smtp_username
             msg['To'] = recipient.email
 
-            # Add HTML content
-            html_part = MIMEText(body, 'html')
+            # Add HTML content with NexInvo branding
+            html_part = MIMEText(branded_body, 'html', 'utf-8')
             msg.attach(html_part)
 
             # Connect and send
