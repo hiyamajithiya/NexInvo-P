@@ -127,19 +127,66 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         except UserSession.DoesNotExist:
             # No existing session, proceed normally
             pass
-        
+
+        # Check subscription status for non-superusers
+        if not user.is_superuser:
+            from .models import OrganizationMembership, Subscription
+
+            # Get user's organization
+            membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
+            if membership:
+                organization = membership.organization
+
+                # Check subscription status
+                try:
+                    subscription = Subscription.objects.get(organization=organization)
+
+                    # Update status if needed (handles automatic status transitions)
+                    subscription.update_status_if_needed()
+
+                    # Check if subscription is fully expired (grace period also ended)
+                    if subscription.is_fully_expired():
+                        return Response({
+                            'error': 'subscription_expired',
+                            'detail': 'Your subscription has expired and the grace period has ended. Please contact your administrator to renew the subscription.',
+                            'subscription_status': subscription.status,
+                            'expired_on': subscription.end_date.strftime('%Y-%m-%d'),
+                            'organization': organization.name
+                        }, status=status.HTTP_403_FORBIDDEN)
+
+                except Subscription.DoesNotExist:
+                    # No subscription found - allow login but they'll see limited access
+                    pass
+
         # Generate tokens (call parent's post logic)
         response = super().post(request, *args, **kwargs)
-        
+
         if response.status_code == 200:
             # Create a new session token (invalidates any existing session)
             device_info = current_device_info
             ip_address = request.META.get('REMOTE_ADDR')
             session_token = UserSession.create_session(user, device_info, ip_address)
-            
+
             # Add session token to response
             response.data['session_token'] = session_token
-        
+
+            # Add subscription warning if in grace period
+            if not user.is_superuser:
+                from .models import OrganizationMembership, Subscription
+                membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
+                if membership:
+                    try:
+                        subscription = Subscription.objects.get(organization=membership.organization)
+                        if subscription.is_in_grace_period():
+                            response.data['subscription_warning'] = {
+                                'in_grace_period': True,
+                                'days_remaining': subscription.grace_period_days_remaining(),
+                                'message': f'Your subscription has expired. You have {subscription.grace_period_days_remaining()} days remaining to renew before access is blocked.',
+                                'expired_on': subscription.end_date.strftime('%Y-%m-%d')
+                            }
+                    except Subscription.DoesNotExist:
+                        pass
+
         return response
 
 

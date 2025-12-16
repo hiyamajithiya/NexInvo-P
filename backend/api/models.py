@@ -839,13 +839,18 @@ class CouponUsage(models.Model):
 class Subscription(models.Model):
     """
     Organization's subscription to a plan.
+    Data is protected and will never be deleted without superadmin permission.
     """
     STATUS_CHOICES = [
         ('trial', 'Trial'),
         ('active', 'Active'),
-        ('expired', 'Expired'),
+        ('grace_period', 'Grace Period'),  # Expired but within 15-day grace period
+        ('expired', 'Expired'),  # Grace period also expired - login blocked
         ('cancelled', 'Cancelled'),
     ]
+
+    # Grace period duration in days - user can still access after subscription expires
+    GRACE_PERIOD_DAYS = 15
 
     organization = models.OneToOneField(Organization, on_delete=models.CASCADE,
                                        related_name='subscription_detail')
@@ -870,6 +875,10 @@ class Subscription(models.Model):
                                       related_name='applied_subscriptions',
                                       help_text="Coupon used for this subscription")
 
+    # Data Protection - data will never be deleted without superadmin permission
+    data_protected = models.BooleanField(default=True,
+                                        help_text="User data is protected and cannot be deleted without superadmin permission")
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -883,20 +892,84 @@ class Subscription(models.Model):
         return f"{self.organization.name} - {self.plan.name} ({self.status})"
 
     def is_active(self):
-        """Check if subscription is currently active"""
-        from django.utils import timezone
-        from datetime import date
+        """Check if subscription is currently active (includes grace period)"""
+        from datetime import date, timedelta
 
         if self.status == 'cancelled':
             return False
 
-        if self.status == 'trial' and self.trial_end_date:
-            return date.today() <= self.trial_end_date
+        if self.status == 'expired':
+            return False
 
-        return date.today() <= self.end_date
+        today = date.today()
+
+        if self.status == 'trial' and self.trial_end_date:
+            return today <= self.trial_end_date
+
+        # For active/grace_period status, check if within subscription or grace period
+        grace_end_date = self.end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+        return today <= grace_end_date
+
+    def is_in_grace_period(self):
+        """Check if subscription is in grace period (expired but within 15 days)"""
+        from datetime import date, timedelta
+
+        if self.status in ['cancelled', 'expired']:
+            return False
+
+        today = date.today()
+
+        # Check if trial is in grace period
+        if self.status == 'trial' and self.trial_end_date:
+            if today > self.trial_end_date:
+                grace_end = self.trial_end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+                return today <= grace_end
+            return False
+
+        # Check if subscription is in grace period
+        if today > self.end_date:
+            grace_end = self.end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+            return today <= grace_end
+
+        return False
+
+    def grace_period_days_remaining(self):
+        """Calculate days remaining in grace period"""
+        from datetime import date, timedelta
+
+        if not self.is_in_grace_period():
+            return 0
+
+        today = date.today()
+
+        if self.status == 'trial' and self.trial_end_date:
+            grace_end = self.trial_end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+        else:
+            grace_end = self.end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+
+        return max(0, (grace_end - today).days)
+
+    def is_fully_expired(self):
+        """Check if subscription and grace period have both expired (login should be blocked)"""
+        from datetime import date, timedelta
+
+        if self.status == 'expired':
+            return True
+
+        if self.status == 'cancelled':
+            return True
+
+        today = date.today()
+
+        if self.status == 'trial' and self.trial_end_date:
+            grace_end = self.trial_end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+            return today > grace_end
+
+        grace_end = self.end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+        return today > grace_end
 
     def days_remaining(self):
-        """Calculate days remaining in subscription"""
+        """Calculate days remaining in subscription (not including grace period)"""
         from datetime import date
 
         if self.status == 'trial' and self.trial_end_date:
@@ -905,6 +978,42 @@ class Subscription(models.Model):
             delta = self.end_date - date.today()
 
         return max(0, delta.days)
+
+    def update_status_if_needed(self):
+        """Update subscription status based on current date"""
+        from datetime import date, timedelta
+
+        today = date.today()
+        status_changed = False
+
+        if self.status == 'cancelled' or self.status == 'expired':
+            return False
+
+        # Check trial expiry
+        if self.status == 'trial' and self.trial_end_date:
+            if today > self.trial_end_date:
+                grace_end = self.trial_end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+                if today > grace_end:
+                    self.status = 'expired'
+                else:
+                    self.status = 'grace_period'
+                status_changed = True
+
+        # Check subscription expiry
+        elif self.status in ['active', 'grace_period']:
+            if today > self.end_date:
+                grace_end = self.end_date + timedelta(days=self.GRACE_PERIOD_DAYS)
+                if today > grace_end:
+                    self.status = 'expired'
+                    status_changed = True
+                elif self.status != 'grace_period':
+                    self.status = 'grace_period'
+                    status_changed = True
+
+        if status_changed:
+            self.save(update_fields=['status'])
+
+        return status_changed
 
 
 class SuperAdminNotification(models.Model):

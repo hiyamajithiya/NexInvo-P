@@ -191,6 +191,10 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
         });
         setShowForceLoginDialog(true);
         setError('');
+      } else if (err.response?.status === 403 && err.response?.data?.error === 'subscription_expired') {
+        // Subscription expired and grace period ended
+        const expiredData = err.response.data;
+        setError(\);
       } else {
         const errorMessage = err.response?.data?.error || err.response?.data?.detail ||
           (isRegisterMode ? 'Registration failed' : 'Invalid username or password');
