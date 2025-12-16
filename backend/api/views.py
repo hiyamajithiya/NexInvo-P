@@ -596,11 +596,11 @@ def test_email_view(request):
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def invoice_format_settings_view(request):
-    """Get or update invoice format settings for the authenticated user"""
+    """Get or update invoice format settings for the organization"""
     if request.method == 'GET':
         # Get or create invoice format settings with defaults
         settings, created = InvoiceFormatSettings.objects.get_or_create(
-            user=request.user,
+            organization=request.organization,
             defaults={
                 'show_logo': True,
                 'logo_position': 'left',
