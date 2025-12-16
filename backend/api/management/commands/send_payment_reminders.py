@@ -35,10 +35,10 @@ class Command(BaseCommand):
             organization = invoice_settings.organization
             frequency_days = invoice_settings.reminderFrequencyDays
 
-            # Get unpaid proforma invoices for this organization
-            unpaid_proformas = Invoice.objects.filter(
+            # Get unpaid invoices (both proforma and tax) for this organization
+            unpaid_invoices = Invoice.objects.filter(
                 organization=organization,
-                invoice_type='proforma',
+                invoice_type__in=['proforma', 'tax'],
                 status__in=['draft', 'sent']  # Not paid or cancelled
             ).exclude(
                 status='paid'
@@ -46,7 +46,7 @@ class Command(BaseCommand):
                 status='cancelled'
             )
 
-            for invoice in unpaid_proformas:
+            for invoice in unpaid_invoices:
                 # Check if reminder should be sent based on frequency
                 should_send = False
 
