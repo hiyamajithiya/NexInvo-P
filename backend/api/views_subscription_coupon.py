@@ -250,7 +250,7 @@ class CouponViewSet(viewsets.ModelViewSet):
                     'status': 'trial' if plan.trial_days > 0 else 'active',
                     'amount_paid': discount_info['final_price'],
                     'coupon_applied': coupon,
-                    'auto_renew': True,
+                    'auto_renew': False,
                     'next_billing_date': end_date
                 }
             )
@@ -392,7 +392,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 status='trial' if plan.trial_days > 0 else 'active',
                 amount_paid=discount_info['final_price'],
                 coupon_applied=coupon,
-                auto_renew=True,
+                auto_renew=False,
                 next_billing_date=end_date
             )
 
