@@ -313,16 +313,11 @@ function Dashboard({ user, onLogout }) {
                       <h3 className="stat-title">Storage</h3>
                       <p className="stat-number">{stats.subscription.max_storage_gb} GB</p>
                       <p className="stat-label">Available Storage</p>
-                      <div style={{ marginTop: '10px', fontSize: '12px', color: '#64748b' }}>
-                        {stats.subscription.next_billing_date && (
-                          <>
-                            <div>Next Billing: {formatDate(stats.subscription.next_billing_date)}</div>
-                            <div style={{ marginTop: '5px', fontWeight: '500', color: stats.subscription.auto_renew ? '#10b981' : '#64748b' }}>
-                              Auto-Renew: {stats.subscription.auto_renew ? 'ON' : 'OFF'}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      {stats.subscription.next_billing_date && (
+                        <div style={{ marginTop: '10px', fontSize: '12px', color: '#64748b' }}>
+                          Next Billing: {formatDate(stats.subscription.next_billing_date)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

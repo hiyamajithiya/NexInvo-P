@@ -1238,7 +1238,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                             'trial_end_date': trial_end_date,
                             'status': 'trial' if plan.trial_days > 0 else 'active',
                             'amount_paid': plan.price,
-                            'auto_renew': True,
+                            'auto_renew': False,
                             'next_billing_date': end_date
                         }
                     )
@@ -2175,7 +2175,7 @@ def superadmin_stats(request):
     from .models import Subscription
     total_subscription_revenue = Subscription.objects.filter(
         status='active',
-        auto_renew=True
+        auto_renew=False
     ).aggregate(total=Sum('amount_paid'))['total'] or 0
 
     # Recent transactions (last 10)
@@ -3334,7 +3334,7 @@ class CouponViewSet(viewsets.ModelViewSet):
                     'status': 'trial' if plan.trial_days > 0 else 'active',
                     'amount_paid': discount_info['final_price'],
                     'coupon_applied': coupon,
-                    'auto_renew': True,
+                    'auto_renew': False,
                     'next_billing_date': end_date
                 }
             )
@@ -3476,7 +3476,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 status='trial' if plan.trial_days > 0 else 'active',
                 amount_paid=discount_info['final_price'],
                 coupon_applied=coupon,
-                auto_renew=True,
+                auto_renew=False,
                 next_billing_date=end_date
             )
 
@@ -3653,7 +3653,7 @@ class SubscriptionUpgradeRequestViewSet(viewsets.ModelViewSet):
                         status='active',
                         amount_paid=amount,
                         coupon_applied=coupon_obj,
-                        auto_renew=True,
+                        auto_renew=False,
                         next_billing_date=end_date,
                         last_payment_date=date.today()
                     )
@@ -3797,7 +3797,7 @@ class SubscriptionUpgradeRequestViewSet(viewsets.ModelViewSet):
                     status='active',
                     amount_paid=upgrade_request.amount,
                     coupon_applied=coupon_obj,
-                    auto_renew=True,
+                    auto_renew=False,
                     next_billing_date=end_date,
                     last_payment_date=date.today()
                 )

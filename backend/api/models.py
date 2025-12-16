@@ -858,7 +858,7 @@ class Subscription(models.Model):
 
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='trial')
-    auto_renew = models.BooleanField(default=True, help_text="Automatically renew subscription")
+    auto_renew = models.BooleanField(default=False, help_text="Auto-renewal is not currently implemented")
 
     # Payment Details
     last_payment_date = models.DateField(null=True, blank=True)
