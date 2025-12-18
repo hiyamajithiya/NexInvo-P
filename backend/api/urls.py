@@ -63,4 +63,12 @@ urlpatterns = [
     path('tally-sync/mappings/', views.tally_mappings, name='tally-mappings'),
     path('tally-sync/sync-invoices/', views.tally_sync_invoices, name='tally-sync-invoices'),
     path('tally-sync/sync-history/', views.tally_sync_history, name='tally-sync-history'),
+    # Payment Settings & Payment Requests
+    path('superadmin/payment-settings/', views.superadmin_payment_settings, name='superadmin-payment-settings'),
+    path('payment-settings/', views.get_payment_settings_public, name='payment-settings-public'),
+    path('payment-requests/', views.get_my_payment_requests, name='my-payment-requests'),
+    path('payment-requests/submit/', views.submit_payment_request, name='submit-payment-request'),
+    path('superadmin/payment-requests/', views.superadmin_payment_requests, name='superadmin-payment-requests'),
+    path('superadmin/payment-requests/<uuid:request_id>/approve/', views.superadmin_approve_payment_request, name='superadmin-approve-payment-request'),
+    path('superadmin/payment-requests/<uuid:request_id>/reject/', views.superadmin_reject_payment_request, name='superadmin-reject-payment-request'),
 ]

@@ -31,6 +31,10 @@ import {
   LocalOffer as CouponIcon,
   CurrencyRupee as RupeeIcon,
   Upgrade as UpgradeIcon,
+  History as HistoryIcon,
+  HourglassEmpty as PendingIcon,
+  CheckCircleOutline as ApprovedIcon,
+  HighlightOff as RejectedIcon,
 } from '@mui/icons-material';
 
 const MySubscription = ({ onNavigate }) => {
@@ -39,9 +43,12 @@ const MySubscription = ({ onNavigate }) => {
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [paymentRequests, setPaymentRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   useEffect(() => {
     loadSubscription();
+    loadPaymentRequests();
   }, []);
 
   const loadSubscription = async () => {
@@ -58,6 +65,18 @@ const MySubscription = ({ onNavigate }) => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPaymentRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const response = await api.get('/payment-requests/');
+      setPaymentRequests(response.data.requests || []);
+    } catch (error) {
+      console.error('Error loading payment requests:', error);
+    } finally {
+      setLoadingRequests(false);
     }
   };
 
@@ -389,6 +408,80 @@ const MySubscription = ({ onNavigate }) => {
           </Paper>
         </Box>
       </Box>
+
+      {/* Payment Requests History */}
+      {paymentRequests.length > 0 && (
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <HistoryIcon sx={{ mr: 1, color: '#6366f1' }} />
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>
+              Payment Request History
+            </Typography>
+          </Box>
+
+          {loadingRequests ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {paymentRequests.map((request) => (
+                <Paper
+                  key={request.id}
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    bgcolor: request.status === 'approved' ? '#f0fdf4' : request.status === 'rejected' ? '#fef2f2' : '#fefce8',
+                    border: `1px solid ${request.status === 'approved' ? '#10b981' : request.status === 'rejected' ? '#ef4444' : '#f59e0b'}`,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        {request.status === 'pending' && <PendingIcon sx={{ color: '#f59e0b', fontSize: 20 }} />}
+                        {request.status === 'approved' && <ApprovedIcon sx={{ color: '#10b981', fontSize: 20 }} />}
+                        {request.status === 'rejected' && <RejectedIcon sx={{ color: '#ef4444', fontSize: 20 }} />}
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                          {request.plan_name} Plan
+                        </Typography>
+                        <Chip
+                          label={request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                          size="small"
+                          sx={{
+                            bgcolor: request.status === 'approved' ? '#d1fae5' : request.status === 'rejected' ? '#fee2e2' : '#fef3c7',
+                            color: request.status === 'approved' ? '#065f46' : request.status === 'rejected' ? '#991b1b' : '#92400e',
+                            fontWeight: 'bold',
+                          }}
+                        />
+                      </Box>
+                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                        Transaction: <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{request.transaction_id}</span>
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                        Payment Date: {formatDate(request.payment_date)}
+                      </Typography>
+                      {request.rejection_reason && (
+                        <Alert severity="error" sx={{ mt: 1, py: 0 }}>
+                          <Typography variant="caption">{request.rejection_reason}</Typography>
+                        </Alert>
+                      )}
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        ₹{parseFloat(request.final_amount).toLocaleString('en-IN')}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                        Submitted: {formatDate(request.created_at)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+          )}
+        </Paper>
+      )}
 
       {/* Cancel Confirmation Dialog */}
       <Dialog

@@ -2151,3 +2151,104 @@ class UserSession(models.Model):
         cls.objects.filter(user=user).delete()
 
 
+# =============================================================================
+# PAYMENT SETTINGS & PAYMENT REQUEST MODELS
+# =============================================================================
+
+class PaymentSettings(models.Model):
+    """
+    System-wide payment/bank account settings managed by SuperAdmin.
+    Tenants will see these details when subscribing to a plan.
+    """
+    # Bank Account Details
+    account_holder_name = models.CharField(max_length=255, help_text='Name of account holder')
+    account_number = models.CharField(max_length=50, help_text='Bank account number')
+    bank_name = models.CharField(max_length=255, help_text='Name of the bank')
+    branch_name = models.CharField(max_length=255, blank=True, help_text='Branch name')
+    ifsc_code = models.CharField(max_length=20, help_text='IFSC code')
+
+    # UPI Details (optional)
+    upi_id = models.CharField(max_length=100, blank=True, help_text='UPI ID for payments')
+    upi_qr_code = models.TextField(blank=True, help_text='Base64 encoded QR code image')
+
+    # Additional Payment Instructions
+    payment_instructions = models.TextField(blank=True, help_text='Additional instructions for payment')
+
+    # Status
+    is_active = models.BooleanField(default=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payment Settings"
+        verbose_name_plural = "Payment Settings"
+
+    def __str__(self):
+        return f"{self.account_holder_name} - {self.bank_name}"
+
+
+class PaymentRequest(models.Model):
+    """
+    Payment requests from tenants for subscription plans.
+    Tenants upload payment proof and SuperAdmin approves/rejects.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    # Request Info
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='payment_requests')
+    requested_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='payment_requests')
+
+    # Plan Details
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='payment_requests')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text='Amount to be paid')
+
+    # Coupon (if applied)
+    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_requests')
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text='Discount applied')
+    final_amount = models.DecimalField(max_digits=10, decimal_places=2, help_text='Final amount after discount')
+
+    # Payment Proof
+    transaction_id = models.CharField(max_length=200, help_text='UTR/Transaction ID')
+    payment_date = models.DateField(help_text='Date of payment')
+    payment_method = models.CharField(max_length=50, choices=[
+        ('bank_transfer', 'Bank Transfer (NEFT/RTGS/IMPS)'),
+        ('upi', 'UPI'),
+        ('cheque', 'Cheque'),
+        ('cash', 'Cash Deposit'),
+        ('other', 'Other'),
+    ], default='bank_transfer')
+    payment_screenshot = models.TextField(blank=True, help_text='Base64 encoded payment screenshot')
+    user_notes = models.TextField(blank=True, help_text='Additional notes from user')
+
+    # Status & Processing
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_notes = models.TextField(blank=True, help_text='Notes from admin')
+    rejection_reason = models.TextField(blank=True, help_text='Reason for rejection')
+
+    # Approval Details
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_payment_requests')
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    # Created Subscription (after approval)
+    subscription = models.ForeignKey('Subscription', on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_request')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payment Request"
+        verbose_name_plural = "Payment Requests"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.plan.name} ({self.status})"
+
+

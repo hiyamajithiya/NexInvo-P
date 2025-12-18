@@ -194,7 +194,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
       } else if (err.response?.status === 403 && err.response?.data?.error === 'subscription_expired') {
         // Subscription expired and grace period ended
         const expiredData = err.response.data;
-        setError(\);
+        setError(`Your subscription expired on ${expiredData.expired_on} and the 15-day grace period has ended. Please contact your administrator to renew the subscription for "${expiredData.organization}".`);
       } else {
         const errorMessage = err.response?.data?.error || err.response?.data?.detail ||
           (isRegisterMode ? 'Registration failed' : 'Invalid username or password');
