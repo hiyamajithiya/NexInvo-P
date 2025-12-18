@@ -56,6 +56,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import SubscriptionPlans from './SubscriptionPlans';
 import CouponManagement from './CouponManagement';
 import BulkEmailManager from './BulkEmailManager';
+import PaymentSettingsAdmin from './PaymentSettingsAdmin';
+import PaymentRequestsAdmin from './PaymentRequestsAdmin';
 import './Dashboard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -550,6 +552,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
       case 'subscription-plans': return 'Subscription Plans';
       case 'coupons': return 'Coupon Management';
       case 'upgrade-requests': return 'Upgrade Requests';
+      case 'payment-requests': return 'Payment Requests';
+      case 'payment-settings': return 'Payment Settings';
       case 'bulk-email': return 'Bulk Email Manager';
       case 'settings': return 'System Settings';
       default: return 'Super Admin Portal';
@@ -2042,6 +2046,10 @@ const SuperAdminDashboard = ({ onLogout }) => {
         return <CouponManagement />;
       case 'upgrade-requests':
         return renderUpgradeRequestsContent();
+      case 'payment-requests':
+        return <PaymentRequestsAdmin />;
+      case 'payment-settings':
+        return <PaymentSettingsAdmin />;
       case 'bulk-email':
         return <BulkEmailManager />;
       case 'settings':
@@ -2165,12 +2173,28 @@ const SuperAdminDashboard = ({ onLogout }) => {
             )}
           </a>
           <a
+            href="#payment-requests"
+            className={`nav-item ${activeMenu === 'payment-requests' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('payment-requests'); }}
+          >
+            <span className="nav-icon">💳</span>
+            <span className="nav-text">Payment Requests</span>
+          </a>
+          <a
             href="#bulk-email"
             className={`nav-item ${activeMenu === 'bulk-email' ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); setActiveMenu('bulk-email'); }}
           >
             <span className="nav-icon">📧</span>
             <span className="nav-text">Bulk Email</span>
+          </a>
+          <a
+            href="#payment-settings"
+            className={`nav-item ${activeMenu === 'payment-settings' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('payment-settings'); }}
+          >
+            <span className="nav-icon">🏦</span>
+            <span className="nav-text">Payment Settings</span>
           </a>
           <a
             href="#settings"
