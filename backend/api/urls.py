@@ -71,4 +71,13 @@ urlpatterns = [
     path('superadmin/payment-requests/', views.superadmin_payment_requests, name='superadmin-payment-requests'),
     path('superadmin/payment-requests/<uuid:request_id>/approve/', views.superadmin_approve_payment_request, name='superadmin-approve-payment-request'),
     path('superadmin/payment-requests/<uuid:request_id>/reject/', views.superadmin_reject_payment_request, name='superadmin-reject-payment-request'),
+    # Reviews & Testimonials
+    path('reviews/public/', views.get_public_reviews, name='public-reviews'),
+    path('reviews/eligibility/', views.check_review_eligibility, name='review-eligibility'),
+    path('reviews/dismiss-prompt/', views.dismiss_review_prompt, name='dismiss-review-prompt'),
+    path('reviews/submit/', views.submit_review, name='submit-review'),
+    path('superadmin/reviews/', views.superadmin_reviews, name='superadmin-reviews'),
+    path('superadmin/reviews/<uuid:review_id>/approve/', views.superadmin_approve_review, name='superadmin-approve-review'),
+    path('superadmin/reviews/<uuid:review_id>/reject/', views.superadmin_reject_review, name='superadmin-reject-review'),
+    path('superadmin/reviews/<uuid:review_id>/toggle-featured/', views.superadmin_toggle_featured_review, name='superadmin-toggle-featured-review'),
 ]

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { dashboardAPI, settingsAPI } from '../services/api';
+import api from '../services/api';
 import { formatDate } from '../utils/dateFormat';
 import './Dashboard.css';
 import OrganizationSwitcher from './OrganizationSwitcher';
@@ -18,6 +19,7 @@ const MySubscription = lazy(() => import('./MySubscription'));
 const HelpCenter = lazy(() => import('./HelpCenter'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const TallySyncCorner = lazy(() => import('./TallySyncCorner'));
+const ReviewSubmitPage = lazy(() => import('./ReviewSubmitPage'));
 
 // Component loading spinner
 const ComponentLoader = () => (
@@ -49,6 +51,9 @@ function Dashboard({ user, onLogout }) {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [subscriptionWarning, setSubscriptionWarning] = useState(null);
   const [showSubscriptionWarning, setShowSubscriptionWarning] = useState(false);
+  const [showReviewPopup, setShowReviewPopup] = useState(false);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Ref for dropdown auto-hide timeout
   const dropdownTimeoutRef = useRef(null);
@@ -131,6 +136,19 @@ function Dashboard({ user, onLogout }) {
     }
   }, []);
 
+  // Check review eligibility on mount
+  useEffect(() => {
+    const checkReviewEligibility = async () => {
+      try {
+        const response = await api.get('/reviews/eligibility/');
+        setReviewEligibility(response.data);
+      } catch (error) {
+        console.error('Error checking review eligibility:', error);
+      }
+    };
+    checkReviewEligibility();
+  }, []);
+
   const loadStats = async () => {
     try {
       const response = await dashboardAPI.getStats();
@@ -157,6 +175,46 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  // Handle logout with review prompt (show popup for first 3 logouts if eligible)
+  const handleLogoutWithReviewPrompt = async () => {
+    // Check if user is eligible to submit review and hasn't been prompted 3 times
+    if (reviewEligibility?.eligible &&
+        !reviewEligibility?.has_submitted &&
+        reviewEligibility?.dismissal_count < 3) {
+      setShowReviewPopup(true);
+    } else {
+      onLogout();
+    }
+  };
+
+  // Handle dismissing review popup and logout
+  const handleDismissReviewPopup = async () => {
+    try {
+      await api.post('/reviews/dismiss-prompt/');
+      // Update local state
+      setReviewEligibility(prev => prev ? {
+        ...prev,
+        dismissal_count: prev.dismissal_count + 1
+      } : null);
+    } catch (error) {
+      console.error('Error dismissing review prompt:', error);
+    }
+    setShowReviewPopup(false);
+    onLogout();
+  };
+
+  // Handle navigating to review page from popup
+  const handleGoToReview = () => {
+    setShowReviewPopup(false);
+    setActiveMenu('submit-review');
+  };
+
+  // Handle menu item click (also closes mobile menu)
+  const handleMenuClick = (menuItem) => {
+    setActiveMenu(menuItem);
+    setMobileMenuOpen(false);
+  };
+
   const renderContent = () => {
     switch (activeMenu) {
       case 'invoices':
@@ -181,8 +239,10 @@ function Dashboard({ user, onLogout }) {
         return <HelpCenter />;
       case 'tally-sync':
         return <TallySyncCorner />;
+      case 'submit-review':
+        return <ReviewSubmitPage onNavigate={setActiveMenu} />;
       case 'profile':
-        return <Profile onLogout={onLogout} />;
+        return <Profile onLogout={handleLogoutWithReviewPrompt} />;
       default:
         return (
           <>
@@ -477,6 +537,7 @@ function Dashboard({ user, onLogout }) {
       case 'subscription': return 'My Subscription';
       case 'help': return 'Help Center';
       case 'tally-sync': return 'Tally Sync Corner';
+      case 'submit-review': return 'Submit Review';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
     }
@@ -494,9 +555,122 @@ function Dashboard({ user, onLogout }) {
         </Suspense>
       )}
 
+      {/* Review Prompt Popup */}
+      {showReviewPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '480px',
+            width: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: '36px'
+            }}>
+              ⭐
+            </div>
+            <h2 style={{
+              color: '#111827',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              marginBottom: '12px'
+            }}>
+              Share Your Experience!
+            </h2>
+            <p style={{
+              color: '#6b7280',
+              fontSize: '16px',
+              lineHeight: '1.6',
+              marginBottom: '24px'
+            }}>
+              We'd love to hear your feedback! Your review helps us improve and helps others discover our service.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleGoToReview}
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '14px 28px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span>✍️</span> Write a Review
+              </button>
+              <button
+                onClick={handleDismissReviewPopup}
+                style={{
+                  backgroundColor: '#f3f4f6',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  padding: '14px 28px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Maybe Later
+              </button>
+            </div>
+            <p style={{
+              color: '#9ca3af',
+              fontSize: '12px',
+              marginTop: '16px'
+            }}>
+              {3 - (reviewEligibility?.dismissal_count || 0)} reminder{(3 - (reviewEligibility?.dismissal_count || 0)) !== 1 ? 's' : ''} left
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="mobile-menu-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
+          <button
+            className="mobile-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
           <div className="logo">
             {companyLogo ? (
               <img
@@ -530,7 +704,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#dashboard"
             className={`nav-item ${activeMenu === 'dashboard' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('dashboard'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('dashboard'); }}
           >
             <span className="nav-icon">🏠</span>
             <span className="nav-text">Dashboard</span>
@@ -538,7 +712,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#invoices"
             className={`nav-item ${activeMenu === 'invoices' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('invoices'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('invoices'); }}
           >
             <span className="nav-icon">📄</span>
             <span className="nav-text">Invoices</span>
@@ -546,7 +720,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#clients"
             className={`nav-item ${activeMenu === 'clients' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('clients'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('clients'); }}
           >
             <span className="nav-icon">👥</span>
             <span className="nav-text">Clients</span>
@@ -554,7 +728,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#services"
             className={`nav-item ${activeMenu === 'services' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('services'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('services'); }}
           >
             <span className="nav-icon">📋</span>
             <span className="nav-text">Service Master</span>
@@ -562,7 +736,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#receipts"
             className={`nav-item ${activeMenu === 'receipts' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('receipts'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('receipts'); }}
           >
             <span className="nav-icon">🧾</span>
             <span className="nav-text">Receipts</span>
@@ -570,7 +744,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#reports"
             className={`nav-item ${activeMenu === 'reports' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('reports'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('reports'); }}
           >
             <span className="nav-icon">📊</span>
             <span className="nav-text">Reports</span>
@@ -578,7 +752,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#settings"
             className={`nav-item ${activeMenu === 'settings' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('settings'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('settings'); }}
           >
             <span className="nav-icon">⚙️</span>
             <span className="nav-text">Settings</span>
@@ -586,7 +760,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#organization"
             className={`nav-item ${activeMenu === 'organization' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('organization'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('organization'); }}
           >
             <span className="nav-icon">🏢</span>
             <span className="nav-text">Organization</span>
@@ -594,7 +768,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#subscription"
             className={`nav-item ${activeMenu === 'subscription' || activeMenu === 'pricing' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('subscription'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('subscription'); }}
           >
             <span className="nav-icon">💼</span>
             <span className="nav-text">My Subscription</span>
@@ -602,7 +776,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#tally-sync"
             className={`nav-item ${activeMenu === 'tally-sync' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('tally-sync'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('tally-sync'); }}
           >
             <span className="nav-icon">🔄</span>
             <span className="nav-text">Tally Sync Corner</span>
@@ -610,7 +784,7 @@ function Dashboard({ user, onLogout }) {
           <a
             href="#help"
             className={`nav-item ${activeMenu === 'help' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); setActiveMenu('help'); }}
+            onClick={(e) => { e.preventDefault(); handleMenuClick('help'); }}
           >
             <span className="nav-icon">❓</span>
             <span className="nav-text">Help & Guide</span>
@@ -624,8 +798,19 @@ function Dashboard({ user, onLogout }) {
         {/* Top Header */}
         <header className="top-header">
           <div className="header-left">
-            <h1 className="page-title">{getPageTitle()}</h1>
-            <p className="page-subtitle">Welcome back, {user?.username || 'Admin'}</p>
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+            >
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+            <div>
+              <h1 className="page-title">{getPageTitle()}</h1>
+              <p className="page-subtitle">Welcome back, {user?.username || 'Admin'}</p>
+            </div>
           </div>
           <div className="header-right">
             <button
@@ -666,7 +851,7 @@ function Dashboard({ user, onLogout }) {
                   </button>
                   <button
                     className="user-dropdown-item logout"
-                    onClick={onLogout}
+                    onClick={handleLogoutWithReviewPrompt}
                   >
                     <span>🚪</span> Logout
                   </button>

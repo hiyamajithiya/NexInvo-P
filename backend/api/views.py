@@ -5714,3 +5714,342 @@ def superadmin_reject_payment_request(request, request_id):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# =============================================================================
+# REVIEW & TESTIMONIAL ENDPOINTS
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_public_reviews(request):
+    """
+    Get approved reviews for landing page (Public endpoint)
+    """
+    from .models import Review
+
+    reviews = Review.objects.filter(
+        status='approved'
+    ).order_by('-is_featured', '-approved_at')[:10]  # Limit to 10 reviews
+
+    data = []
+    for review in reviews:
+        data.append({
+            'id': str(review.id),
+            'rating': review.rating,
+            'title': review.title,
+            'content': review.content,
+            'display_name': review.display_name,
+            'designation': review.designation,
+            'company_name': review.company_name,
+            'profile_image': review.profile_image,
+            'is_featured': review.is_featured,
+        })
+
+    return Response({'reviews': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_review_eligibility(request):
+    """
+    Check if user can submit a review and if prompt should be shown.
+    Eligible: Active subscription OR Trial period
+    Prompt shown: First 3 logouts if no review submitted
+    """
+    from .models import Review, ReviewPromptDismissal, OrganizationMembership, Subscription
+
+    # Get organization
+    membership = OrganizationMembership.objects.filter(
+        user=request.user,
+        is_active=True
+    ).first()
+
+    if not membership:
+        return Response({
+            'eligible': False,
+            'show_prompt': False,
+            'reason': 'No organization found'
+        })
+
+    organization = membership.organization
+
+    # Check subscription status (active OR trial allowed)
+    try:
+        subscription = Subscription.objects.get(organization=organization)
+        is_eligible = subscription.status in ['active', 'trial', 'grace_period']
+    except Subscription.DoesNotExist:
+        is_eligible = False
+
+    if not is_eligible:
+        return Response({
+            'eligible': False,
+            'show_prompt': False,
+            'reason': 'Active subscription required'
+        })
+
+    # Check if already has pending or approved review
+    existing_review = Review.objects.filter(
+        organization=organization,
+        status__in=['pending', 'approved']
+    ).first()
+
+    has_submitted = existing_review is not None
+
+    # Check dismissal count
+    dismissal, _ = ReviewPromptDismissal.objects.get_or_create(user=request.user)
+    show_prompt = dismissal.dismissal_count < 3 and not has_submitted
+
+    return Response({
+        'eligible': True,
+        'has_submitted': has_submitted,
+        'show_prompt': show_prompt,
+        'dismissal_count': dismissal.dismissal_count,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dismiss_review_prompt(request):
+    """
+    Increment dismissal count when user dismisses review prompt
+    """
+    from .models import ReviewPromptDismissal
+
+    dismissal, _ = ReviewPromptDismissal.objects.get_or_create(user=request.user)
+    dismissal.dismissal_count += 1
+    dismissal.save()
+
+    return Response({
+        'success': True,
+        'dismissal_count': dismissal.dismissal_count,
+        'show_prompt': dismissal.dismissal_count < 3
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_review(request):
+    """
+    Submit a review (Tenant endpoint)
+    """
+    from .models import Review, OrganizationMembership, Subscription, SuperAdminNotification
+
+    # Get organization
+    membership = OrganizationMembership.objects.filter(
+        user=request.user,
+        is_active=True
+    ).first()
+
+    if not membership:
+        return Response({'error': 'No organization found'}, status=status.HTTP_400_BAD_REQUEST)
+
+    organization = membership.organization
+
+    # Verify subscription status
+    try:
+        subscription = Subscription.objects.get(organization=organization)
+        if subscription.status not in ['active', 'trial', 'grace_period']:
+            return Response({'error': 'Active subscription required to submit review'}, status=status.HTTP_403_FORBIDDEN)
+    except Subscription.DoesNotExist:
+        return Response({'error': 'No subscription found'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Check if already has pending or approved review
+    existing_review = Review.objects.filter(
+        organization=organization,
+        status__in=['pending', 'approved']
+    ).first()
+
+    if existing_review:
+        return Response({
+            'error': 'You already have a review submitted. Only one review per organization is allowed.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data
+
+    # Validate required fields
+    required_fields = ['rating', 'title', 'content', 'display_name']
+    for field in required_fields:
+        if not data.get(field):
+            return Response({'error': f'{field} is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Validate rating
+    rating = int(data.get('rating', 0))
+    if rating < 1 or rating > 5:
+        return Response({'error': 'Rating must be between 1 and 5'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        review = Review.objects.create(
+            organization=organization,
+            submitted_by=request.user,
+            rating=rating,
+            title=data.get('title'),
+            content=data.get('content'),
+            display_name=data.get('display_name'),
+            designation=data.get('designation', ''),
+            company_name=data.get('company_name', ''),
+            profile_image=data.get('profile_image', ''),
+        )
+
+        # Create notification for superadmin
+        SuperAdminNotification.objects.create(
+            notification_type='other',
+            title=f'New Review from {organization.name}',
+            message=f'{data.get("display_name")} submitted a {rating}-star review. Please review and approve.',
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Thank you for your review! It will be visible on our website after approval.',
+            'review_id': str(review.id),
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def superadmin_reviews(request):
+    """
+    Get all reviews (SuperAdmin only)
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'SuperAdmin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    from .models import Review
+
+    status_filter = request.GET.get('status', None)
+
+    reviews = Review.objects.select_related(
+        'organization', 'submitted_by', 'approved_by'
+    ).order_by('-created_at')
+
+    if status_filter:
+        reviews = reviews.filter(status=status_filter)
+
+    data = []
+    for review in reviews:
+        data.append({
+            'id': str(review.id),
+            'organization_name': review.organization.name,
+            'submitted_by': review.submitted_by.email if review.submitted_by else 'Unknown',
+            'rating': review.rating,
+            'title': review.title,
+            'content': review.content,
+            'display_name': review.display_name,
+            'designation': review.designation,
+            'company_name': review.company_name,
+            'profile_image': review.profile_image,
+            'status': review.status,
+            'is_featured': review.is_featured,
+            'rejection_reason': review.rejection_reason,
+            'approved_by': review.approved_by.email if review.approved_by else None,
+            'approved_at': review.approved_at.isoformat() if review.approved_at else None,
+            'created_at': review.created_at.isoformat(),
+        })
+
+    return Response({'reviews': data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_approve_review(request, review_id):
+    """
+    Approve a review (SuperAdmin only)
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'SuperAdmin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    from .models import Review
+    from django.utils import timezone
+
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return Response({'error': 'Review not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if review.status != 'pending':
+        return Response({'error': 'This review has already been processed'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        review.status = 'approved'
+        review.approved_by = request.user
+        review.approved_at = timezone.now()
+        review.save()
+
+        return Response({
+            'success': True,
+            'message': 'Review approved and will now be visible on the landing page.',
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_reject_review(request, review_id):
+    """
+    Reject a review (SuperAdmin only)
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'SuperAdmin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    from .models import Review
+
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return Response({'error': 'Review not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if review.status != 'pending':
+        return Response({'error': 'This review has already been processed'}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data
+    rejection_reason = data.get('rejection_reason', '')
+
+    if not rejection_reason:
+        return Response({'error': 'Rejection reason is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        review.status = 'rejected'
+        review.rejection_reason = rejection_reason
+        review.save()
+
+        return Response({
+            'success': True,
+            'message': 'Review rejected.',
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def superadmin_toggle_featured_review(request, review_id):
+    """
+    Toggle featured status of a review (SuperAdmin only)
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'SuperAdmin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    from .models import Review
+
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return Response({'error': 'Review not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if review.status != 'approved':
+        return Response({'error': 'Only approved reviews can be featured'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        review.is_featured = not review.is_featured
+        review.save()
+
+        return Response({
+            'success': True,
+            'is_featured': review.is_featured,
+            'message': 'Review featured successfully.' if review.is_featured else 'Review unfeatured.',
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

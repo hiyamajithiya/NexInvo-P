@@ -13,6 +13,33 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   const [isNavScrolled, setIsNavScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
+  const [customerReviews, setCustomerReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
+  // Static testimonials data (fallback when no reviews from API)
+  const staticTestimonials = [
+    {
+      name: "Rajesh Kumar",
+      role: "CA, Kumar & Associates",
+      content: "NexInvo has transformed how we manage invoices for our clients. The GST compliance feature is exceptional.",
+      rating: 5
+    },
+    {
+      name: "Priya Sharma",
+      role: "Freelance Designer",
+      content: "Simple, professional invoices in minutes. My clients love the clean format and I love the payment tracking.",
+      rating: 5
+    },
+    {
+      name: "Amit Patel",
+      role: "CEO, TechStart Solutions",
+      content: "Managing multiple organizations from one dashboard is a game-changer. Highly recommended for agencies.",
+      rating: 5
+    }
+  ];
+
+  // Use customerReviews if available, otherwise static testimonials
+  const displayTestimonials = customerReviews.length > 0 ? customerReviews : staticTestimonials;
 
   // Handle navbar scroll effect
   useEffect(() => {
@@ -23,13 +50,15 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Auto-rotate testimonials
   useEffect(() => {
+    const testimonialsToUse = customerReviews.length > 0 ? customerReviews : staticTestimonials;
+    if (testimonialsToUse.length === 0) return;
+
     const interval = setInterval(() => {
-      setActiveTestimonial(prev => (prev + 1) % testimonials.length);
+      setActiveTestimonial(prev => (prev + 1) % testimonialsToUse.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [customerReviews, staticTestimonials]);
 
   // Fetch subscription plans on mount
   useEffect(() => {
@@ -48,6 +77,33 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
       }
     };
     fetchPlans();
+  }, []);
+
+  // Fetch customer reviews on mount
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/reviews/public/`);
+        if (response.data.reviews && response.data.reviews.length > 0) {
+          // Transform API reviews to match testimonials format
+          const formattedReviews = response.data.reviews.map(review => ({
+            name: review.display_name,
+            role: review.designation ? `${review.designation}${review.company_name ? `, ${review.company_name}` : ''}` : (review.company_name || ''),
+            content: review.content,
+            title: review.title,
+            rating: review.rating,
+            profile_image: review.profile_image,
+            is_featured: review.is_featured
+          }));
+          setCustomerReviews(formattedReviews);
+        }
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+    fetchReviews();
   }, []);
 
   const scrollToSection = (sectionId) => {
@@ -70,28 +126,6 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
     if (plan.billing_period === 'lifetime') return ' one-time';
     return `/${plan.billing_period}`;
   };
-
-  // Testimonials data
-  const testimonials = [
-    {
-      name: "Rajesh Kumar",
-      role: "CA, Kumar & Associates",
-      content: "NexInvo has transformed how we manage invoices for our clients. The GST compliance feature is exceptional.",
-      rating: 5
-    },
-    {
-      name: "Priya Sharma",
-      role: "Freelance Designer",
-      content: "Simple, professional invoices in minutes. My clients love the clean format and I love the payment tracking.",
-      rating: 5
-    },
-    {
-      name: "Amit Patel",
-      role: "CEO, TechStart Solutions",
-      content: "Managing multiple organizations from one dashboard is a game-changer. Highly recommended for agencies.",
-      rating: 5
-    }
-  ];
 
   // Features data with icons
   const features = [
@@ -502,41 +536,88 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               See what our customers have to say about NexInvo
             </p>
           </div>
-          <div className="testimonials-slider">
-            <div className="testimonials-track" style={{ transform: `translateX(-${activeTestimonial * 100}%)` }}>
-              {testimonials.map((testimonial, index) => (
-                <div className="testimonial-card" key={index}>
-                  <div className="testimonial-rating">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <span key={i}>★</span>
-                    ))}
-                  </div>
-                  <blockquote className="testimonial-content">
-                    "{testimonial.content}"
-                  </blockquote>
-                  <div className="testimonial-author">
-                    <div className="author-avatar">
-                      {testimonial.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div className="author-info">
-                      <span className="author-name">{testimonial.name}</span>
-                      <span className="author-role">{testimonial.role}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+          {loadingReviews ? (
+            <div className="testimonials-loading" style={{ textAlign: 'center', padding: '60px 0' }}>
+              <div className="loading-spinner"></div>
+              <p>Loading testimonials...</p>
             </div>
-            <div className="testimonials-dots">
-              {testimonials.map((_, index) => (
-                <button
-                  key={index}
-                  className={`dot ${activeTestimonial === index ? 'active' : ''}`}
-                  onClick={() => setActiveTestimonial(index)}
-                  aria-label={`Go to testimonial ${index + 1}`}
-                />
-              ))}
+          ) : (
+            <div className="testimonials-slider">
+              <div className="testimonials-track" style={{ transform: `translateX(-${activeTestimonial * 100}%)` }}>
+                {displayTestimonials.map((testimonial, index) => (
+                  <div className="testimonial-card" key={index}>
+                    {testimonial.is_featured && (
+                      <div className="testimonial-featured-badge" style={{
+                        position: 'absolute',
+                        top: '12px',
+                        right: '12px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}>
+                        ⭐ Featured
+                      </div>
+                    )}
+                    <div className="testimonial-rating">
+                      {[...Array(testimonial.rating)].map((_, i) => (
+                        <span key={i}>★</span>
+                      ))}
+                    </div>
+                    {testimonial.title && (
+                      <h4 style={{
+                        fontSize: '18px',
+                        fontWeight: '600',
+                        color: '#111827',
+                        marginBottom: '8px',
+                        textAlign: 'center'
+                      }}>
+                        "{testimonial.title}"
+                      </h4>
+                    )}
+                    <blockquote className="testimonial-content">
+                      "{testimonial.content}"
+                    </blockquote>
+                    <div className="testimonial-author">
+                      {testimonial.profile_image ? (
+                        <img
+                          src={testimonial.profile_image}
+                          alt={testimonial.name}
+                          className="author-avatar"
+                          style={{
+                            width: '50px',
+                            height: '50px',
+                            borderRadius: '50%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      ) : (
+                        <div className="author-avatar">
+                          {testimonial.name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                      )}
+                      <div className="author-info">
+                        <span className="author-name">{testimonial.name}</span>
+                        {testimonial.role && <span className="author-role">{testimonial.role}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="testimonials-dots">
+                {displayTestimonials.map((_, index) => (
+                  <button
+                    key={index}
+                    className={`dot ${activeTestimonial === index ? 'active' : ''}`}
+                    onClick={() => setActiveTestimonial(index)}
+                    aria-label={`Go to testimonial ${index + 1}`}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

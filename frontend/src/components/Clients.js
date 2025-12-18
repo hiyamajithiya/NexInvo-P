@@ -208,7 +208,7 @@ function Clients() {
     // Create Excel template data with updated fields
     // Note: Client Code is optional - if left blank, it will be auto-generated
     const templateData = [
-      ['Client Name*', 'Client Code (auto-generated if blank)', 'Email*', 'Phone', 'Mobile', 'Address', 'City', 'State', 'PIN Code', 'State Code', 'GSTIN', 'PAN', 'Date of Birth (YYYY-MM-DD)', 'Date of Incorporation (YYYY-MM-DD)'],
+      ['Client Name*', 'Client Code', 'Email*', 'Phone', 'Mobile', 'Address', 'City', 'State', 'PIN Code', 'State Code', 'GSTIN', 'PAN', 'Date of Birth', 'Date of Incorporation'],
       ['ABC Corporation', '', 'abc@example.com', '022-12345678', '9876543210', '123 Main St', 'Mumbai', 'Maharashtra', '400001', '27', '27XXXXX0000X1Z5', 'XXXXX0000X', '', '2020-01-15'],
       ['John Doe', 'CUSTOM01', 'john@example.com', '', '9876543211', '456 Park Ave', 'Delhi', 'Delhi', '110001', '07', '', '', '1985-05-20', '']
     ];
