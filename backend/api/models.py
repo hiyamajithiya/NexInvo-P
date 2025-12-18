@@ -2252,3 +2252,79 @@ class PaymentRequest(models.Model):
         return f"{self.organization.name} - {self.plan.name} ({self.status})"
 
 
+# =============================================================================
+# REVIEW & TESTIMONIAL MODELS
+# =============================================================================
+
+class Review(models.Model):
+    """
+    Customer reviews/testimonials that can be displayed on landing page after approval.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='reviews')
+    submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='submitted_reviews')
+
+    # Review Content
+    rating = models.IntegerField(help_text='Rating from 1 to 5 stars')
+    title = models.CharField(max_length=200, help_text='Short headline for the review')
+    content = models.TextField(help_text='Detailed review content')
+
+    # Display Info (for landing page)
+    display_name = models.CharField(max_length=200, help_text='Name to display (person or company)')
+    designation = models.CharField(max_length=100, blank=True, help_text='e.g., CEO, Manager, Owner')
+    company_name = models.CharField(max_length=200, blank=True, help_text='Company name to display')
+    profile_image = models.TextField(blank=True, help_text='Base64 encoded profile image')
+
+    # Status & Moderation
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_featured = models.BooleanField(default=False, help_text='Featured reviews are highlighted on landing page')
+    rejection_reason = models.TextField(blank=True, help_text='Reason for rejection')
+
+    # Approval Details
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_reviews')
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Review"
+        verbose_name_plural = "Reviews"
+        ordering = ['-created_at']
+        # One review per organization
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organization'],
+                condition=models.Q(status__in=['pending', 'approved']),
+                name='unique_active_review_per_org'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.display_name} - {self.rating} stars ({self.status})"
+
+
+class ReviewPromptDismissal(models.Model):
+    """
+    Track how many times a user has dismissed the review prompt.
+    After 3 dismissals, stop showing the prompt.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='review_prompt_dismissal')
+    dismissal_count = models.IntegerField(default=0)
+    last_dismissed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Review Prompt Dismissal"
+        verbose_name_plural = "Review Prompt Dismissals"
+
+    def __str__(self):
+        return f"{self.user.email} - {self.dismissal_count} dismissals"
+
+

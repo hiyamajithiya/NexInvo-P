@@ -58,6 +58,7 @@ import CouponManagement from './CouponManagement';
 import BulkEmailManager from './BulkEmailManager';
 import PaymentSettingsAdmin from './PaymentSettingsAdmin';
 import PaymentRequestsAdmin from './PaymentRequestsAdmin';
+import ReviewsAdmin from './ReviewsAdmin';
 import './Dashboard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -555,6 +556,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
       case 'payment-requests': return 'Payment Requests';
       case 'payment-settings': return 'Payment Settings';
       case 'bulk-email': return 'Bulk Email Manager';
+      case 'reviews': return 'Customer Reviews';
       case 'settings': return 'System Settings';
       default: return 'Super Admin Portal';
     }
@@ -2052,6 +2054,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
         return <PaymentSettingsAdmin />;
       case 'bulk-email':
         return <BulkEmailManager />;
+      case 'reviews':
+        return <ReviewsAdmin />;
       case 'settings':
         return renderSettingsContent();
       default:
@@ -2195,6 +2199,14 @@ const SuperAdminDashboard = ({ onLogout }) => {
           >
             <span className="nav-icon">🏦</span>
             <span className="nav-text">Payment Settings</span>
+          </a>
+          <a
+            href="#reviews"
+            className={`nav-item ${activeMenu === 'reviews' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('reviews'); }}
+          >
+            <span className="nav-icon">⭐</span>
+            <span className="nav-text">Customer Reviews</span>
           </a>
           <a
             href="#settings"
