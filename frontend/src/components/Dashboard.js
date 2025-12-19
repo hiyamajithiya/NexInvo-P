@@ -209,6 +209,14 @@ function Dashboard({ user, onLogout }) {
     setActiveMenu('submit-review');
   };
 
+  // Handle review submitted - update eligibility state
+  const handleReviewSubmitted = () => {
+    setReviewEligibility(prev => prev ? {
+      ...prev,
+      has_submitted: true
+    } : null);
+  };
+
   // Handle menu item click (also closes mobile menu)
   const handleMenuClick = (menuItem) => {
     setActiveMenu(menuItem);
@@ -240,7 +248,7 @@ function Dashboard({ user, onLogout }) {
       case 'tally-sync':
         return <TallySyncCorner />;
       case 'submit-review':
-        return <ReviewSubmitPage onNavigate={setActiveMenu} />;
+        return <ReviewSubmitPage onNavigate={setActiveMenu} onReviewSubmitted={handleReviewSubmitted} />;
       case 'profile':
         return <Profile onLogout={handleLogoutWithReviewPrompt} />;
       default:

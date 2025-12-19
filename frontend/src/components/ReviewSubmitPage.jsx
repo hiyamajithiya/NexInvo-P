@@ -22,7 +22,7 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 
-const ReviewSubmitPage = ({ onNavigate }) => {
+const ReviewSubmitPage = ({ onNavigate, onReviewSubmitted }) => {
   const [loading, setLoading] = useState(true);
   const [eligibility, setEligibility] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -94,6 +94,10 @@ const ReviewSubmitPage = ({ onNavigate }) => {
     try {
       await api.post('/reviews/submit/', formData);
       setSubmitted(true);
+      // Notify parent that review was submitted
+      if (onReviewSubmitted) {
+        onReviewSubmitted();
+      }
       showSnackbar('Thank you for your review! It will be visible after approval.', 'success');
     } catch (error) {
       console.error('Error submitting review:', error);
@@ -389,13 +393,13 @@ const ReviewSubmitPage = ({ onNavigate }) => {
 
         {/* Preview */}
         <Grid item xs={12} md={5}>
-          <Paper sx={{ p: 3, borderRadius: 3, position: 'sticky', top: 20 }}>
+          <Paper sx={{ p: 3, borderRadius: 3, position: 'sticky', top: 20, minWidth: 0 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827', mb: 3 }}>
               Preview
             </Typography>
 
-            <Card sx={{ bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 3 }}>
-              <CardContent sx={{ p: 3, textAlign: 'center' }}>
+            <Card sx={{ bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+              <CardContent sx={{ p: 3, textAlign: 'center', overflow: 'hidden' }}>
                 <Avatar
                   src={formData.profile_image}
                   sx={{ width: 70, height: 70, mx: 'auto', mb: 2, bgcolor: '#8b5cf6' }}
@@ -403,17 +407,54 @@ const ReviewSubmitPage = ({ onNavigate }) => {
                   {formData.display_name?.charAt(0)?.toUpperCase() || '?'}
                 </Avatar>
                 <Rating value={formData.rating} readOnly sx={{ mb: 2 }} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 'bold',
+                    color: '#111827',
+                    mb: 1,
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    hyphens: 'auto',
+                  }}
+                >
                   "{formData.title || 'Your review title...'}"
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#4b5563', mb: 3, fontStyle: 'italic' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: '#4b5563',
+                    mb: 3,
+                    fontStyle: 'italic',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    hyphens: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                  }}
+                >
                   "{formData.content || 'Your review content will appear here...'}"
                 </Typography>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    fontWeight: 'bold',
+                    color: '#111827',
+                    wordBreak: 'break-word',
+                  }}
+                >
                   {formData.display_name || 'Your Name'}
                 </Typography>
                 {(formData.designation || formData.company_name) && (
-                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: '#6b7280',
+                      wordBreak: 'break-word',
+                      display: 'block',
+                    }}
+                  >
                     {formData.designation}
                     {formData.designation && formData.company_name ? ' at ' : ''}
                     {formData.company_name}

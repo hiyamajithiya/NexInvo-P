@@ -121,10 +121,10 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   };
 
   const getBillingPeriod = (plan) => {
-    if (plan.billing_period === 'monthly') return '/month';
-    if (plan.billing_period === 'yearly') return '/year';
-    if (plan.billing_period === 'lifetime') return ' one-time';
-    return `/${plan.billing_period}`;
+    if (plan.billing_cycle === 'monthly') return '/month';
+    if (plan.billing_cycle === 'yearly') return '/year';
+    if (plan.billing_cycle === 'lifetime') return ' one-time';
+    return `/${plan.billing_cycle || 'month'}`;
   };
 
   // Features data with icons
@@ -641,9 +641,9 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               subscriptionPlans.map((plan) => (
                 <div
                   key={plan.id}
-                  className={`pricing-card ${plan.is_popular ? 'popular' : ''}`}
+                  className={`pricing-card ${plan.highlight ? 'popular' : ''}`}
                 >
-                  {plan.is_popular && (
+                  {plan.highlight && (
                     <div className="popular-badge">Most Popular</div>
                   )}
                   <div className="pricing-header">
@@ -657,7 +657,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
                   <ul className="plan-features">
                     <li>
                       <span className="check">✓</span>
-                      {plan.max_invoices === -1 ? 'Unlimited Invoices' : `${plan.max_invoices} Invoices/month`}
+                      {plan.max_invoices_per_month === -1 ? 'Unlimited Invoices' : `${plan.max_invoices_per_month} Invoices/month`}
                     </li>
                     <li>
                       <span className="check">✓</span>
@@ -665,9 +665,19 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
                     </li>
                     <li>
                       <span className="check">✓</span>
-                      {plan.max_clients === -1 ? 'Unlimited Clients' : `${plan.max_clients} Clients`}
+                      {plan.max_organizations === -1 ? 'Unlimited Organizations' : `${plan.max_organizations} Organization${plan.max_organizations > 1 ? 's' : ''}`}
                     </li>
-                    {plan.features && plan.features.slice(0, 4).map((feature, idx) => (
+                    <li>
+                      <span className="check">✓</span>
+                      {plan.max_storage_gb === -1 ? 'Unlimited Storage' : `${plan.max_storage_gb} GB Storage`}
+                    </li>
+                    {plan.trial_days > 0 && (
+                      <li>
+                        <span className="check">✓</span>
+                        {plan.trial_days} Days Free Trial
+                      </li>
+                    )}
+                    {plan.features && plan.features.slice(0, 3).map((feature, idx) => (
                       <li key={idx}>
                         <span className="check">✓</span>
                         {feature}
@@ -675,7 +685,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
                     ))}
                   </ul>
                   <button
-                    className={`btn-plan ${plan.is_popular ? 'primary' : 'secondary'}`}
+                    className={`btn-plan ${plan.highlight ? 'primary' : 'secondary'}`}
                     onClick={onNavigateToSignup}
                   >
                     {parseFloat(plan.price) === 0 ? 'Get Started Free' : 'Start Free Trial'}
