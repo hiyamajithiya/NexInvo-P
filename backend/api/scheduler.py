@@ -6,12 +6,18 @@ It runs automatically when the Django server starts.
 """
 
 import logging
+import threading
 from datetime import datetime
 from django.conf import settings
 from django.utils import timezone
 from django.core.mail import EmailMessage
+from django.core.cache import cache
 
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# Lock to prevent multiple simultaneous reminder sends
+_reminder_lock = threading.Lock()
+_scheduler_started = False
 from apscheduler.triggers.cron import CronTrigger
 from django_apscheduler.jobstores import DjangoJobStore
 from django_apscheduler.models import DjangoJobExecution
@@ -36,86 +42,110 @@ def send_payment_reminders():
     Send payment reminders for all organizations with active reminder settings.
     This function is called automatically by the scheduler.
     """
-    from api.models import Invoice, InvoiceSettings, EmailSettings, CompanySettings
-    from api.pdf_generator import generate_invoice_pdf
+    global _reminder_lock
 
-    logger.info("Starting automated payment reminder process...")
+    # Use lock to prevent multiple simultaneous executions
+    if not _reminder_lock.acquire(blocking=False):
+        logger.warning("Payment reminder process already running, skipping...")
+        return "Skipped: Already running"
 
-    # Get all organizations with active reminders
-    orgs_with_reminders = InvoiceSettings.objects.filter(
-        enablePaymentReminders=True
-    )
+    try:
+        from api.models import Invoice, InvoiceSettings, EmailSettings, CompanySettings
+        from api.pdf_generator import generate_invoice_pdf
 
-    total_sent = 0
-    total_skipped = 0
-    total_failed = 0
+        logger.info("Starting automated payment reminder process...")
 
-    for invoice_settings in orgs_with_reminders:
-        # Skip if no organization is linked (legacy data)
-        if not invoice_settings.organization_id:
-            logger.warning(f'Skipping InvoiceSettings {invoice_settings.id} - no organization linked')
-            continue
-
-        organization = invoice_settings.organization
-        frequency_days = invoice_settings.reminderFrequencyDays
-
-        # Get unpaid invoices (both proforma and tax) for this organization
-        unpaid_invoices = Invoice.objects.filter(
-            organization=organization,
-            invoice_type__in=['proforma', 'tax'],
-            status__in=['draft', 'sent']
-        ).exclude(
-            status='paid'
-        ).exclude(
-            status='cancelled'
+        # Get all organizations with active reminders
+        orgs_with_reminders = InvoiceSettings.objects.filter(
+            enablePaymentReminders=True
         )
 
-        for invoice in unpaid_invoices:
-            # Check if reminder should be sent based on frequency
-            should_send = False
-            skip_reason = None
+        total_sent = 0
+        total_skipped = 0
+        total_failed = 0
 
-            if invoice.last_reminder_sent is None:
-                # Never sent a reminder, check if invoice is old enough
-                days_since_invoice = (timezone.now().date() - invoice.invoice_date).days
-                if days_since_invoice >= frequency_days:
-                    should_send = True
-                else:
-                    skip_reason = f"Invoice only {days_since_invoice} days old (needs {frequency_days} days)"
-            else:
-                # Check if enough days have passed since last reminder
-                days_since_last_reminder = (timezone.now() - invoice.last_reminder_sent).days
-                if days_since_last_reminder >= frequency_days:
-                    should_send = True
-                else:
-                    skip_reason = f"Last reminder {days_since_last_reminder} days ago (needs {frequency_days} days)"
+        for invoice_settings in orgs_with_reminders:
+            # Skip if no organization is linked (legacy data)
+            if not invoice_settings.organization_id:
+                logger.warning(f'Skipping InvoiceSettings {invoice_settings.id} - no organization linked')
+                continue
 
-            # Check if client has email
-            if should_send and not invoice.client.email:
+            organization = invoice_settings.organization
+            frequency_days = invoice_settings.reminderFrequencyDays
+
+            # Get unpaid invoices (both proforma and tax) for this organization
+            unpaid_invoices = Invoice.objects.filter(
+                organization=organization,
+                invoice_type__in=['proforma', 'tax'],
+                status__in=['draft', 'sent']
+            ).exclude(
+                status='paid'
+            ).exclude(
+                status='cancelled'
+            )
+
+            for invoice in unpaid_invoices:
+                # Check if reminder should be sent based on frequency
                 should_send = False
-                skip_reason = f"Client {invoice.client.name} has no email address"
+                skip_reason = None
 
-            if should_send:
-                try:
-                    # Send reminder email
-                    send_reminder_email(invoice, invoice_settings, organization)
+                if invoice.last_reminder_sent is None:
+                    # Never sent a reminder, check if invoice is old enough
+                    days_since_invoice = (timezone.now().date() - invoice.invoice_date).days
+                    if days_since_invoice >= frequency_days:
+                        should_send = True
+                    else:
+                        skip_reason = f"Invoice only {days_since_invoice} days old (needs {frequency_days} days)"
+                else:
+                    # Check if enough days have passed since last reminder
+                    days_since_last_reminder = (timezone.now() - invoice.last_reminder_sent).days
+                    if days_since_last_reminder >= frequency_days:
+                        should_send = True
+                    else:
+                        skip_reason = f"Last reminder {days_since_last_reminder} days ago (needs {frequency_days} days)"
 
-                    # Update invoice reminder tracking
-                    invoice.last_reminder_sent = timezone.now()
-                    invoice.reminder_count += 1
-                    invoice.save()
+                # Check if client has email
+                if should_send and not invoice.client.email:
+                    should_send = False
+                    skip_reason = f"Client {invoice.client.name} has no email address"
 
-                    total_sent += 1
-                    logger.info(f'[SENT] Reminder for {invoice.invoice_number} to {invoice.client.email}')
-                except Exception as e:
-                    total_failed += 1
-                    logger.error(f'[FAILED] {invoice.invoice_number}: {str(e)}')
-            else:
-                total_skipped += 1
-                logger.debug(f'[SKIP] {invoice.invoice_number}: {skip_reason}')
+                if should_send:
+                    try:
+                        # Use select_for_update to prevent race conditions
+                        # Re-fetch the invoice with a lock to ensure no duplicate sends
+                        from django.db import transaction
+                        with transaction.atomic():
+                            locked_invoice = Invoice.objects.select_for_update(nowait=True).get(pk=invoice.pk)
 
-    logger.info(f'Payment reminders completed: {total_sent} sent, {total_skipped} skipped, {total_failed} failed')
-    return f"Sent: {total_sent}, Skipped: {total_skipped}, Failed: {total_failed}"
+                            # Double-check the reminder hasn't been sent by another process
+                            if locked_invoice.last_reminder_sent is not None:
+                                days_since = (timezone.now() - locked_invoice.last_reminder_sent).days
+                                if days_since < frequency_days:
+                                    logger.debug(f'[SKIP] {invoice.invoice_number}: Already sent by another process')
+                                    total_skipped += 1
+                                    continue
+
+                            # Send reminder email
+                            send_reminder_email(locked_invoice, invoice_settings, organization)
+
+                            # Update invoice reminder tracking
+                            locked_invoice.last_reminder_sent = timezone.now()
+                            locked_invoice.reminder_count += 1
+                            locked_invoice.save()
+
+                        total_sent += 1
+                        logger.info(f'[SENT] Reminder for {invoice.invoice_number} to {invoice.client.email}')
+                    except Exception as e:
+                        total_failed += 1
+                        logger.error(f'[FAILED] {invoice.invoice_number}: {str(e)}')
+                else:
+                    total_skipped += 1
+                    logger.debug(f'[SKIP] {invoice.invoice_number}: {skip_reason}')
+
+        logger.info(f'Payment reminders completed: {total_sent} sent, {total_skipped} skipped, {total_failed} failed')
+        return f"Sent: {total_sent}, Skipped: {total_skipped}, Failed: {total_failed}"
+    finally:
+        _reminder_lock.release()
 
 
 def send_reminder_email(invoice, invoice_settings, organization):
@@ -302,7 +332,6 @@ def check_and_send_pending_reminders():
     This is called on server startup to catch any missed reminders.
     """
     from api.models import Invoice, InvoiceSettings
-    import threading
 
     def _send_pending():
         try:
@@ -357,6 +386,14 @@ def start_scheduler():
     Start the background scheduler with payment reminder job.
     This is called when Django server starts.
     """
+    global _scheduler_started
+
+    # Prevent multiple scheduler starts
+    if _scheduler_started:
+        logger.warning("Scheduler already started, skipping duplicate start...")
+        return
+
+    _scheduler_started = True
     scheduler = BackgroundScheduler(timezone=settings.TIME_ZONE)
     scheduler.add_jobstore(DjangoJobStore(), "default")
 
