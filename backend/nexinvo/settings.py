@@ -270,6 +270,12 @@ CSRF_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
+# CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = [
+    "https://nexinvo.in",
+    "https://www.nexinvo.in",
+]
+
 # Content Security Policy (CSP) Headers - Implement via middleware or nginx in production
 # For Django, consider using django-csp package
 
