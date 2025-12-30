@@ -145,23 +145,38 @@ class InvoiceSerializer(serializers.ModelSerializer):
         try:
             company_settings = CompanySettings.objects.get(organization=invoice.organization)
 
-            # Get company state code - try stateCode first, then extract from GSTIN
-            company_state_code = ''
-            if company_settings.stateCode:
-                company_state_code = str(company_settings.stateCode).strip()
-            elif company_settings.gstin and len(company_settings.gstin) >= 2:
-                company_state_code = str(company_settings.gstin[:2]).strip()
+            # Helper function to get state code - prefer GSTIN extraction as it's more reliable
+            def get_state_code(gstin, state_code_field):
+                # First try to extract from GSTIN (first 2 digits)
+                if gstin and len(str(gstin).strip()) >= 2:
+                    extracted = str(gstin).strip()[:2]
+                    if extracted.isdigit():
+                        return extracted
+                # Fall back to stateCode field if it's a valid 2-digit code
+                if state_code_field:
+                    state_code = str(state_code_field).strip()
+                    # Ensure it's a valid state code (2 digits, 01-38)
+                    if state_code.isdigit() and len(state_code) <= 2:
+                        return state_code.zfill(2)  # Pad to 2 digits
+                return ''
 
-            # Get client state code - try stateCode first, then extract from GSTIN
+            # Get company state code
+            company_state_code = get_state_code(
+                company_settings.gstin,
+                company_settings.stateCode
+            )
+
+            # Get client state code
             client_state_code = ''
             if invoice.client:
-                if invoice.client.stateCode:
-                    client_state_code = str(invoice.client.stateCode).strip()
-                elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
-                    client_state_code = str(invoice.client.gstin[:2]).strip()
+                client_state_code = get_state_code(
+                    invoice.client.gstin,
+                    invoice.client.stateCode
+                )
 
             print(f"[GST Debug] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
             print(f"[GST Debug] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{invoice.client.gstin if invoice.client else 'N/A'}'")
+            print(f"[GST Debug] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{invoice.client.stateCode if invoice.client else 'N/A'}'")
 
             if company_state_code and client_state_code:
                 is_interstate = company_state_code != client_state_code
@@ -242,23 +257,38 @@ class InvoiceSerializer(serializers.ModelSerializer):
             try:
                 company_settings = CompanySettings.objects.get(organization=instance.organization)
 
-                # Get company state code - try stateCode first, then extract from GSTIN
-                company_state_code = ''
-                if company_settings.stateCode:
-                    company_state_code = str(company_settings.stateCode).strip()
-                elif company_settings.gstin and len(company_settings.gstin) >= 2:
-                    company_state_code = str(company_settings.gstin[:2]).strip()
+                # Helper function to get state code - prefer GSTIN extraction as it's more reliable
+                def get_state_code(gstin, state_code_field):
+                    # First try to extract from GSTIN (first 2 digits)
+                    if gstin and len(str(gstin).strip()) >= 2:
+                        extracted = str(gstin).strip()[:2]
+                        if extracted.isdigit():
+                            return extracted
+                    # Fall back to stateCode field if it's a valid 2-digit code
+                    if state_code_field:
+                        state_code = str(state_code_field).strip()
+                        # Ensure it's a valid state code (2 digits, 01-38)
+                        if state_code.isdigit() and len(state_code) <= 2:
+                            return state_code.zfill(2)  # Pad to 2 digits
+                    return ''
 
-                # Get client state code - try stateCode first, then extract from GSTIN
+                # Get company state code
+                company_state_code = get_state_code(
+                    company_settings.gstin,
+                    company_settings.stateCode
+                )
+
+                # Get client state code
                 client_state_code = ''
                 if instance.client:
-                    if instance.client.stateCode:
-                        client_state_code = str(instance.client.stateCode).strip()
-                    elif instance.client.gstin and len(instance.client.gstin) >= 2:
-                        client_state_code = str(instance.client.gstin[:2]).strip()
+                    client_state_code = get_state_code(
+                        instance.client.gstin,
+                        instance.client.stateCode
+                    )
 
                 print(f"[GST Debug Update] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
                 print(f"[GST Debug Update] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{instance.client.gstin if instance.client else 'N/A'}'")
+                print(f"[GST Debug Update] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{instance.client.stateCode if instance.client else 'N/A'}'")
 
                 if company_state_code and client_state_code:
                     is_interstate = company_state_code != client_state_code
