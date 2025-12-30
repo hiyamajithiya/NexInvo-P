@@ -111,6 +111,11 @@ export const authAPI = {
   sendOTP: (email) => api.post('/send-otp/', { email }),
   verifyOTP: (email, otp) => api.post('/verify-otp/', { email, otp }),
   resendOTP: (email) => api.post('/resend-otp/', { email }),
+  // Forgot Password
+  forgotPasswordSendOTP: (email) => api.post('/forgot-password/send-otp/', { email }),
+  forgotPasswordVerifyOTP: (email, otp) => api.post('/forgot-password/verify-otp/', { email, otp }),
+  forgotPasswordReset: (email, otp, new_password, confirm_password) =>
+    api.post('/forgot-password/reset/', { email, otp, new_password, confirm_password }),
 };
 
 // Organization APIs
