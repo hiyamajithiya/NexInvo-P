@@ -18,7 +18,10 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse
-from api.views import EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view, logout_view
+from api.views import (
+    EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view, logout_view,
+    forgot_password_send_otp_view, forgot_password_verify_otp_view, forgot_password_reset_view
+)
 
 def api_root(request):
     return JsonResponse({
@@ -44,5 +47,9 @@ urlpatterns = [
     path("api/token/", EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("api/token/refresh/", TokenRefreshView.as_view(), name='token_refresh'),
     path("api/logout/", logout_view, name='logout'),
+    # Forgot Password endpoints
+    path("api/forgot-password/send-otp/", forgot_password_send_otp_view, name='forgot_password_send_otp'),
+    path("api/forgot-password/verify-otp/", forgot_password_verify_otp_view, name='forgot_password_verify_otp'),
+    path("api/forgot-password/reset/", forgot_password_reset_view, name='forgot_password_reset'),
     path("api/", include('api.urls')),
 ]

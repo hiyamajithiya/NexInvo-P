@@ -555,3 +555,92 @@ Support: {SUPPORT_EMAIL}
     except Exception as e:
         logger.error(f"Failed to send OTP email to {email}: {str(e)}")
         return False
+
+
+def send_password_reset_otp_email(email, otp_code, user_name='User'):
+    """
+    Send OTP email for password reset
+
+    Args:
+        email: Email address to send OTP to
+        otp_code: 6-digit OTP code
+        user_name: User's first name for personalization
+
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        subject = 'NexInvo - Password Reset OTP'
+
+        # Build professional HTML content
+        content = format_paragraph(f"Hello {user_name},", style="normal")
+        content += format_paragraph(
+            "We received a request to reset your password for your NexInvo account. Please use the following OTP to reset your password:",
+            style="lead"
+        )
+
+        # OTP code block
+        content += format_code_block(otp_code, "Your Password Reset OTP")
+
+        content += format_alert_box(
+            "<strong>Important:</strong> This OTP is valid for <strong>10 minutes</strong> only. Do not share this OTP with anyone.",
+            "warning"
+        )
+
+        content += format_paragraph(
+            "If you didn't request a password reset, please ignore this email. Your password will remain unchanged.",
+            style="muted"
+        )
+
+        content += format_alert_box(
+            "If you didn't request this, someone may be trying to access your account. We recommend changing your password immediately if you suspect unauthorized access.",
+            "info"
+        )
+
+        content += format_divider()
+        content += format_paragraph(
+            f"For support, contact <a href='mailto:{SUPPORT_EMAIL}' style='color: #6366f1;'>{SUPPORT_EMAIL}</a>",
+            style="small"
+        )
+
+        # Generate full HTML email
+        html_message = get_base_email_template(
+            subject="Password Reset",
+            content=content,
+            company_name="NexInvo",
+            company_tagline="Invoice Management System",
+        )
+
+        plain_message = f"""
+NexInvo - Password Reset
+
+Hello {user_name},
+
+We received a request to reset your password for your NexInvo account. Please use the following OTP to reset your password:
+
+Your OTP: {otp_code}
+
+This OTP is valid for 10 minutes only. Do not share this OTP with anyone.
+
+If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
+
+If you didn't request this, someone may be trying to access your account. We recommend changing your password immediately if you suspect unauthorized access.
+
+---
+© 2025 Chinmay Technosoft Private Limited. All rights reserved.
+Support: {SUPPORT_EMAIL}
+        """
+
+        send_email_with_system_settings(
+            subject=subject,
+            plain_message=plain_message,
+            html_message=html_message,
+            recipient_list=[email],
+        )
+
+        logger.info(f"Password reset OTP email sent to {email}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send password reset OTP email to {email}: {str(e)}")
+        return False
