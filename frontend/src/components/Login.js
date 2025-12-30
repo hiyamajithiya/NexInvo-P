@@ -5,6 +5,8 @@ import './Login.css';
 
 const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   const [isRegisterMode, setIsRegisterMode] = useState(initialMode === 'register');
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState(1); // 1: email, 2: OTP, 3: new password
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -28,6 +30,11 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   const [logoutMessage, setLogoutMessage] = useState('');
   const [showForceLoginDialog, setShowForceLoginDialog] = useState(false);
   const [existingSessionInfo, setExistingSessionInfo] = useState(null);
+
+  // Forgot password states
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [forgotPasswordOtp, setForgotPasswordOtp] = useState('');
 
   // Check for logout reason on mount
   useEffect(() => {
@@ -233,6 +240,124 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
     setExistingSessionInfo(null);
   };
 
+  // Forgot Password handlers
+  const handleForgotPasswordSendOTP = async () => {
+    if (!username) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.forgotPasswordSendOTP(username);
+      setForgotPasswordStep(2);
+      setResendTimer(60);
+      setSuccessMessage('If an account exists with this email, you will receive an OTP.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPasswordVerifyOTP = async () => {
+    if (!forgotPasswordOtp || forgotPasswordOtp.length !== 6) {
+      setError('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.forgotPasswordVerifyOTP(username, forgotPasswordOtp);
+      setForgotPasswordStep(3);
+      setSuccessMessage('OTP verified! Please enter your new password.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPasswordReset = async () => {
+    if (!newPassword || newPassword.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.forgotPasswordReset(username, forgotPasswordOtp, newPassword, confirmPassword);
+      setSuccessMessage('Password reset successfully! Please login with your new password.');
+      // Reset all states and go back to login
+      setTimeout(() => {
+        setIsForgotPasswordMode(false);
+        setForgotPasswordStep(1);
+        setUsername('');
+        setForgotPasswordOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }, 2000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to reset password. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendForgotPasswordOTP = async () => {
+    if (resendTimer > 0) return;
+
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      await authAPI.forgotPasswordSendOTP(username);
+      setForgotPasswordOtp('');
+      setResendTimer(60);
+      setSuccessMessage('New OTP sent to your email.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to resend OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = (e) => {
+    e.preventDefault();
+    if (forgotPasswordStep === 1) {
+      handleForgotPasswordSendOTP();
+    } else if (forgotPasswordStep === 2) {
+      handleForgotPasswordVerifyOTP();
+    } else if (forgotPasswordStep === 3) {
+      handleForgotPasswordReset();
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setIsForgotPasswordMode(false);
+    setForgotPasswordStep(1);
+    setError('');
+    setSuccessMessage('');
+    setForgotPasswordOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
   const toggleMode = () => {
     setIsRegisterMode(!isRegisterMode);
     setError('');
@@ -271,6 +396,14 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
   // Get step title
   const getStepTitle = () => {
+    if (isForgotPasswordMode) {
+      switch (forgotPasswordStep) {
+        case 1: return 'Forgot Password';
+        case 2: return 'Verify OTP';
+        case 3: return 'Reset Password';
+        default: return 'Forgot Password';
+      }
+    }
     if (!isRegisterMode) return 'Welcome Back';
     switch (registrationStep) {
       case 1: return 'Create Account';
@@ -282,6 +415,14 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
   // Get step description
   const getStepDescription = () => {
+    if (isForgotPasswordMode) {
+      switch (forgotPasswordStep) {
+        case 1: return 'Enter your email to receive a password reset OTP';
+        case 2: return `Enter the OTP sent to ${username}`;
+        case 3: return 'Create a new password for your account';
+        default: return 'Reset your password';
+      }
+    }
     if (!isRegisterMode) return 'Sign in to your account';
     switch (registrationStep) {
       case 1: return 'Enter your email to get started';
@@ -498,6 +639,18 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
               Back
             </button>
           )}
+          {isForgotPasswordMode && (
+            <button
+              type="button"
+              onClick={handleBackToLogin}
+              className="back-step-btn"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Back to Login
+            </button>
+          )}
         </div>
 
         <div className="login-card">
@@ -520,9 +673,25 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
                 </div>
               </div>
             )}
+            {isForgotPasswordMode && (
+              <div className="registration-steps">
+                <div className={`step ${forgotPasswordStep >= 1 ? 'active' : ''} ${forgotPasswordStep > 1 ? 'completed' : ''}`}>
+                  <span className="step-number">{forgotPasswordStep > 1 ? '✓' : '1'}</span>
+                  <span className="step-label">Email</span>
+                </div>
+                <div className={`step ${forgotPasswordStep >= 2 ? 'active' : ''} ${forgotPasswordStep > 2 ? 'completed' : ''}`}>
+                  <span className="step-number">{forgotPasswordStep > 2 ? '✓' : '2'}</span>
+                  <span className="step-label">Verify</span>
+                </div>
+                <div className={`step ${forgotPasswordStep >= 3 ? 'active' : ''}`}>
+                  <span className="step-number">3</span>
+                  <span className="step-label">Reset</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          <form onSubmit={handleSubmit} className="login-form">
+          <form onSubmit={isForgotPasswordMode ? handleForgotPasswordSubmit : handleSubmit} className="login-form">
             {logoutMessage && (
               <div className="info-message" style={{
                 backgroundColor: '#fef3c7',
@@ -693,7 +862,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
             )}
 
             {/* Login form fields */}
-            {!isRegisterMode && (
+            {!isRegisterMode && !isForgotPasswordMode && (
               <>
                 <div className="form-group">
                   <label htmlFor="username">Email Address</label>
@@ -719,6 +888,132 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
                       placeholder="Enter your password"
                       required
                       autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex="-1"
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                  <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotPasswordMode(true)}
+                      className="link-button"
+                      style={{ fontSize: '13px' }}
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Forgot Password Step 1: Email */}
+            {isForgotPasswordMode && forgotPasswordStep === 1 && (
+              <div className="form-group">
+                <label htmlFor="forgotEmail">Email Address *</label>
+                <input
+                  id="forgotEmail"
+                  type="email"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                />
+                <small className="form-help">Enter the email address associated with your account</small>
+              </div>
+            )}
+
+            {/* Forgot Password Step 2: OTP Verification */}
+            {isForgotPasswordMode && forgotPasswordStep === 2 && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="forgotOtp">Enter OTP *</label>
+                  <input
+                    id="forgotOtp"
+                    type="text"
+                    value={forgotPasswordOtp}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setForgotPasswordOtp(value);
+                    }}
+                    placeholder="Enter 6-digit OTP"
+                    required
+                    maxLength={6}
+                    style={{ letterSpacing: '8px', textAlign: 'center', fontSize: '20px' }}
+                  />
+                  <small className="form-help">
+                    OTP sent to {username}. Valid for 10 minutes.
+                  </small>
+                </div>
+                <div className="resend-otp-container">
+                  {resendTimer > 0 ? (
+                    <span className="resend-timer">Resend OTP in {resendTimer}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="resend-otp-btn"
+                      onClick={handleResendForgotPasswordOTP}
+                      disabled={loading}
+                    >
+                      Resend OTP
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Forgot Password Step 3: New Password */}
+            {isForgotPasswordMode && forgotPasswordStep === 3 && (
+              <>
+                <div className="verified-email-badge">
+                  <span className="verified-icon">✓</span>
+                  <span className="verified-text">{username}</span>
+                  <span className="verified-label">Verified</span>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="newPassword">New Password *</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="newPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex="-1"
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                  <small className="form-help">Minimum 8 characters</small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="confirmPassword">Confirm Password *</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="confirmPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
@@ -763,12 +1058,22 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
               disabled={loading}
             >
               {loading ? (
+                isForgotPasswordMode ? (
+                  forgotPasswordStep === 1 ? 'Sending OTP...' :
+                  forgotPasswordStep === 2 ? 'Verifying...' :
+                  'Resetting Password...'
+                ) :
                 isRegisterMode ? (
                   registrationStep === 1 ? 'Sending OTP...' :
                   registrationStep === 2 ? 'Verifying...' :
                   'Creating Account...'
                 ) : 'Signing in...'
               ) : (
+                isForgotPasswordMode ? (
+                  forgotPasswordStep === 1 ? 'Send OTP' :
+                  forgotPasswordStep === 2 ? 'Verify OTP' :
+                  'Reset Password'
+                ) :
                 isRegisterMode ? (
                   registrationStep === 1 ? 'Send OTP' :
                   registrationStep === 2 ? 'Verify OTP' :
@@ -777,15 +1082,17 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
               )}
             </button>
 
-            <div className="form-footer">
-              <button
-                type="button"
-                onClick={toggleMode}
-                className="toggle-mode-btn"
-              >
-                {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register"}
-              </button>
-            </div>
+            {!isForgotPasswordMode && (
+              <div className="form-footer">
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="toggle-mode-btn"
+                >
+                  {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register"}
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </div>

@@ -356,6 +356,187 @@ def resend_otp_view(request):
         )
 
 
+# =============================================================================
+# FORGOT PASSWORD VIEWS
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password_send_otp_view(request):
+    """Send OTP to email for password reset"""
+    from .models import PasswordResetOTP
+
+    email = request.data.get('email', '').strip().lower()
+
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Basic email validation
+    import re
+    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_regex, email):
+        return Response(
+            {'error': 'Please enter a valid email address'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if user exists
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        # For security, don't reveal if email exists or not
+        return Response({
+            'success': True,
+            'message': f'If an account exists with {email}, you will receive an OTP.',
+            'expires_in_minutes': 10
+        })
+
+    try:
+        # Generate OTP
+        otp = PasswordResetOTP.generate_otp(email)
+
+        # Send OTP via email
+        from .email_utils import send_password_reset_otp_email
+        email_sent = send_password_reset_otp_email(email, otp.otp_code, user.first_name or 'User')
+
+        if email_sent:
+            return Response({
+                'success': True,
+                'message': f'OTP sent to {email}. Please check your email.',
+                'expires_in_minutes': 10
+            })
+        else:
+            return Response(
+                {'error': 'Failed to send OTP email. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except Exception as e:
+        print(f"Forgot password OTP error: {e}")
+        return Response(
+            {'error': f'Failed to send OTP: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password_verify_otp_view(request):
+    """Verify OTP for password reset"""
+    from .models import PasswordResetOTP
+
+    email = request.data.get('email', '').strip().lower()
+    otp_code = request.data.get('otp', '').strip()
+
+    if not email or not otp_code:
+        return Response(
+            {'error': 'Email and OTP are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Verify OTP
+    success, message, otp_obj = PasswordResetOTP.verify_otp(email, otp_code)
+
+    if success:
+        return Response({
+            'success': True,
+            'message': message,
+            'otp_verified': True
+        })
+    else:
+        return Response(
+            {'error': message},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password_reset_view(request):
+    """Reset password after OTP verification"""
+    from .models import PasswordResetOTP
+
+    email = request.data.get('email', '').strip().lower()
+    otp_code = request.data.get('otp', '').strip()
+    new_password = request.data.get('new_password', '')
+    confirm_password = request.data.get('confirm_password', '')
+
+    if not email or not otp_code or not new_password:
+        return Response(
+            {'error': 'Email, OTP, and new password are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if new_password != confirm_password:
+        return Response(
+            {'error': 'Passwords do not match'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Password strength validation
+    if len(new_password) < 8:
+        return Response(
+            {'error': 'Password must be at least 8 characters long'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check for verified OTP
+    try:
+        otp = PasswordResetOTP.objects.get(
+            email=email,
+            otp_code=otp_code,
+            is_verified=True,
+            is_used=False
+        )
+
+        # Check if not expired
+        if otp.is_expired():
+            return Response(
+                {'error': 'OTP has expired. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    except PasswordResetOTP.DoesNotExist:
+        return Response(
+            {'error': 'Invalid or expired OTP. Please verify OTP first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Get user and update password
+    try:
+        user = User.objects.get(email=email)
+        user.set_password(new_password)
+        user.save()
+
+        # Mark OTP as used
+        otp.is_used = True
+        otp.save()
+
+        # Clear any existing sessions for this user (force re-login)
+        from .models import UserSession
+        UserSession.objects.filter(user=user).delete()
+
+        return Response({
+            'success': True,
+            'message': 'Password reset successfully. Please login with your new password.'
+        })
+
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        print(f"Password reset error: {e}")
+        return Response(
+            {'error': 'Failed to reset password. Please try again.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 # User Registration View
 @api_view(['POST'])
 @permission_classes([AllowAny])
