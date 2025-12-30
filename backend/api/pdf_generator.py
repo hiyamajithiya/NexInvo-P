@@ -310,20 +310,36 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
                     if hasattr(invoice, 'is_interstate') and invoice.is_interstate is not None:
                         is_interstate = invoice.is_interstate
                     else:
-                        # Fall back to state code comparison
+                        # Fall back to state code comparison using GSTIN extraction
                         is_interstate = True
                         try:
-                            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
-                            client_state_code = ''
-                            if invoice.client.stateCode:
-                                client_state_code = str(invoice.client.stateCode).strip()
-                            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
-                                client_state_code = str(invoice.client.gstin[:2]).strip()
+                            # Helper function to get state code - prefer GSTIN extraction
+                            def get_state_code(gstin, state_code_field):
+                                # First try to extract from GSTIN (first 2 digits)
+                                if gstin and len(str(gstin).strip()) >= 2:
+                                    extracted = str(gstin).strip()[:2]
+                                    if extracted.isdigit():
+                                        return extracted
+                                # Fall back to stateCode field if it's a valid 2-digit code
+                                if state_code_field:
+                                    state_code = str(state_code_field).strip()
+                                    if state_code.isdigit() and len(state_code) <= 2:
+                                        return state_code.zfill(2)
+                                return ''
+
+                            company_state_code = get_state_code(
+                                company_settings.gstin if company_settings else None,
+                                company_settings.stateCode if company_settings else None
+                            )
+                            client_state_code = get_state_code(
+                                invoice.client.gstin if invoice.client else None,
+                                invoice.client.stateCode if invoice.client else None
+                            )
                             if company_state_code and client_state_code:
                                 is_interstate = company_state_code != client_state_code
                         except:
                             pass
-                    
+
                     if is_interstate:
                         igst = gst_amount
                     else:
