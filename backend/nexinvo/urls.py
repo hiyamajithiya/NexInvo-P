@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse
-from api.views import EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view
+from api.views import EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view, logout_view
 
 def api_root(request):
     return JsonResponse({
@@ -43,5 +43,6 @@ urlpatterns = [
     path("api/register/", register_view, name='register'),
     path("api/token/", EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("api/token/refresh/", TokenRefreshView.as_view(), name='token_refresh'),
+    path("api/logout/", logout_view, name='logout'),
     path("api/", include('api.urls')),
 ]

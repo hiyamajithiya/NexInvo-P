@@ -144,18 +144,32 @@ class InvoiceSerializer(serializers.ModelSerializer):
         is_interstate = True  # Default to IGST
         try:
             company_settings = CompanySettings.objects.get(organization=invoice.organization)
-            company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
 
+            # Get company state code - try stateCode first, then extract from GSTIN
+            company_state_code = ''
+            if company_settings.stateCode:
+                company_state_code = str(company_settings.stateCode).strip()
+            elif company_settings.gstin and len(company_settings.gstin) >= 2:
+                company_state_code = str(company_settings.gstin[:2]).strip()
+
+            # Get client state code - try stateCode first, then extract from GSTIN
             client_state_code = ''
-            if invoice.client.stateCode:
-                client_state_code = str(invoice.client.stateCode).strip()
-            elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
-                client_state_code = str(invoice.client.gstin[:2]).strip()
+            if invoice.client:
+                if invoice.client.stateCode:
+                    client_state_code = str(invoice.client.stateCode).strip()
+                elif invoice.client.gstin and len(invoice.client.gstin) >= 2:
+                    client_state_code = str(invoice.client.gstin[:2]).strip()
+
+            print(f"[GST Debug] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
+            print(f"[GST Debug] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{invoice.client.gstin if invoice.client else 'N/A'}'")
 
             if company_state_code and client_state_code:
                 is_interstate = company_state_code != client_state_code
+                print(f"[GST Debug] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
+            else:
+                print(f"[GST Debug] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
         except CompanySettings.DoesNotExist:
-            pass
+            print("[GST Debug] CompanySettings not found - defaulting to IGST")
 
         invoice.is_interstate = is_interstate
 
@@ -227,18 +241,32 @@ class InvoiceSerializer(serializers.ModelSerializer):
             is_interstate = True  # Default to IGST
             try:
                 company_settings = CompanySettings.objects.get(organization=instance.organization)
-                company_state_code = str(company_settings.stateCode).strip() if company_settings.stateCode else ''
 
+                # Get company state code - try stateCode first, then extract from GSTIN
+                company_state_code = ''
+                if company_settings.stateCode:
+                    company_state_code = str(company_settings.stateCode).strip()
+                elif company_settings.gstin and len(company_settings.gstin) >= 2:
+                    company_state_code = str(company_settings.gstin[:2]).strip()
+
+                # Get client state code - try stateCode first, then extract from GSTIN
                 client_state_code = ''
-                if instance.client.stateCode:
-                    client_state_code = str(instance.client.stateCode).strip()
-                elif instance.client.gstin and len(instance.client.gstin) >= 2:
-                    client_state_code = str(instance.client.gstin[:2]).strip()
+                if instance.client:
+                    if instance.client.stateCode:
+                        client_state_code = str(instance.client.stateCode).strip()
+                    elif instance.client.gstin and len(instance.client.gstin) >= 2:
+                        client_state_code = str(instance.client.gstin[:2]).strip()
+
+                print(f"[GST Debug Update] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
+                print(f"[GST Debug Update] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{instance.client.gstin if instance.client else 'N/A'}'")
 
                 if company_state_code and client_state_code:
                     is_interstate = company_state_code != client_state_code
+                    print(f"[GST Debug Update] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
+                else:
+                    print(f"[GST Debug Update] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
             except CompanySettings.DoesNotExist:
-                pass
+                print("[GST Debug Update] CompanySettings not found - defaulting to IGST")
 
             instance.is_interstate = is_interstate
 
