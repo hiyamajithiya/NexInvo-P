@@ -106,6 +106,7 @@ export const authAPI = {
   login: (credentials) => api.post('/token/', credentials),
   refresh: (refresh) => api.post('/token/refresh/', { refresh }),
   register: (data) => api.post('/register/', data),
+  logout: () => api.post('/logout/'),
   // OTP verification for registration
   sendOTP: (email) => api.post('/send-otp/', { email }),
   verifyOTP: (email, otp) => api.post('/verify-otp/', { email, otp }),
