@@ -191,6 +191,38 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 
 
 # =============================================================================
+# LOGOUT VIEW - CLEAR USER SESSION
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_view(request):
+    """
+    Logout the current user by invalidating their session.
+    This clears the UserSession record so they can login again.
+    """
+    from .models import UserSession
+
+    try:
+        # Delete the user's active session
+        UserSession.invalidate_session(request.user)
+        print(f"[Logout] Session invalidated for user: {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Logged out successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(f"[Logout] Error during logout for {request.user.email}: {e}")
+        # Even if there's an error, try to delete the session
+        UserSession.objects.filter(user=request.user).delete()
+        return Response({
+            'success': True,
+            'message': 'Logged out'
+        }, status=status.HTTP_200_OK)
+
+
+# =============================================================================
 # EMAIL OTP VERIFICATION VIEWS
 # =============================================================================
 
@@ -4771,6 +4803,7 @@ def tally_check_connection(request):
     """Check connection to Tally"""
     from .tally_sync import TallyConnector
     from .models import TallyMapping
+    import socket
 
     org_id = request.headers.get('X-Organization-ID')
     if not org_id:
@@ -4789,10 +4822,49 @@ def tally_check_connection(request):
 
     # Get Tally settings
     host = request.data.get('host', 'localhost')
-    port = request.data.get('port', 9000)
+    port = int(request.data.get('port', 9000))
 
+    print(f"Tally connection check: host={host}, port={port}")
+
+    # First do a quick socket check to see if port is open
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        socket_result = sock.connect_ex((host, port))
+        sock.close()
+
+        if socket_result != 0:
+            return Response({
+                'connected': False,
+                'message': f'Cannot reach Tally at {host}:{port}. Port is not open. Please ensure:\n1. Tally is running\n2. ODBC Server is enabled in Tally (F12 > Features > Enable ODBC Server)\n3. The port {port} is correct',
+                'company_name': '',
+                'tally_version': '',
+                'debug_info': {
+                    'host': host,
+                    'port': port,
+                    'socket_error_code': socket_result
+                }
+            })
+    except socket.timeout:
+        return Response({
+            'connected': False,
+            'message': f'Connection timeout to {host}:{port}. Tally server is not responding.',
+            'company_name': '',
+            'tally_version': ''
+        })
+    except Exception as sock_err:
+        print(f"Socket check error: {sock_err}")
+
+    # Port is open, try Tally XML communication
     connector = TallyConnector(host=host, port=port)
     result = connector.check_connection()
+
+    # Add debug info
+    result['debug_info'] = {
+        'host': host,
+        'port': port,
+        'url': f'http://{host}:{port}'
+    }
 
     # Save connection info if successful
     if result['connected']:

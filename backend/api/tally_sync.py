@@ -24,112 +24,114 @@ class TallyConnector:
     def _send_request(self, xml_data):
         """Send XML request to Tally and return response"""
         try:
-            headers = {'Content-Type': 'application/xml'}
+            # Tally expects text/xml content type
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'Accept': 'text/xml'
+            }
+            print(f"Connecting to Tally at {self.base_url}")
             response = requests.post(
                 self.base_url,
                 data=xml_data.encode('utf-8'),
                 headers=headers,
                 timeout=30
             )
+            print(f"Tally response status: {response.status_code}")
             return response.text
-        except requests.exceptions.ConnectionError:
-            raise ConnectionError("Cannot connect to Tally. Ensure Tally is running with ODBC enabled.")
+        except requests.exceptions.ConnectionError as e:
+            print(f"Tally ConnectionError: {e}")
+            raise ConnectionError(f"Cannot connect to Tally at {self.base_url}. Ensure Tally is running with ODBC Server enabled on port {self.port}. Error: {str(e)}")
         except requests.exceptions.Timeout:
-            raise TimeoutError("Tally request timed out. Please try again.")
+            raise TimeoutError(f"Tally request timed out after 30 seconds. Check if Tally is responding on {self.base_url}.")
+        except Exception as e:
+            print(f"Tally request error: {e}")
+            raise
 
     def check_connection(self):
         """
         Check if Tally is running and accessible.
         Returns company info if connected.
         """
-        # XML request to get Tally info
-        xml_request = """
-        <ENVELOPE>
-            <HEADER>
-                <VERSION>1</VERSION>
-                <TALLYREQUEST>Export</TALLYREQUEST>
-                <TYPE>Data</TYPE>
-                <ID>MyTallyInfo</ID>
-            </HEADER>
-            <BODY>
-                <DESC>
-                    <STATICVARIABLES>
-                        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-                    </STATICVARIABLES>
-                    <TDL>
-                        <TDLMESSAGE>
-                            <REPORT NAME="MyTallyInfo">
-                                <FORMS>MyTallyInfoForm</FORMS>
-                            </REPORT>
-                            <FORM NAME="MyTallyInfoForm">
-                                <PARTS>MyTallyInfoPart</PARTS>
-                            </FORM>
-                            <PART NAME="MyTallyInfoPart">
-                                <LINES>MyTallyInfoLine</LINES>
-                                <REPEAT>MyTallyInfoLine : MyTallyInfoColl</REPEAT>
-                                <SCROLLED>Vertical</SCROLLED>
-                            </PART>
-                            <LINE NAME="MyTallyInfoLine">
-                                <FIELDS>FldCompName, FldTallyVer</FIELDS>
-                            </LINE>
-                            <FIELD NAME="FldCompName">
-                                <SET>$$Name</SET>
-                            </FIELD>
-                            <FIELD NAME="FldTallyVer">
-                                <SET>$$LicenseInfo:TallyVersion</SET>
-                            </FIELD>
-                            <COLLECTION NAME="MyTallyInfoColl">
-                                <TYPE>Company</TYPE>
-                            </COLLECTION>
-                        </TDLMESSAGE>
-                    </TDL>
-                </DESC>
-            </BODY>
-        </ENVELOPE>
-        """.strip()
+        import re
+
+        # First try a simple license info request - works with most Tally versions
+        xml_request_simple = """<ENVELOPE>
+<HEADER>
+<TALLYREQUEST>Export Data</TALLYREQUEST>
+</HEADER>
+<BODY>
+<EXPORTDATA>
+<REQUESTDESC>
+<REPORTNAME>List of Companies</REPORTNAME>
+</REQUESTDESC>
+</EXPORTDATA>
+</BODY>
+</ENVELOPE>"""
 
         try:
-            response = self._send_request(xml_request)
+            response = self._send_request(xml_request_simple)
+            print(f"Tally check_connection response (first 500 chars): {response[:500]}")
 
-            # Parse response to get company name and version
-            if '<COMPANYNAME>' in response or '<FLDCOMPNAME>' in response:
-                # Try to extract company name
+            # Check if we got a valid XML response
+            if response and ('<ENVELOPE' in response or '<RESPONSE' in response or '<COMPANY' in response):
                 company_name = ''
                 tally_version = ''
 
-                try:
-                    root = ET.fromstring(response)
-                    # Look for company name
-                    for elem in root.iter():
-                        if elem.tag.upper() in ['COMPANYNAME', 'FLDCOMPNAME', 'NAME']:
-                            if elem.text:
-                                company_name = elem.text
-                                break
-                        if elem.tag.upper() in ['TALLYVERSION', 'FLDTALLYVER']:
-                            if elem.text:
-                                tally_version = elem.text
-                except ET.ParseError:
-                    pass
+                # Try to extract company name using regex (more robust)
+                company_match = re.search(r'<COMPANY[^>]*>\s*<NAME>([^<]+)</NAME>', response, re.IGNORECASE | re.DOTALL)
+                if company_match:
+                    company_name = company_match.group(1).strip()
+                else:
+                    # Alternative pattern
+                    company_match = re.search(r'<COMPANYNAME>([^<]+)</COMPANYNAME>', response, re.IGNORECASE)
+                    if company_match:
+                        company_name = company_match.group(1).strip()
+                    else:
+                        # Look for NAME within COMPANY context
+                        company_match = re.search(r'NAME="([^"]+)"', response, re.IGNORECASE)
+                        if company_match:
+                            company_name = company_match.group(1).strip()
+
+                # Try to extract Tally version
+                version_match = re.search(r'<TALLYVERSION>([^<]+)</TALLYVERSION>', response, re.IGNORECASE)
+                if version_match:
+                    tally_version = version_match.group(1).strip()
 
                 return {
                     'connected': True,
                     'message': 'Connected to Tally successfully',
-                    'company_name': company_name or 'Unknown',
-                    'tally_version': tally_version or 'Tally Prime/ERP'
+                    'company_name': company_name or 'Connected (Company detected)',
+                    'tally_version': tally_version or 'Tally Prime/ERP 9'
                 }
 
-            # Simple connection test if detailed info not available
+            # If we got any response at all, connection is working
+            if response:
+                return {
+                    'connected': True,
+                    'message': 'Connected to Tally (response received)',
+                    'company_name': 'Connected',
+                    'tally_version': 'Tally'
+                }
+
             return {
-                'connected': True,
-                'message': 'Connected to Tally',
-                'company_name': 'Connected',
-                'tally_version': 'Tally'
+                'connected': False,
+                'message': 'Tally returned empty response. Check if ODBC Server is enabled.',
+                'company_name': '',
+                'tally_version': ''
             }
 
         except (ConnectionError, TimeoutError) as e:
             return {
                 'connected': False,
                 'message': str(e),
+                'company_name': '',
+                'tally_version': ''
+            }
+        except Exception as e:
+            print(f"Unexpected error in check_connection: {e}")
+            return {
+                'connected': False,
+                'message': f'Unexpected error: {str(e)}',
                 'company_name': '',
                 'tally_version': ''
             }

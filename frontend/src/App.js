@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ToastProvider } from './components/Toast';
+import { authAPI } from './services/api';
 import versionCheckService from './services/versionCheck';
 import './theme.css';
 import './App.css';
@@ -111,7 +112,17 @@ function App() {
     setUser(userData);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Call the backend to clear the session first
+    try {
+      await authAPI.logout();
+      console.log('Session invalidated on server');
+    } catch (error) {
+      // Even if the API call fails, proceed with local logout
+      console.warn('Logout API call failed:', error);
+    }
+
+    // Clear local state and storage
     setIsAuthenticated(false);
     setIsSuperAdmin(false);
     setUser(null);
