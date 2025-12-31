@@ -348,6 +348,72 @@ function Receipts() {
     clearSelection();
   };
 
+  const handleShareWhatsApp = (receipt) => {
+    // Format currency
+    const formatAmount = (amount) => {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 2,
+      }).format(parseFloat(amount));
+    };
+
+    // Create WhatsApp message
+    const message = `*Receipt: #${receipt.id}*
+
+Dear ${receipt.client_name},
+
+Payment received successfully!
+
+🧾 Receipt ID: #${receipt.id}
+📄 Invoice No: ${receipt.invoice_number}
+📅 Date: ${formatDate(receipt.payment_date)}
+💰 Amount: ${formatAmount(receipt.amount)}
+💳 Payment Method: ${receipt.payment_method?.replace('_', ' ').toUpperCase()}
+${receipt.reference_number ? `🔖 Reference: ${receipt.reference_number}` : ''}
+
+Thank you for your payment!`;
+
+    // Open WhatsApp with the message
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  const handleBulkWhatsApp = () => {
+    if (selectedReceipts.length === 0) return;
+
+    // Format currency
+    const formatAmount = (amount) => {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 2,
+      }).format(parseFloat(amount));
+    };
+
+    // Get selected receipts details
+    const selectedReceiptDetails = filteredReceipts.filter(r => selectedReceipts.includes(r.id));
+
+    // Create summary message for multiple receipts
+    let message = `*Receipt Summary*\n\n`;
+
+    selectedReceiptDetails.forEach((receipt, index) => {
+      message += `${index + 1}. Receipt #${receipt.id}\n`;
+      message += `   Invoice: ${receipt.invoice_number}\n`;
+      message += `   Client: ${receipt.client_name}\n`;
+      message += `   Amount: ${formatAmount(receipt.amount)}\n`;
+      message += `   Date: ${formatDate(receipt.payment_date)}\n\n`;
+    });
+
+    const totalAmount = selectedReceiptDetails.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+    message += `*Total: ${formatAmount(totalAmount)}*\n\nThank you!`;
+
+    // Open WhatsApp with the message
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+    clearSelection();
+  };
+
   const filteredReceipts = receipts
     .filter(receipt => {
       const matchesSearch = receipt.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -639,6 +705,26 @@ function Receipts() {
                 >
                   <span>🖨️</span> Print
                 </button>
+                <button
+                  onClick={handleBulkWhatsApp}
+                  disabled={bulkActionLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#25D366',
+                    border: 'none',
+                    color: 'white',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    opacity: bulkActionLoading ? 0.7 : 1,
+                  }}
+                >
+                  <span>💬</span> WhatsApp
+                </button>
               </div>
             </div>
           )}
@@ -748,6 +834,14 @@ function Receipts() {
                               </button>
                             </>
                           )}
+                          <button
+                            className="btn-icon-small"
+                            onClick={() => handleShareWhatsApp(receipt)}
+                            title="Send via WhatsApp"
+                            style={{ color: '#25D366' }}
+                          >
+                            💬
+                          </button>
                           <button
                             className="btn-icon-small"
                             onClick={() => handleEditReceipt(receipt)}
