@@ -14,6 +14,7 @@ import {
   Switch,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { InvoiceSettings, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -23,6 +24,7 @@ type InvoiceSettingsScreenProps = {
 };
 
 export default function InvoiceSettingsScreen({ navigation }: InvoiceSettingsScreenProps) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<InvoiceSettings | null>(null);
@@ -275,7 +277,7 @@ export default function InvoiceSettingsScreen({ navigation }: InvoiceSettingsScr
         </Card>
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}

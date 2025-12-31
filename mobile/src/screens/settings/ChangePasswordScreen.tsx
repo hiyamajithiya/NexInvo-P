@@ -12,6 +12,7 @@ import {
   Card,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -21,6 +22,7 @@ type ChangePasswordScreenProps = {
 };
 
 export default function ChangePasswordScreen({ navigation }: ChangePasswordScreenProps) {
+  const insets = useSafeAreaInsets();
   const [saving, setSaving] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -135,7 +137,7 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordScree
         </Card>
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}

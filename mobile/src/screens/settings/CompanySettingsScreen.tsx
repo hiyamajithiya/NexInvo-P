@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { CompanySettings, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -22,6 +23,7 @@ type CompanySettingsScreenProps = {
 };
 
 export default function CompanySettingsScreen({ navigation }: CompanySettingsScreenProps) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<CompanySettings | null>(null);
@@ -239,7 +241,7 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
         </Card>
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}
