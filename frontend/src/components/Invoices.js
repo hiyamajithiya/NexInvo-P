@@ -146,6 +146,44 @@ function Invoices() {
     }
   };
 
+  const handleShareWhatsApp = async (invoice) => {
+    try {
+      // Generate PDF URL for sharing
+      const response = await invoiceAPI.generatePDF(invoice.id);
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const pdfUrl = window.URL.createObjectURL(blob);
+
+      // Format currency
+      const formatAmount = (amount) => {
+        return new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: 'INR',
+          maximumFractionDigits: 2,
+        }).format(parseFloat(amount));
+      };
+
+      // Create WhatsApp message
+      const message = `*Invoice: ${invoice.invoice_number}*
+
+Dear ${invoice.client_name},
+
+Please find your invoice details below:
+
+📄 Invoice No: ${invoice.invoice_number}
+📅 Date: ${formatDate(invoice.invoice_date)}
+💰 Amount: ${formatAmount(invoice.total_amount)}
+
+Thank you for your business!`;
+
+      // Open WhatsApp with the message
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    } catch (err) {
+      console.error('Error sharing via WhatsApp:', err);
+      alert('Failed to share via WhatsApp');
+    }
+  };
+
   const handleEdit = async (id) => {
     try {
       const response = await invoiceAPI.getById(id);
@@ -294,6 +332,40 @@ function Invoices() {
     alert(`Deleted: ${successCount} successful, ${failedCount} failed`);
     clearSelection();
     loadInvoices();
+  };
+
+  const handleBulkWhatsApp = () => {
+    if (selectedInvoices.length === 0) return;
+
+    // Format currency
+    const formatAmount = (amount) => {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 2,
+      }).format(parseFloat(amount));
+    };
+
+    // Get selected invoices details
+    const selectedInvoiceDetails = invoices.filter(inv => selectedInvoices.includes(inv.id));
+
+    // Create summary message for multiple invoices
+    let message = `*Invoice Summary*\n\n`;
+
+    selectedInvoiceDetails.forEach((invoice, index) => {
+      message += `${index + 1}. Invoice: ${invoice.invoice_number}\n`;
+      message += `   Client: ${invoice.client_name}\n`;
+      message += `   Amount: ${formatAmount(invoice.total_amount)}\n`;
+      message += `   Date: ${formatDate(invoice.invoice_date)}\n\n`;
+    });
+
+    const totalAmount = selectedInvoiceDetails.reduce((sum, inv) => sum + parseFloat(inv.total_amount), 0);
+    message += `*Total: ${formatAmount(totalAmount)}*\n\nThank you for your business!`;
+
+    // Open WhatsApp with the message
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+    clearSelection();
   };
 
   const handleDownloadTemplate = async () => {
@@ -672,6 +744,26 @@ function Invoices() {
               <span>🖨️</span> Print
             </button>
             <button
+              onClick={handleBulkWhatsApp}
+              disabled={bulkActionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#25D366',
+                border: 'none',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: bulkActionLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                opacity: bulkActionLoading ? 0.7 : 1,
+              }}
+            >
+              <span>💬</span> WhatsApp
+            </button>
+            <button
               onClick={handleBulkDelete}
               disabled={bulkActionLoading}
               style={{
@@ -795,6 +887,14 @@ function Invoices() {
                         title="Send Email"
                       >
                         📧
+                      </button>
+                      <button
+                        className="btn-icon-small"
+                        onClick={() => handleShareWhatsApp(invoice)}
+                        title="Send via WhatsApp"
+                        style={{ color: '#25D366' }}
+                      >
+                        💬
                       </button>
                       {invoice.invoice_type === 'proforma' && invoice.status !== 'paid' && (
                         <button

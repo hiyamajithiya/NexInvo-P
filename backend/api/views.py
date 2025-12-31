@@ -170,11 +170,26 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             # Add session token to response
             response.data['session_token'] = session_token
 
-            # Add subscription warning if in grace period
-            if not user.is_superuser:
-                from .models import OrganizationMembership, Subscription
-                membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
-                if membership:
+            # Add user data to response
+            response.data['user'] = {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            }
+
+            # Add organization data to response
+            from .models import OrganizationMembership, Subscription
+            membership = OrganizationMembership.objects.filter(user=user, is_active=True).first()
+            if membership:
+                response.data['organization'] = {
+                    'id': membership.organization.id,
+                    'name': membership.organization.name,
+                }
+
+                # Add subscription warning if in grace period
+                if not user.is_superuser:
                     try:
                         subscription = Subscription.objects.get(organization=membership.organization)
                         if subscription.is_in_grace_period():
@@ -186,6 +201,9 @@ class EmailTokenObtainPairView(TokenObtainPairView):
                             }
                     except Subscription.DoesNotExist:
                         pass
+            else:
+                # User without organization (superadmin or unassigned)
+                response.data['organization'] = None
 
         return response
 
