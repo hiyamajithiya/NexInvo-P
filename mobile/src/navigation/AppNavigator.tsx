@@ -3,9 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme } from 'react-native-paper';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-
-const Icon = MaterialCommunityIcons;
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList, MainTabParamList } from '../types';
@@ -70,7 +68,7 @@ function MainTabs() {
               iconName = 'circle';
           }
 
-          return <Icon name={iconName} size={size} color={color} />;
+          return <MaterialCommunityIcons name={iconName as any} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#6366f1',
         tabBarInactiveTintColor: '#64748b',

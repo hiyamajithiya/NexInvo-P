@@ -16,6 +16,7 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { Invoice, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -36,6 +37,7 @@ export default function RecordPaymentScreen({
   navigation,
   route,
 }: RecordPaymentScreenProps) {
+  const insets = useSafeAreaInsets();
   const preselectedInvoiceId = route.params?.invoiceId;
 
   const [loading, setLoading] = useState(true);
@@ -312,7 +314,7 @@ export default function RecordPaymentScreen({
       </ScrollView>
 
       {/* Action Buttons */}
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}

@@ -18,6 +18,7 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { Invoice, Client, RootStackParamList, InvoiceItem } from '../../types';
 import colors from '../../theme/colors';
@@ -39,6 +40,7 @@ export default function InvoiceFormScreen({
   navigation,
   route,
 }: InvoiceFormScreenProps) {
+  const insets = useSafeAreaInsets();
   const invoiceId = route.params?.invoiceId;
   const isEditing = !!invoiceId;
 
@@ -415,7 +417,7 @@ export default function InvoiceFormScreen({
       </ScrollView>
 
       {/* Save Button */}
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}

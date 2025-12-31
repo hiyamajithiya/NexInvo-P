@@ -15,6 +15,7 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -25,6 +26,7 @@ type PaymentTermFormScreenProps = {
 };
 
 export default function PaymentTermFormScreen({ navigation, route }: PaymentTermFormScreenProps) {
+  const insets = useSafeAreaInsets();
   const { paymentTermId } = route.params || {};
   const isEditing = !!paymentTermId;
 
@@ -164,7 +166,7 @@ export default function PaymentTermFormScreen({ navigation, route }: PaymentTerm
         </Card>
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}

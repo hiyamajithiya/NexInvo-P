@@ -18,6 +18,7 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import {
   Client,
@@ -54,6 +55,7 @@ export default function ScheduledInvoiceFormScreen({
   navigation,
   route,
 }: ScheduledInvoiceFormScreenProps) {
+  const insets = useSafeAreaInsets();
   const scheduledInvoiceId = route.params?.scheduledInvoiceId;
   const isEditing = !!scheduledInvoiceId;
 
@@ -506,7 +508,7 @@ export default function ScheduledInvoiceFormScreen({
       </ScrollView>
 
       {/* Action Buttons */}
-      <View style={styles.actions}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           mode="outlined"
           onPress={() => navigation.goBack()}
