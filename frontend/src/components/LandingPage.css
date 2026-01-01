@@ -2320,3 +2320,368 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================
+   Download App Section
+   ============================================ */
+.download-app-section {
+  padding: 100px 24px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.download-app-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.download-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.download-info {
+  color: white;
+}
+
+.download-info .section-badge {
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.download-info .section-title {
+  color: white;
+  font-size: 2.5rem;
+  margin: 16px 0 20px;
+}
+
+.download-info .section-description {
+  color: #94a3b8;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+
+.download-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.download-feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  transition: var(--transition);
+}
+
+.download-feature:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.df-icon {
+  font-size: 1.5rem;
+}
+
+.download-feature span:last-child {
+  color: #e2e8f0;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.download-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.btn-download-primary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 28px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: none;
+  border-radius: 14px;
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.35);
+}
+
+.btn-download-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(34, 197, 94, 0.45);
+}
+
+.download-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.btn-download-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.download-label {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.download-platform {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.coming-soon-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.apple-icon {
+  width: 24px;
+  height: 24px;
+  fill: #94a3b8;
+}
+
+.download-note {
+  color: #64748b;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Phone Mockup */
+.download-visual {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.phone-mockup {
+  position: relative;
+}
+
+.phone-frame {
+  width: 280px;
+  height: 580px;
+  background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 40px;
+  padding: 12px;
+  box-shadow:
+    0 50px 100px rgba(0, 0, 0, 0.5),
+    inset 0 2px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 2;
+}
+
+.phone-notch {
+  width: 120px;
+  height: 28px;
+  background: #0f172a;
+  border-radius: 0 0 20px 20px;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-radius: 30px;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-preview {
+  padding: 50px 20px 20px;
+  height: 100%;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.app-logo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.app-menu {
+  color: #64748b;
+  font-size: 1.2rem;
+}
+
+.app-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.app-stat {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
+  padding: 18px 14px;
+  text-align: center;
+}
+
+.app-stat-value {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.app-stat-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.app-quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-action {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.app-action:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.phone-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%);
+  z-index: 1;
+  filter: blur(40px);
+}
+
+/* Download Section Responsive */
+@media (max-width: 992px) {
+  .download-content {
+    grid-template-columns: 1fr;
+    gap: 60px;
+    text-align: center;
+  }
+
+  .download-info .section-title {
+    font-size: 2rem;
+  }
+
+  .download-features {
+    max-width: 400px;
+    margin: 0 auto 36px;
+  }
+
+  .download-buttons {
+    justify-content: center;
+  }
+
+  .download-visual {
+    order: -1;
+  }
+
+  .phone-frame {
+    width: 240px;
+    height: 500px;
+  }
+}
+
+@media (max-width: 576px) {
+  .download-app-section {
+    padding: 60px 16px;
+  }
+
+  .download-info .section-title {
+    font-size: 1.75rem;
+  }
+
+  .download-features {
+    grid-template-columns: 1fr;
+  }
+
+  .download-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .btn-download-primary,
+  .coming-soon-badge {
+    width: 100%;
+    max-width: 280px;
+    justify-content: center;
+  }
+
+  .phone-frame {
+    width: 220px;
+    height: 460px;
+  }
+
+  .phone-notch {
+    width: 100px;
+    height: 24px;
+  }
+}

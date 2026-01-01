@@ -279,6 +279,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
             <button onClick={() => scrollToSection('how-it-works')}>How It Works</button>
             <button onClick={() => scrollToSection('pricing')}>Pricing</button>
             <button onClick={() => scrollToSection('testimonials')}>Testimonials</button>
+            <button onClick={() => scrollToSection('download')}>Download App</button>
             <button onClick={() => setShowHelpCenter(true)}>Help</button>
           </div>
 
@@ -735,6 +736,96 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
             <button onClick={() => setShowHelpCenter(true)} className="btn-text">
               View All FAQs <span>→</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Download App Section */}
+      <section className="download-app-section" id="download">
+        <div className="section-container">
+          <div className="download-content">
+            <div className="download-info">
+              <span className="section-badge">Mobile App</span>
+              <h2 className="section-title">Take NexInvo Everywhere</h2>
+              <p className="section-description">
+                Manage your invoices on the go with our Android mobile app. Create invoices,
+                track payments, and manage clients from your smartphone.
+              </p>
+              <div className="download-features">
+                <div className="download-feature">
+                  <span className="df-icon">📱</span>
+                  <span>Native Android App</span>
+                </div>
+                <div className="download-feature">
+                  <span className="df-icon">🔄</span>
+                  <span>Real-time Sync</span>
+                </div>
+                <div className="download-feature">
+                  <span className="df-icon">📴</span>
+                  <span>Works Offline</span>
+                </div>
+                <div className="download-feature">
+                  <span className="df-icon">🔒</span>
+                  <span>Secure & Fast</span>
+                </div>
+              </div>
+              <div className="download-buttons">
+                <a
+                  href="https://expo.dev/accounts/himanshu83/projects/nexinvo/builds/45f3c360-7934-453f-a286-d27f492aab56"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-download-primary"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="download-icon">
+                    <path d="M17.523 15.341l-.001-.002c-.215.136-.447.254-.696.35-.677.262-1.484.32-2.281.32h-5.09c-.797 0-1.604-.058-2.281-.32a3.017 3.017 0 01-.696-.35l-.001.002L3 18.819V21c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2v-2.181l-3.477-3.478zM18 4H6C4.895 4 4 4.895 4 6v10.586l2.293-2.293a1 1 0 011.414 0l.002.001c.131.084.29.166.478.239.481.186 1.131.267 1.813.267h4c.682 0 1.332-.081 1.813-.267.188-.073.347-.155.478-.239l.002-.001a1 1 0 011.414 0L20 16.586V6c0-1.105-.895-2-2-2z"/>
+                    <path d="M12 14a1 1 0 01-.707-.293l-3-3a1 1 0 111.414-1.414L11 10.586V7a1 1 0 112 0v3.586l1.293-1.293a1 1 0 111.414 1.414l-3 3A1 1 0 0112 14z"/>
+                  </svg>
+                  <div className="btn-download-text">
+                    <span className="download-label">Download for</span>
+                    <span className="download-platform">Android</span>
+                  </div>
+                </a>
+                <div className="coming-soon-badge">
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="apple-icon">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                  </svg>
+                  <span>iOS Coming Soon</span>
+                </div>
+              </div>
+              <p className="download-note">
+                * Requires Android 8.0 or higher. iOS version is under development.
+              </p>
+            </div>
+            <div className="download-visual">
+              <div className="phone-mockup">
+                <div className="phone-frame">
+                  <div className="phone-notch"></div>
+                  <div className="phone-screen">
+                    <div className="app-preview">
+                      <div className="app-header">
+                        <span className="app-logo">NexInvo</span>
+                        <span className="app-menu">☰</span>
+                      </div>
+                      <div className="app-stats">
+                        <div className="app-stat">
+                          <span className="app-stat-value">₹2.5L</span>
+                          <span className="app-stat-label">Revenue</span>
+                        </div>
+                        <div className="app-stat">
+                          <span className="app-stat-value">156</span>
+                          <span className="app-stat-label">Invoices</span>
+                        </div>
+                      </div>
+                      <div className="app-quick-actions">
+                        <div className="app-action">📄 New Invoice</div>
+                        <div className="app-action">👥 Add Client</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="phone-glow"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
