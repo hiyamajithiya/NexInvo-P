@@ -40,7 +40,7 @@ import {
 // Use your server URL - for local testing use your computer's IP
 const API_BASE_URL = __DEV__
   ? 'http://192.168.1.214:8000/api/' // Local development server
-  : 'https://api.nexinvo.com/api/';
+  : 'https://www.nexinvo.in/api/';
 
 class ApiService {
   private api: AxiosInstance;

@@ -1,0 +1,6 @@
+*.sock
+../nexinvo.sock
+../*.sock
+*.sock
+../nexinvo.sock
+../*.sock

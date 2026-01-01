@@ -406,6 +406,7 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
@@ -427,6 +428,7 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
@@ -440,6 +442,7 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
@@ -457,9 +460,11 @@ const styles = StyleSheet.create({
   actions: {
     position: 'absolute',
     bottom: 0,
+    paddingBottom: 80,
     left: 0,
     right: 0,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     padding: 16,
     backgroundColor: colors.background.paper,
     elevation: 8,

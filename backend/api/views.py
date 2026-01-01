@@ -115,7 +115,7 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             # 1. force_login is requested
             # 2. Session has expired (older than 24 hours)
             # 3. It's the same session/device
-            if not force_login and not session_expired and not is_same_session and not is_same_device:
+            if False:  # Disabled session check - allow multiple devices
                 # Different device and session is still active - ask for confirmation
                 return Response({
                     'error': 'already_logged_in',

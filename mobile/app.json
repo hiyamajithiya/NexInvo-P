@@ -23,10 +23,16 @@
         "backgroundColor": "#6366f1"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.nexinvo.app"
+      "package": "com.nexinvo.app",
+      "label": "NexInvo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "aae9785e-2cf3-4f28-b42c-c7b08bbf64d0"
+      }
     }
   }
 }
