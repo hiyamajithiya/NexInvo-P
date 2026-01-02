@@ -42,8 +42,8 @@ export interface RegisterRequest {
   password: string;
   first_name: string;
   last_name: string;
-  organization_name: string;
-  phone?: string;
+  company_name: string;
+  mobile_number: string;
 }
 
 // Dashboard Types - matches backend API response
@@ -57,13 +57,14 @@ export interface DashboardStats {
 
 export interface SubscriptionInfo {
   plan_name: string;
-  status: string;
+  status: 'trial' | 'active' | 'grace_period' | 'expired' | 'cancelled';
   is_active: boolean;
   total_days: number;
   days_remaining: number;
   days_elapsed: number;
   start_date: string;
   end_date: string;
+  trial_end_date?: string;
   current_users: number;
   max_users: number;
   users_remaining: number;
@@ -73,6 +74,13 @@ export interface SubscriptionInfo {
   max_storage_gb: number;
   next_billing_date: string | null;
   auto_renew: boolean;
+}
+
+export interface SubscriptionWarning {
+  in_grace_period: boolean;
+  days_remaining: number;
+  message: string;
+  expired_on: string;
 }
 
 // Invoice Types
@@ -488,6 +496,10 @@ export type RootStackParamList = {
   InvoiceSettings: undefined;
   PaymentTerms: undefined;
   PaymentTermForm: { paymentTermId?: number };
+  // Legal screens
+  PrivacyPolicy: undefined;
+  TermsOfService: undefined;
+  DPDPCompliance: undefined;
 };
 
 export type MainTabParamList = {

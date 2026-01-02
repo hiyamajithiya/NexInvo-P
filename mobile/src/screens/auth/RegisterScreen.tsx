@@ -5,6 +5,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  TouchableOpacity,
+  Linking,
 } from 'react-native';
 import {
   TextInput,
@@ -12,6 +14,7 @@ import {
   Text,
   HelperText,
   ProgressBar,
+  Checkbox,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types';
@@ -36,11 +39,12 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   // Step 3: Details
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleSendOtp = async () => {
     if (!email.trim() || !email.includes('@')) {
@@ -81,8 +85,20 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   };
 
   const handleRegister = async () => {
-    if (!firstName.trim() || !lastName.trim() || !organizationName.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !companyName.trim()) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Validate mobile number (Indian: 10 digits starting with 6-9)
+    const mobileClean = mobileNumber.replace(/[\s-]/g, '').replace(/^\+91/, '').replace(/^91/, '');
+    if (!mobileClean || !/^[6-9]\d{9}$/.test(mobileClean)) {
+      setError('Please enter a valid 10-digit Indian mobile number');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError('Please accept the Terms of Service and Privacy Policy');
       return;
     }
 
@@ -107,8 +123,8 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         password,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        organization_name: organizationName.trim(),
-        phone: phone.trim(),
+        company_name: companyName.trim(),
+        mobile_number: mobileNumber.trim(),
       });
 
       // Show success and navigate to login
@@ -228,22 +244,23 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
             </View>
 
             <TextInput
-              label="Organization Name *"
-              value={organizationName}
-              onChangeText={setOrganizationName}
+              label="Company Name *"
+              value={companyName}
+              onChangeText={setCompanyName}
               mode="outlined"
               style={styles.input}
               left={<TextInput.Icon icon="domain" />}
             />
 
             <TextInput
-              label="Phone (Optional)"
-              value={phone}
-              onChangeText={setPhone}
+              label="Mobile Number *"
+              value={mobileNumber}
+              onChangeText={setMobileNumber}
               mode="outlined"
               keyboardType="phone-pad"
               style={styles.input}
               left={<TextInput.Icon icon="phone" />}
+              placeholder="10-digit mobile number"
             />
 
             <TextInput
@@ -272,11 +289,37 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
               left={<TextInput.Icon icon="lock-check" />}
             />
 
+            <View style={styles.termsContainer}>
+              <Checkbox
+                status={acceptedTerms ? 'checked' : 'unchecked'}
+                onPress={() => setAcceptedTerms(!acceptedTerms)}
+                color={colors.primary[500]}
+              />
+              <View style={styles.termsTextContainer}>
+                <Text variant="bodySmall" style={styles.termsText}>
+                  I agree to the{' '}
+                </Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://nexinvo.com/terms')}>
+                  <Text variant="bodySmall" style={styles.termsLink}>
+                    Terms of Service
+                  </Text>
+                </TouchableOpacity>
+                <Text variant="bodySmall" style={styles.termsText}>
+                  {' '}and{' '}
+                </Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://nexinvo.com/privacy')}>
+                  <Text variant="bodySmall" style={styles.termsLink}>
+                    Privacy Policy
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <Button
               mode="contained"
               onPress={handleRegister}
               loading={loading}
-              disabled={loading}
+              disabled={loading || !acceptedTerms}
               style={styles.button}
               contentStyle={styles.buttonContent}
             >
@@ -421,5 +464,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  termsTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  termsText: {
+    color: colors.text.secondary,
+  },
+  termsLink: {
+    color: colors.primary[500],
+    textDecorationLine: 'underline',
   },
 });

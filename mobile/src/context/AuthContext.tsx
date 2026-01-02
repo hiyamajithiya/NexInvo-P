@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '../services/api';
-import { User, Organization, LoginRequest } from '../types';
+import { User, Organization, LoginRequest, SubscriptionWarning } from '../types';
 import * as SecureStore from 'expo-secure-store';
 
 interface AuthContextType {
@@ -8,6 +8,8 @@ interface AuthContextType {
   isLoading: boolean;
   user: User | null;
   organization: Organization | null;
+  subscriptionWarning: SubscriptionWarning | null;
+  clearSubscriptionWarning: () => void;
   login: (data: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
@@ -20,6 +22,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [subscriptionWarning, setSubscriptionWarning] = useState<SubscriptionWarning | null>(null);
+
+  const clearSubscriptionWarning = () => {
+    setSubscriptionWarning(null);
+  };
 
   useEffect(() => {
     checkAuth();
@@ -54,6 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrganization(response.organization);
     setIsAuthenticated(true);
 
+    // Check for subscription warning (grace period)
+    if (response.subscription_warning) {
+      setSubscriptionWarning(response.subscription_warning);
+    }
+
     // Save user data
     await SecureStore.setItemAsync('user', JSON.stringify(response.user));
     await SecureStore.setItemAsync('organization', JSON.stringify(response.organization));
@@ -63,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.logout();
     setUser(null);
     setOrganization(null);
+    setSubscriptionWarning(null);
     setIsAuthenticated(false);
     await SecureStore.deleteItemAsync('user');
     await SecureStore.deleteItemAsync('organization');
@@ -75,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         user,
         organization,
+        subscriptionWarning,
+        clearSubscriptionWarning,
         login,
         logout,
         checkAuth,

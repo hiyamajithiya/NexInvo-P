@@ -34,6 +34,9 @@ import PaymentTermFormScreen from '../screens/settings/PaymentTermFormScreen';
 import ServiceMasterScreen from '../screens/services/ServiceMasterScreen';
 import ServiceFormScreen from '../screens/services/ServiceFormScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
+import PrivacyPolicyScreen from '../screens/legal/PrivacyPolicyScreen';
+import TermsOfServiceScreen from '../screens/legal/TermsOfServiceScreen';
+import DPDPComplianceScreen from '../screens/legal/DPDPComplianceScreen';
 import { ActivityIndicator, View } from 'react-native';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -234,6 +237,22 @@ export default function AppNavigator() {
               options={({ route }) => ({
                 title: route.params?.paymentTermId ? 'Edit Payment Term' : 'New Payment Term',
               })}
+            />
+            {/* Legal Screens */}
+            <Stack.Screen
+              name="PrivacyPolicy"
+              component={PrivacyPolicyScreen}
+              options={{ title: 'Privacy Policy' }}
+            />
+            <Stack.Screen
+              name="TermsOfService"
+              component={TermsOfServiceScreen}
+              options={{ title: 'Terms of Service' }}
+            />
+            <Stack.Screen
+              name="DPDPCompliance"
+              component={DPDPComplianceScreen}
+              options={{ title: 'DPDP Compliance' }}
             />
           </>
         ) : (

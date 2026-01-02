@@ -5,6 +5,8 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Modal,
+  Linking,
 } from 'react-native';
 import {
   Text,
@@ -12,6 +14,8 @@ import {
   useTheme,
   ActivityIndicator,
   Surface,
+  Button,
+  IconButton,
 } from 'react-native-paper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -30,10 +34,11 @@ type DashboardNavigationProp = CompositeNavigationProp<
 export default function DashboardScreen() {
   const theme = useTheme();
   const navigation = useNavigation<DashboardNavigationProp>();
-  const { organization } = useAuth();
+  const { organization, subscriptionWarning, clearSubscriptionWarning } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(!!subscriptionWarning);
 
   const fetchStats = async () => {
     try {
@@ -75,22 +80,140 @@ export default function DashboardScreen() {
     );
   }
 
+  const dismissWarning = () => {
+    setShowWarningModal(false);
+    clearSubscriptionWarning();
+  };
+
+  const getSubscriptionStatusBanner = () => {
+    if (!stats?.subscription) return null;
+
+    const { status, days_remaining, trial_end_date } = stats.subscription;
+
+    if (status === 'trial') {
+      return (
+        <View style={styles.trialBanner}>
+          <View style={styles.bannerContent}>
+            <Text style={styles.bannerIcon}>🎁</Text>
+            <View style={styles.bannerTextContainer}>
+              <Text style={styles.bannerTitle}>Free Trial Active</Text>
+              <Text style={styles.bannerSubtitle}>
+                {days_remaining} days remaining. Upgrade to continue after trial.
+              </Text>
+            </View>
+          </View>
+          <Button
+            mode="contained"
+            compact
+            onPress={() => Linking.openURL('https://nexinvo.com/pricing')}
+            style={styles.bannerButton}
+            labelStyle={styles.bannerButtonLabel}
+          >
+            Upgrade
+          </Button>
+        </View>
+      );
+    }
+
+    if (status === 'grace_period') {
+      return (
+        <View style={styles.graceBanner}>
+          <View style={styles.bannerContent}>
+            <Text style={styles.bannerIcon}>⚠️</Text>
+            <View style={styles.bannerTextContainer}>
+              <Text style={styles.graceBannerTitle}>Subscription Expired</Text>
+              <Text style={styles.graceBannerSubtitle}>
+                {days_remaining} days left in grace period. Renew now to avoid service interruption.
+              </Text>
+            </View>
+          </View>
+          <Button
+            mode="contained"
+            compact
+            onPress={() => Linking.openURL('https://nexinvo.com/pricing')}
+            style={styles.graceButton}
+            labelStyle={styles.bannerButtonLabel}
+          >
+            Renew
+          </Button>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.greeting}>
-          Welcome back!
-        </Text>
-        <Text variant="bodyLarge" style={styles.orgName}>
-          {organization?.name || 'Your Organization'}
-        </Text>
-      </View>
+    <>
+      {/* Subscription Warning Modal */}
+      <Modal
+        visible={showWarningModal && !!subscriptionWarning}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissWarning}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.warningModal}>
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={dismissWarning}
+              style={styles.modalCloseButton}
+            />
+            <Text style={styles.warningIcon}>⚠️</Text>
+            <Text style={styles.warningTitle}>Subscription Expired</Text>
+            <Text style={styles.warningMessage}>
+              {subscriptionWarning?.message}
+            </Text>
+            <View style={styles.warningDaysBox}>
+              <Text style={styles.warningDays}>
+                ⏰ {subscriptionWarning?.days_remaining} days remaining before access is blocked
+              </Text>
+            </View>
+            <View style={styles.warningButtons}>
+              <Button
+                mode="outlined"
+                onPress={dismissWarning}
+                style={styles.warningDismissButton}
+              >
+                Remind Later
+              </Button>
+              <Button
+                mode="contained"
+                onPress={() => {
+                  dismissWarning();
+                  Linking.openURL('https://nexinvo.com/pricing');
+                }}
+                style={styles.warningRenewButton}
+              >
+                Renew Now
+              </Button>
+            </View>
+            <Text style={styles.warningNote}>
+              Subscription renewal is managed via web application.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Trial/Grace Period Banner */}
+        {getSubscriptionStatusBanner()}
+
+        <View style={styles.header}>
+          <Text variant="headlineMedium" style={styles.greeting}>
+            Welcome back!
+          </Text>
+          <Text variant="bodyLarge" style={styles.orgName}>
+            {organization?.name || 'Your Organization'}
+          </Text>
+        </View>
 
       {/* Stats Cards */}
       <View style={styles.statsGrid}>
@@ -288,7 +411,8 @@ export default function DashboardScreen() {
           </Card>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 
@@ -416,5 +540,142 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
+  },
+  // Trial/Grace Period Banner Styles
+  trialBanner: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  graceBanner: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  bannerIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  bannerTextContainer: {
+    flex: 1,
+  },
+  bannerTitle: {
+    color: '#1e40af',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  bannerSubtitle: {
+    color: '#3b82f6',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  graceBannerTitle: {
+    color: '#991b1b',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  graceBannerSubtitle: {
+    color: '#dc2626',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  bannerButton: {
+    backgroundColor: '#2563eb',
+    marginLeft: 8,
+  },
+  graceButton: {
+    backgroundColor: '#dc2626',
+    marginLeft: 8,
+  },
+  bannerButtonLabel: {
+    fontSize: 12,
+  },
+  // Warning Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  warningModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+  },
+  warningIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  warningTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#dc2626',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  warningMessage: {
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  warningDaysBox: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    width: '100%',
+  },
+  warningDays: {
+    color: '#991b1b',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  warningButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  warningDismissButton: {
+    flex: 1,
+    borderColor: colors.grey[300],
+  },
+  warningRenewButton: {
+    flex: 1,
+    backgroundColor: colors.primary[500],
+  },
+  warningNote: {
+    fontSize: 12,
+    color: colors.text.muted,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

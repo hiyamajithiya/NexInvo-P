@@ -200,9 +200,41 @@ export default function SettingsScreen() {
           onPress={() => {
             Alert.alert(
               'NexInvo',
-              'Version 1.0.0\n\nInvoice Management System\n\n© 2025 NexInvo'
+              'Version 1.0.0\n\nInvoice Management System\n\n© 2025 Chinmay Technosoft Private Limited'
             );
           }}
+        />
+      </Card>
+
+      {/* Legal Section */}
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Legal
+          </Text>
+        </Card.Content>
+        <List.Item
+          title="Privacy Policy"
+          description="How we handle your data"
+          left={(props) => <List.Icon {...props} icon="shield-account" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('PrivacyPolicy')}
+        />
+        <Divider />
+        <List.Item
+          title="Terms of Service"
+          description="Usage terms and conditions"
+          left={(props) => <List.Icon {...props} icon="file-document" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('TermsOfService')}
+        />
+        <Divider />
+        <List.Item
+          title="DPDP Compliance"
+          description="Data protection compliance"
+          left={(props) => <List.Icon {...props} icon="shield-check" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('DPDPCompliance')}
         />
       </Card>
 

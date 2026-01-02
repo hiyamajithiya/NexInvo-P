@@ -149,6 +149,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             </Button>
           </View>
         </View>
+
+        <View style={styles.companyInfo}>
+          <Text variant="bodySmall" style={styles.companyName}>
+            Chinmay Technosoft Private Limited
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -214,5 +220,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
+  },
+  companyInfo: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingBottom: 16,
+  },
+  companyName: {
+    color: colors.text.secondary,
+    fontSize: 12,
+    textAlign: 'center',
   },
 });

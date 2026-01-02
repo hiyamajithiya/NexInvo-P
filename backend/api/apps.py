@@ -1,7 +1,9 @@
 import os
 import sys
 import logging
-import fcntl
+import platform
+if platform.system() != 'Windows':
+    import fcntl
 from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -26,15 +28,25 @@ class ApiConfig(AppConfig):
             run_main = os.environ.get('RUN_MAIN')
 
             if run_main == 'true' or (run_main is None and 'gunicorn' in sys.modules):
-                lock_file = '/tmp/nexinvo_scheduler.lock'
-                try:
-                    lock_fd = open(lock_file, 'w')
-                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    from api.scheduler import start_scheduler
-                    start_scheduler()
-                    logger.info("Background scheduler started successfully (single instance)")
-                    self._scheduler_lock = lock_fd
-                except BlockingIOError:
-                    logger.info("Scheduler already running in another worker - skipping")
-                except Exception as e:
-                    logger.error(f"Failed to start scheduler: {e}")
+                if platform.system() == 'Windows':
+                    # On Windows, skip file locking and just start scheduler
+                    try:
+                        from api.scheduler import start_scheduler
+                        start_scheduler()
+                        logger.info("Background scheduler started successfully (Windows)")
+                    except Exception as e:
+                        logger.error(f"Failed to start scheduler: {e}")
+                else:
+                    # On Unix, use file locking to prevent multiple instances
+                    lock_file = '/tmp/nexinvo_scheduler.lock'
+                    try:
+                        lock_fd = open(lock_file, 'w')
+                        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        from api.scheduler import start_scheduler
+                        start_scheduler()
+                        logger.info("Background scheduler started successfully (single instance)")
+                        self._scheduler_lock = lock_fd
+                    except BlockingIOError:
+                        logger.info("Scheduler already running in another worker - skipping")
+                    except Exception as e:
+                        logger.error(f"Failed to start scheduler: {e}")
