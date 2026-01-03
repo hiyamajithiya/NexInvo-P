@@ -28,7 +28,7 @@ type RecordPaymentScreenProps = {
 
 const paymentMethods = [
   { value: 'cash', label: 'Cash' },
-  { value: 'bank', label: 'Bank Transfer' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'upi', label: 'UPI' },
   { value: 'cheque', label: 'Cheque' },
 ];
@@ -53,7 +53,7 @@ export default function RecordPaymentScreen({
   const [paymentDate, setPaymentDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-  const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [notes, setNotes] = useState('');
 

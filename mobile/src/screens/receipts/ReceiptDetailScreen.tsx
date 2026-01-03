@@ -204,6 +204,7 @@ export default function ReceiptDetailScreen({
       case 'cash':
         return { bg: colors.success.light, text: colors.success.dark };
       case 'bank':
+      case 'bank_transfer':
       case 'bank transfer':
         return { bg: colors.info.light, text: colors.info.dark };
       case 'upi':
