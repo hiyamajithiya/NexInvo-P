@@ -2023,7 +2023,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 invoice.status = 'paid'
                 invoice.save()
         elif invoice.invoice_type == 'tax':
-            # Payment against Tax Invoice - Create Receipt but NO automatic email
+            # Payment against Tax Invoice - Create Receipt and send email automatically
+            receipt = None
             with transaction.atomic():
                 # Generate Receipt Number
                 invoice_settings = InvoiceSettings.objects.get(organization=self.request.organization)
@@ -2046,7 +2047,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 receipt_number = f"{receipt_prefix}{next_number}"
 
                 # Create Receipt for Tax Invoice payment with TDS details (Income Tax TDS + GST TDS)
-                Receipt.objects.create(
+                receipt = Receipt.objects.create(
                     organization=self.request.organization,
                     created_by=self.request.user,
                     payment=payment,
@@ -2070,8 +2071,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     invoice.status = 'sent'
                 invoice.save()
 
-            # NO automatic email for Tax Invoice payments
-            # User can manually download or email the receipt from the Receipts section
+            # Auto-send receipt and tax invoice email (outside transaction)
+            if receipt and invoice.client.email:
+                try:
+                    company_settings = CompanySettings.objects.get(organization=self.request.organization)
+                    send_receipt_email(receipt, invoice, company_settings)
+                except Exception as e:
+                    print(f"Error sending receipt email for tax invoice payment: {str(e)}")
         else:
             # Update invoice status for other invoice types
             if total_paid >= invoice.total_amount:
