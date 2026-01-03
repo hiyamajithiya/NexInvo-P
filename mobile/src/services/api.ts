@@ -219,6 +219,7 @@ class ApiService {
     invoice_type?: string;
     client?: number;
     search?: string;
+    unpaid_only?: boolean;
   }): Promise<InvoiceListResponse> {
     const response = await this.api.get<InvoiceListResponse | Invoice[]>('invoices/', { params });
     // Handle both paginated and non-paginated responses

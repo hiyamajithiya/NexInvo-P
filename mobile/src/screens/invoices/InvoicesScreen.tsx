@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,18 +14,21 @@ import {
   ActivityIndicator,
   useTheme,
 } from 'react-native-paper';
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import api from '../../services/api';
-import { Invoice, RootStackParamList } from '../../types';
+import { Invoice, RootStackParamList, MainTabParamList } from '../../types';
 import colors from '../../theme/colors';
 
 type InvoicesScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 };
 
+type InvoicesScreenRouteProp = RouteProp<MainTabParamList, 'Invoices'>;
+
 const statusFilters = [
   { key: '', label: 'All' },
+  { key: 'pending', label: 'Pending' },
   { key: 'draft', label: 'Draft' },
   { key: 'sent', label: 'Sent' },
   { key: 'paid', label: 'Paid' },
@@ -35,6 +38,7 @@ const statusFilters = [
 export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const theme = useTheme();
   const isFocused = useIsFocused();
+  const route = useRoute<InvoicesScreenRouteProp>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,12 +48,22 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const [hasMore, setHasMore] = useState(true);
   const [fabOpen, setFabOpen] = useState(false);
 
+  // Handle initial filter from navigation params
+  useEffect(() => {
+    if (route.params?.filter) {
+      setStatusFilter(route.params.filter);
+    }
+  }, [route.params?.filter]);
+
   const fetchInvoices = async (reset = false) => {
     try {
       const currentPage = reset ? 1 : page;
+      // For 'pending' filter, we use unpaid_only=true to get all unpaid invoices
+      const isPending = statusFilter === 'pending';
       const data = await api.getInvoices({
         page: currentPage,
-        status: statusFilter || undefined,
+        status: isPending ? undefined : (statusFilter || undefined),
+        unpaid_only: isPending ? true : undefined,
         search: search || undefined,
       });
 

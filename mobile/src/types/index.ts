@@ -504,7 +504,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Invoices: undefined;
+  Invoices: { filter?: 'pending' | 'paid' | 'draft' | 'sent' | 'overdue' } | undefined;
   Clients: undefined;
   Receipts: undefined;
   Settings: undefined;
