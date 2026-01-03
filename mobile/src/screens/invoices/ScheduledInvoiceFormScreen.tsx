@@ -4,6 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  TouchableOpacity,
+  Modal,
+  FlatList,
 } from 'react-native';
 import {
   Text,
@@ -11,10 +14,11 @@ import {
   Button,
   Card,
   ActivityIndicator,
-  Menu,
   SegmentedButtons,
   Switch,
   IconButton,
+  Searchbar,
+  Portal,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -23,8 +27,8 @@ import api from '../../services/api';
 import {
   Client,
   ScheduledInvoice,
-  ScheduledInvoiceItem,
   RootStackParamList,
+  ServiceItem,
 } from '../../types';
 import colors from '../../theme/colors';
 
@@ -49,6 +53,7 @@ interface FormItem {
   hsn_sac: string;
   gst_rate: string;
   taxable_amount: string;
+  serviceId?: number;
 }
 
 export default function ScheduledInvoiceFormScreen({
@@ -62,7 +67,16 @@ export default function ScheduledInvoiceFormScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
-  const [clientMenuVisible, setClientMenuVisible] = useState(false);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+
+  // Modal states
+  const [clientModalVisible, setClientModalVisible] = useState(false);
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  const [currentItemIndex, setCurrentItemIndex] = useState<number | null>(null);
+
+  // Search states
+  const [clientSearch, setClientSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
 
   // Form state
   const [name, setName] = useState('');
@@ -89,12 +103,16 @@ export default function ScheduledInvoiceFormScreen({
 
   const fetchInitialData = async () => {
     try {
-      const clientsData = await api.getClients();
+      const [clientsData, servicesData] = await Promise.all([
+        api.getClients(),
+        api.getServiceItems(),
+      ]);
       setClients(clientsData.results || []);
+      setServices(servicesData.results || []);
 
       if (isEditing && scheduledInvoiceId) {
         const scheduleData = await api.getScheduledInvoice(scheduledInvoiceId);
-        populateForm(scheduleData);
+        populateForm(scheduleData, clientsData.results || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -104,7 +122,7 @@ export default function ScheduledInvoiceFormScreen({
     }
   };
 
-  const populateForm = (schedule: ScheduledInvoice) => {
+  const populateForm = (schedule: ScheduledInvoice, clientsList: Client[]) => {
     setName(schedule.name);
     setInvoiceType(schedule.invoice_type);
     setFrequency(schedule.frequency);
@@ -120,7 +138,7 @@ export default function ScheduledInvoiceFormScreen({
     setEmailBody(schedule.email_body || '');
 
     // Set client
-    const client = clients.find(c => c.id === schedule.client);
+    const client = clientsList.find(c => c.id === schedule.client);
     if (client) setSelectedClient(client);
 
     // Set items
@@ -128,15 +146,24 @@ export default function ScheduledInvoiceFormScreen({
       setItems(schedule.items.map(item => ({
         description: item.description,
         hsn_sac: item.hsn_sac,
-        gst_rate: item.gst_rate,
-        taxable_amount: item.taxable_amount,
+        gst_rate: String(item.gst_rate),
+        taxable_amount: String(item.taxable_amount),
       })));
     }
   };
 
-  const handleClientSelect = (client: Client) => {
-    setSelectedClient(client);
-    setClientMenuVisible(false);
+  const selectService = (service: ServiceItem, index: number) => {
+    const newItems = [...items];
+    newItems[index] = {
+      ...newItems[index],
+      description: service.name,
+      hsn_sac: service.sac_code || '',
+      gst_rate: String(service.gst_rate),
+      serviceId: service.id,
+    };
+    setItems(newItems);
+    setServiceModalVisible(false);
+    setCurrentItemIndex(null);
   };
 
   const addItem = () => {
@@ -199,8 +226,8 @@ export default function ScheduledInvoiceFormScreen({
         items: items.map(item => ({
           description: item.description,
           hsn_sac: item.hsn_sac,
-          gst_rate: item.gst_rate,
-          taxable_amount: item.taxable_amount,
+          gst_rate: parseFloat(item.gst_rate) || 18,
+          taxable_amount: parseFloat(item.taxable_amount) || 0,
           total_amount: (
             parseFloat(item.taxable_amount) +
             (parseFloat(item.taxable_amount) * parseFloat(item.gst_rate)) / 100
@@ -238,6 +265,14 @@ export default function ScheduledInvoiceFormScreen({
     }).format(value);
   };
 
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(clientSearch.toLowerCase())
+  );
+
+  const filteredServices = services.filter(service =>
+    service.name.toLowerCase().includes(serviceSearch.toLowerCase())
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -268,32 +303,15 @@ export default function ScheduledInvoiceFormScreen({
             <Text variant="labelMedium" style={styles.fieldLabel}>
               Client *
             </Text>
-            <Menu
-              visible={clientMenuVisible}
-              onDismiss={() => setClientMenuVisible(false)}
-              anchor={
-                <Button
-                  mode="outlined"
-                  onPress={() => setClientMenuVisible(true)}
-                  style={styles.selectButton}
-                  contentStyle={styles.selectButtonContent}
-                >
-                  {selectedClient ? selectedClient.name : 'Select Client'}
-                </Button>
-              }
+            <TouchableOpacity
+              style={styles.selectionButton}
+              onPress={() => setClientModalVisible(true)}
             >
-              {clients && clients.length > 0 ? (
-                clients.map((client) => (
-                  <Menu.Item
-                    key={client.id}
-                    onPress={() => handleClientSelect(client)}
-                    title={`${client.name}${client.email ? ` - ${client.email}` : ''}`}
-                  />
-                ))
-              ) : (
-                <Menu.Item title="No clients available" disabled />
-              )}
-            </Menu>
+              <Text style={selectedClient ? styles.selectionText : styles.placeholderText}>
+                {selectedClient?.name || 'Select Client'}
+              </Text>
+              <IconButton icon="chevron-down" size={20} />
+            </TouchableOpacity>
 
             <Text variant="labelMedium" style={styles.fieldLabel}>
               Invoice Type
@@ -394,23 +412,39 @@ export default function ScheduledInvoiceFormScreen({
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Line Items
               </Text>
-              <Button mode="text" onPress={addItem} icon="plus">
-                Add Item
+              <Button mode="contained" onPress={addItem} compact style={styles.addButton}>
+                + Add Item
               </Button>
             </View>
 
             {items.map((item, index) => (
               <View key={index} style={styles.itemContainer}>
                 <View style={styles.itemHeader}>
-                  <Text variant="labelLarge">Item {index + 1}</Text>
+                  <Text variant="labelLarge" style={styles.itemLabel}>Item {index + 1}</Text>
                   {items.length > 1 && (
                     <IconButton
                       icon="delete"
                       size={20}
+                      iconColor={colors.error.main}
                       onPress={() => removeItem(index)}
                     />
                   )}
                 </View>
+
+                {/* Service Selection Button */}
+                <TouchableOpacity
+                  style={styles.serviceButton}
+                  onPress={() => {
+                    setCurrentItemIndex(index);
+                    setServiceSearch('');
+                    setServiceModalVisible(true);
+                  }}
+                >
+                  <Text style={item.serviceId ? styles.selectionText : styles.placeholderText}>
+                    {item.description || 'Select Service (or enter manually below)'}
+                  </Text>
+                  <IconButton icon="chevron-down" size={20} />
+                </TouchableOpacity>
 
                 <TextInput
                   mode="outlined"
@@ -423,7 +457,7 @@ export default function ScheduledInvoiceFormScreen({
                 <View style={styles.row}>
                   <TextInput
                     mode="outlined"
-                    label="HSN/SAC"
+                    label="SAC Code"
                     value={item.hsn_sac}
                     onChangeText={(value) => updateItem(index, 'hsn_sac', value)}
                     style={[styles.input, styles.halfInput]}
@@ -526,6 +560,158 @@ export default function ScheduledInvoiceFormScreen({
           {isEditing ? 'Update' : 'Create'} Schedule
         </Button>
       </View>
+
+      {/* Client Selection Modal */}
+      <Portal>
+        <Modal
+          visible={clientModalVisible}
+          onRequestClose={() => setClientModalVisible(false)}
+          animationType="slide"
+          transparent
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text variant="titleLarge" style={styles.modalTitle}>Select Client</Text>
+                <IconButton icon="close" onPress={() => setClientModalVisible(false)} />
+              </View>
+
+              <Searchbar
+                placeholder="Search clients..."
+                onChangeText={setClientSearch}
+                value={clientSearch}
+                style={styles.searchbar}
+              />
+
+              <FlatList
+                data={filteredClients}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.listItem,
+                      selectedClient?.id === item.id && styles.selectedListItem
+                    ]}
+                    onPress={() => {
+                      setSelectedClient(item);
+                      setClientModalVisible(false);
+                    }}
+                  >
+                    <View>
+                      <Text variant="bodyLarge" style={styles.listItemTitle}>{item.name}</Text>
+                      {item.email && (
+                        <Text variant="bodySmall" style={styles.listItemSubtitle}>{item.email}</Text>
+                      )}
+                    </View>
+                    {selectedClient?.id === item.id && (
+                      <IconButton icon="check" iconColor={colors.primary[500]} size={20} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyList}>
+                    <Text variant="bodyMedium" style={styles.emptyText}>
+                      No clients found
+                    </Text>
+                    <Button
+                      mode="contained"
+                      onPress={() => {
+                        setClientModalVisible(false);
+                        navigation.navigate('ClientForm', {});
+                      }}
+                      style={styles.createButton}
+                    >
+                      + Create New Client
+                    </Button>
+                  </View>
+                }
+                style={styles.list}
+              />
+
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setClientModalVisible(false);
+                  navigation.navigate('ClientForm', {});
+                }}
+                style={styles.modalFooterButton}
+              >
+                + Create New Client
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Service Selection Modal */}
+      <Portal>
+        <Modal
+          visible={serviceModalVisible}
+          onRequestClose={() => setServiceModalVisible(false)}
+          animationType="slide"
+          transparent
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text variant="titleLarge" style={styles.modalTitle}>Select Service</Text>
+                <IconButton icon="close" onPress={() => setServiceModalVisible(false)} />
+              </View>
+
+              <Searchbar
+                placeholder="Search services..."
+                onChangeText={setServiceSearch}
+                value={serviceSearch}
+                style={styles.searchbar}
+              />
+
+              <FlatList
+                data={filteredServices}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.listItem}
+                    onPress={() => {
+                      if (currentItemIndex !== null) {
+                        selectService(item, currentItemIndex);
+                      }
+                    }}
+                  >
+                    <View style={styles.serviceItemInfo}>
+                      <Text variant="bodyLarge" style={styles.listItemTitle}>{item.name}</Text>
+                      <View style={styles.serviceDetails}>
+                        {item.sac_code && (
+                          <Text variant="bodySmall" style={styles.serviceTag}>SAC: {item.sac_code}</Text>
+                        )}
+                        <Text variant="bodySmall" style={styles.serviceTag}>GST: {item.gst_rate}%</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyList}>
+                    <Text variant="bodyMedium" style={styles.emptyText}>
+                      No services found
+                    </Text>
+                    <Text variant="bodySmall" style={styles.emptySubtext}>
+                      You can enter item details manually or create services in Settings → Service Master
+                    </Text>
+                  </View>
+                }
+                style={styles.list}
+              />
+
+              <Button
+                mode="outlined"
+                onPress={() => setServiceModalVisible(false)}
+                style={styles.modalFooterButton}
+              >
+                Enter Manually
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -568,13 +754,37 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: colors.background.paper,
   },
-  selectButton: {
-    justifyContent: 'flex-start',
-    borderColor: colors.primary[500],
+  selectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.grey[300],
+    borderRadius: 8,
+    paddingLeft: 16,
+    paddingVertical: 4,
+    backgroundColor: colors.background.paper,
     marginBottom: 12,
   },
-  selectButtonContent: {
-    justifyContent: 'flex-start',
+  serviceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    borderRadius: 8,
+    paddingLeft: 16,
+    paddingVertical: 4,
+    backgroundColor: colors.primary[50],
+    marginBottom: 12,
+  },
+  selectionText: {
+    color: colors.text.primary,
+    fontSize: 16,
+  },
+  placeholderText: {
+    color: colors.text.muted,
+    fontSize: 16,
   },
   segmentedButtons: {
     marginBottom: 12,
@@ -585,6 +795,9 @@ const styles = StyleSheet.create({
   },
   halfInput: {
     flex: 1,
+  },
+  addButton: {
+    backgroundColor: colors.primary[500],
   },
   itemContainer: {
     padding: 12,
@@ -597,6 +810,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  itemLabel: {
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
   totalContainer: {
     flexDirection: 'row',
@@ -633,5 +850,94 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: colors.primary[500],
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background.paper,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.grey[200],
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+    color: colors.text.primary,
+  },
+  searchbar: {
+    margin: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    elevation: 0,
+    backgroundColor: colors.grey[100],
+  },
+  list: {
+    maxHeight: 400,
+  },
+  listItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.grey[100],
+  },
+  selectedListItem: {
+    backgroundColor: colors.primary[50],
+  },
+  listItemTitle: {
+    fontWeight: '500',
+    color: colors.text.primary,
+  },
+  listItemSubtitle: {
+    color: colors.text.muted,
+    marginTop: 2,
+  },
+  serviceItemInfo: {
+    flex: 1,
+  },
+  serviceDetails: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  serviceTag: {
+    backgroundColor: colors.grey[100],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    color: colors.text.secondary,
+  },
+  emptyList: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: colors.text.muted,
+    marginBottom: 16,
+  },
+  emptySubtext: {
+    color: colors.text.muted,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  createButton: {
+    backgroundColor: colors.primary[500],
+  },
+  modalFooterButton: {
+    margin: 16,
+    marginTop: 8,
   },
 });

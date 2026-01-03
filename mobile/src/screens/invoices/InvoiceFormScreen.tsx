@@ -4,6 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  TouchableOpacity,
+  Modal,
+  FlatList,
 } from 'react-native';
 import {
   Text,
@@ -13,14 +16,16 @@ import {
   ActivityIndicator,
   SegmentedButtons,
   IconButton,
-  Menu,
   Divider,
+  Searchbar,
+  Portal,
+  RadioButton,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { Invoice, Client, RootStackParamList, InvoiceItem } from '../../types';
+import { Client, RootStackParamList, ServiceItem, PaymentTerm } from '../../types';
 import colors from '../../theme/colors';
 
 type InvoiceFormScreenProps = {
@@ -34,6 +39,7 @@ interface FormItem {
   gst_rate: string;
   taxable_amount: string;
   total_amount: string;
+  serviceId?: number;
 }
 
 export default function InvoiceFormScreen({
@@ -47,10 +53,22 @@ export default function InvoiceFormScreen({
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
-  const [clientMenuVisible, setClientMenuVisible] = useState(false);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
+
+  // Modal states
+  const [clientModalVisible, setClientModalVisible] = useState(false);
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  const [paymentTermModalVisible, setPaymentTermModalVisible] = useState(false);
+  const [currentItemIndex, setCurrentItemIndex] = useState<number | null>(null);
+
+  // Search states
+  const [clientSearch, setClientSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
 
   // Form state
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedPaymentTerm, setSelectedPaymentTerm] = useState<PaymentTerm | null>(null);
   const [invoiceType, setInvoiceType] = useState<'tax' | 'proforma'>('tax');
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().split('T')[0]
@@ -62,6 +80,8 @@ export default function InvoiceFormScreen({
 
   useEffect(() => {
     fetchClients();
+    fetchServices();
+    fetchPaymentTerms();
     if (isEditing) {
       fetchInvoice();
     }
@@ -76,6 +96,24 @@ export default function InvoiceFormScreen({
     }
   };
 
+  const fetchServices = async () => {
+    try {
+      const data = await api.getServiceItems({ page: 1 });
+      setServices(data.results || []);
+    } catch (error) {
+      console.error('Error fetching services:', error);
+    }
+  };
+
+  const fetchPaymentTerms = async () => {
+    try {
+      const data = await api.getPaymentTerms({ page: 1 });
+      setPaymentTerms(data.results || []);
+    } catch (error) {
+      console.error('Error fetching payment terms:', error);
+    }
+  };
+
   const fetchInvoice = async () => {
     try {
       const data = await api.getInvoice(invoiceId!);
@@ -84,7 +122,8 @@ export default function InvoiceFormScreen({
       setNotes(data.notes || '');
 
       // Find and set client
-      const client = clients.find((c) => c.id === data.client);
+      const clientsData = await api.getClients({ page: 1 });
+      const client = (clientsData.results || []).find((c) => c.id === data.client);
       setSelectedClient(client || null);
 
       // Set items
@@ -93,9 +132,9 @@ export default function InvoiceFormScreen({
           data.items.map((item) => ({
             description: item.description,
             hsn_sac: item.hsn_sac,
-            gst_rate: item.gst_rate,
-            taxable_amount: item.taxable_amount,
-            total_amount: item.total_amount,
+            gst_rate: String(item.gst_rate),
+            taxable_amount: String(item.taxable_amount),
+            total_amount: String(item.total_amount),
           }))
         );
       }
@@ -106,6 +145,29 @@ export default function InvoiceFormScreen({
     } finally {
       setLoading(false);
     }
+  };
+
+  const selectService = (service: ServiceItem, index: number) => {
+    const newItems = [...items];
+    newItems[index] = {
+      ...newItems[index],
+      description: service.name,
+      hsn_sac: service.sac_code || '',
+      gst_rate: String(service.gst_rate),
+      serviceId: service.id,
+    };
+
+    // Recalculate total if taxable amount exists
+    if (newItems[index].taxable_amount) {
+      const taxable = parseFloat(newItems[index].taxable_amount) || 0;
+      const gstRate = parseFloat(newItems[index].gst_rate) || 0;
+      const gstAmount = (taxable * gstRate) / 100;
+      newItems[index].total_amount = (taxable + gstAmount).toFixed(2);
+    }
+
+    setItems(newItems);
+    setServiceModalVisible(false);
+    setCurrentItemIndex(null);
   };
 
   const updateItem = (index: number, field: keyof FormItem, value: string) => {
@@ -147,10 +209,16 @@ export default function InvoiceFormScreen({
       taxAmount += total - taxable;
     });
 
+    const totalBeforeRound = subtotal + taxAmount;
+    const roundedTotal = Math.round(totalBeforeRound);
+    const roundOff = roundedTotal - totalBeforeRound;
+
     return {
       subtotal,
       taxAmount,
-      total: subtotal + taxAmount,
+      total: totalBeforeRound,
+      roundOff,
+      roundedTotal,
     };
   };
 
@@ -172,17 +240,23 @@ export default function InvoiceFormScreen({
     setSaving(true);
 
     try {
+      const totals = calculateTotals();
       const invoiceData = {
         client: selectedClient.id,
         invoice_type: invoiceType,
         invoice_date: invoiceDate,
+        payment_term: selectedPaymentTerm?.id || null,
         notes,
+        subtotal: totals.subtotal,
+        tax_amount: totals.taxAmount,
+        round_off: totals.roundOff,
+        total_amount: totals.roundedTotal,
         items: validItems.map((item) => ({
           description: item.description,
           hsn_sac: item.hsn_sac,
-          gst_rate: item.gst_rate,
-          taxable_amount: item.taxable_amount,
-          total_amount: item.total_amount,
+          gst_rate: parseFloat(item.gst_rate) || 18,
+          taxable_amount: parseFloat(item.taxable_amount) || 0,
+          total_amount: parseFloat(item.total_amount) || 0,
         })),
       };
 
@@ -210,6 +284,14 @@ export default function InvoiceFormScreen({
       maximumFractionDigits: 2,
     }).format(amount);
   };
+
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(clientSearch.toLowerCase())
+  );
+
+  const filteredServices = services.filter(service =>
+    service.name.toLowerCase().includes(serviceSearch.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -245,36 +327,17 @@ export default function InvoiceFormScreen({
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>
-              Client
+              Client *
             </Text>
-            <Menu
-              visible={clientMenuVisible}
-              onDismiss={() => setClientMenuVisible(false)}
-              anchor={
-                <Button
-                  mode="outlined"
-                  onPress={() => setClientMenuVisible(true)}
-                  style={styles.clientButton}
-                >
-                  {selectedClient?.name || 'Select Client'}
-                </Button>
-              }
+            <TouchableOpacity
+              style={styles.selectionButton}
+              onPress={() => setClientModalVisible(true)}
             >
-              {clients && clients.length > 0 ? (
-                clients.map((client) => (
-                  <Menu.Item
-                    key={client.id}
-                    onPress={() => {
-                      setSelectedClient(client);
-                      setClientMenuVisible(false);
-                    }}
-                    title={client.name}
-                  />
-                ))
-              ) : (
-                <Menu.Item title="No clients available" disabled />
-              )}
-            </Menu>
+              <Text style={selectedClient ? styles.selectionText : styles.placeholderText}>
+                {selectedClient?.name || 'Select Client'}
+              </Text>
+              <IconButton icon="chevron-down" size={20} />
+            </TouchableOpacity>
           </Card.Content>
         </Card>
 
@@ -282,7 +345,7 @@ export default function InvoiceFormScreen({
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>
-              Invoice Date
+              Invoice Date *
             </Text>
             <TextInput
               mode="outlined"
@@ -293,30 +356,64 @@ export default function InvoiceFormScreen({
           </Card.Content>
         </Card>
 
+        {/* Payment Terms */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Payment Terms
+            </Text>
+            <TouchableOpacity
+              style={styles.selectionButton}
+              onPress={() => setPaymentTermModalVisible(true)}
+            >
+              <Text style={selectedPaymentTerm ? styles.selectionText : styles.placeholderText}>
+                {selectedPaymentTerm ? `${selectedPaymentTerm.term_name} (${selectedPaymentTerm.days} days)` : 'Select Payment Terms'}
+              </Text>
+              <IconButton icon="chevron-down" size={20} />
+            </TouchableOpacity>
+          </Card.Content>
+        </Card>
+
         {/* Items */}
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.itemsHeader}>
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Items
+                Line Items *
               </Text>
-              <Button mode="text" onPress={addItem} compact>
-                Add Item
+              <Button mode="contained" onPress={addItem} compact style={styles.addButton}>
+                + Add Item
               </Button>
             </View>
 
             {items.map((item, index) => (
               <View key={index} style={styles.itemContainer}>
                 <View style={styles.itemHeader}>
-                  <Text variant="labelLarge">Item {index + 1}</Text>
+                  <Text variant="labelLarge" style={styles.itemLabel}>Item {index + 1}</Text>
                   {items.length > 1 && (
                     <IconButton
                       icon="delete"
                       size={20}
+                      iconColor={colors.error.main}
                       onPress={() => removeItem(index)}
                     />
                   )}
                 </View>
+
+                {/* Service Selection Button */}
+                <TouchableOpacity
+                  style={styles.serviceButton}
+                  onPress={() => {
+                    setCurrentItemIndex(index);
+                    setServiceSearch('');
+                    setServiceModalVisible(true);
+                  }}
+                >
+                  <Text style={item.serviceId ? styles.selectionText : styles.placeholderText}>
+                    {item.description || 'Select Service (or enter manually below)'}
+                  </Text>
+                  <IconButton icon="chevron-down" size={20} />
+                </TouchableOpacity>
 
                 <TextInput
                   mode="outlined"
@@ -329,7 +426,7 @@ export default function InvoiceFormScreen({
                 <View style={styles.row}>
                   <TextInput
                     mode="outlined"
-                    label="HSN/SAC"
+                    label="SAC Code"
                     value={item.hsn_sac}
                     onChangeText={(value) => updateItem(index, 'hsn_sac', value)}
                     style={[styles.input, styles.halfInput]}
@@ -347,7 +444,7 @@ export default function InvoiceFormScreen({
                 <View style={styles.row}>
                   <TextInput
                     mode="outlined"
-                    label="Taxable Amount"
+                    label="Taxable Amount (₹)"
                     value={item.taxable_amount}
                     onChangeText={(value) => updateItem(index, 'taxable_amount', value)}
                     keyboardType="numeric"
@@ -355,11 +452,10 @@ export default function InvoiceFormScreen({
                   />
                   <TextInput
                     mode="outlined"
-                    label="Total Amount"
+                    label="Total Amount (₹)"
                     value={item.total_amount}
-                    onChangeText={(value) => updateItem(index, 'total_amount', value)}
-                    keyboardType="numeric"
-                    style={[styles.input, styles.halfInput]}
+                    editable={false}
+                    style={[styles.input, styles.halfInput, styles.readOnlyInput]}
                   />
                 </View>
 
@@ -382,8 +478,15 @@ export default function InvoiceFormScreen({
             </View>
 
             <View style={styles.summaryRow}>
-              <Text variant="bodyMedium">Tax Amount</Text>
+              <Text variant="bodyMedium">GST Amount</Text>
               <Text variant="bodyLarge">{formatCurrency(totals.taxAmount)}</Text>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <Text variant="bodyMedium">Round Off</Text>
+              <Text variant="bodyLarge" style={{ color: totals.roundOff >= 0 ? colors.success.main : colors.error.main }}>
+                {totals.roundOff >= 0 ? '+' : ''}{formatCurrency(totals.roundOff)}
+              </Text>
             </View>
 
             <Divider style={styles.divider} />
@@ -393,7 +496,7 @@ export default function InvoiceFormScreen({
                 Total
               </Text>
               <Text variant="headlineSmall" style={styles.grandTotal}>
-                {formatCurrency(totals.total)}
+                {formatCurrency(totals.roundedTotal)}
               </Text>
             </View>
           </Card.Content>
@@ -430,11 +533,226 @@ export default function InvoiceFormScreen({
           onPress={handleSave}
           loading={saving}
           disabled={saving}
-          style={styles.actionButton}
+          style={[styles.actionButton, styles.saveButton]}
         >
           {isEditing ? 'Update' : 'Create'} Invoice
         </Button>
       </View>
+
+      {/* Client Selection Modal */}
+      <Portal>
+        <Modal
+          visible={clientModalVisible}
+          onRequestClose={() => setClientModalVisible(false)}
+          animationType="slide"
+          transparent
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text variant="titleLarge" style={styles.modalTitle}>Select Client</Text>
+                <IconButton icon="close" onPress={() => setClientModalVisible(false)} />
+              </View>
+
+              <Searchbar
+                placeholder="Search clients..."
+                onChangeText={setClientSearch}
+                value={clientSearch}
+                style={styles.searchbar}
+              />
+
+              <FlatList
+                data={filteredClients}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.listItem,
+                      selectedClient?.id === item.id && styles.selectedListItem
+                    ]}
+                    onPress={() => {
+                      setSelectedClient(item);
+                      setClientModalVisible(false);
+                    }}
+                  >
+                    <View>
+                      <Text variant="bodyLarge" style={styles.listItemTitle}>{item.name}</Text>
+                      {item.email && (
+                        <Text variant="bodySmall" style={styles.listItemSubtitle}>{item.email}</Text>
+                      )}
+                    </View>
+                    {selectedClient?.id === item.id && (
+                      <IconButton icon="check" iconColor={colors.primary[500]} size={20} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyList}>
+                    <Text variant="bodyMedium" style={styles.emptyText}>
+                      No clients found
+                    </Text>
+                    <Button
+                      mode="contained"
+                      onPress={() => {
+                        setClientModalVisible(false);
+                        navigation.navigate('ClientForm', {});
+                      }}
+                      style={styles.createButton}
+                    >
+                      + Create New Client
+                    </Button>
+                  </View>
+                }
+                style={styles.list}
+              />
+
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setClientModalVisible(false);
+                  navigation.navigate('ClientForm', {});
+                }}
+                style={styles.modalFooterButton}
+              >
+                + Create New Client
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Service Selection Modal */}
+      <Portal>
+        <Modal
+          visible={serviceModalVisible}
+          onRequestClose={() => setServiceModalVisible(false)}
+          animationType="slide"
+          transparent
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text variant="titleLarge" style={styles.modalTitle}>Select Service</Text>
+                <IconButton icon="close" onPress={() => setServiceModalVisible(false)} />
+              </View>
+
+              <Searchbar
+                placeholder="Search services..."
+                onChangeText={setServiceSearch}
+                value={serviceSearch}
+                style={styles.searchbar}
+              />
+
+              <FlatList
+                data={filteredServices}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.listItem}
+                    onPress={() => {
+                      if (currentItemIndex !== null) {
+                        selectService(item, currentItemIndex);
+                      }
+                    }}
+                  >
+                    <View style={styles.serviceItemInfo}>
+                      <Text variant="bodyLarge" style={styles.listItemTitle}>{item.name}</Text>
+                      <View style={styles.serviceDetails}>
+                        {item.sac_code && (
+                          <Text variant="bodySmall" style={styles.serviceTag}>SAC: {item.sac_code}</Text>
+                        )}
+                        <Text variant="bodySmall" style={styles.serviceTag}>GST: {item.gst_rate}%</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyList}>
+                    <Text variant="bodyMedium" style={styles.emptyText}>
+                      No services found
+                    </Text>
+                    <Text variant="bodySmall" style={styles.emptySubtext}>
+                      You can enter item details manually or create services in Settings → Service Master
+                    </Text>
+                  </View>
+                }
+                style={styles.list}
+              />
+
+              <Button
+                mode="outlined"
+                onPress={() => setServiceModalVisible(false)}
+                style={styles.modalFooterButton}
+              >
+                Enter Manually
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Payment Terms Selection Modal */}
+      <Portal>
+        <Modal
+          visible={paymentTermModalVisible}
+          onRequestClose={() => setPaymentTermModalVisible(false)}
+          animationType="slide"
+          transparent
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text variant="titleLarge" style={styles.modalTitle}>Select Payment Terms</Text>
+                <IconButton icon="close" onPress={() => setPaymentTermModalVisible(false)} />
+              </View>
+
+              <FlatList
+                data={paymentTerms}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.listItem,
+                      selectedPaymentTerm?.id === item.id && styles.selectedListItem
+                    ]}
+                    onPress={() => {
+                      setSelectedPaymentTerm(item);
+                      setPaymentTermModalVisible(false);
+                    }}
+                  >
+                    <View>
+                      <Text variant="bodyLarge" style={styles.listItemTitle}>{item.term_name}</Text>
+                      <Text variant="bodySmall" style={styles.listItemSubtitle}>{item.days} days</Text>
+                    </View>
+                    {selectedPaymentTerm?.id === item.id && (
+                      <IconButton icon="check" iconColor={colors.primary[500]} size={20} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyList}>
+                    <Text variant="bodyMedium" style={styles.emptyText}>
+                      No payment terms found
+                    </Text>
+                  </View>
+                }
+                style={styles.list}
+              />
+
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setSelectedPaymentTerm(null);
+                  setPaymentTermModalVisible(false);
+                }}
+                style={styles.modalFooterButton}
+              >
+                Clear Selection
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -463,11 +781,42 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: colors.text.primary,
   },
-  clientButton: {
-    justifyContent: 'flex-start',
+  selectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.grey[300],
+    borderRadius: 8,
+    paddingLeft: 16,
+    paddingVertical: 4,
+    backgroundColor: colors.background.paper,
+  },
+  serviceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    borderRadius: 8,
+    paddingLeft: 16,
+    paddingVertical: 4,
+    backgroundColor: colors.primary[50],
+    marginBottom: 12,
+  },
+  selectionText: {
+    color: colors.text.primary,
+    fontSize: 16,
+  },
+  placeholderText: {
+    color: colors.text.muted,
+    fontSize: 16,
   },
   input: {
     marginBottom: 12,
+  },
+  readOnlyInput: {
+    backgroundColor: colors.grey[100],
   },
   row: {
     flexDirection: 'row',
@@ -480,7 +829,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  addButton: {
+    backgroundColor: colors.primary[500],
   },
   itemContainer: {
     marginBottom: 8,
@@ -490,6 +842,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  itemLabel: {
+    fontWeight: '600',
+    color: colors.text.secondary,
   },
   itemDivider: {
     marginTop: 16,
@@ -524,5 +880,97 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  saveButton: {
+    backgroundColor: colors.primary[500],
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background.paper,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.grey[200],
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+    color: colors.text.primary,
+  },
+  searchbar: {
+    margin: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    elevation: 0,
+    backgroundColor: colors.grey[100],
+  },
+  list: {
+    maxHeight: 400,
+  },
+  listItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.grey[100],
+  },
+  selectedListItem: {
+    backgroundColor: colors.primary[50],
+  },
+  listItemTitle: {
+    fontWeight: '500',
+    color: colors.text.primary,
+  },
+  listItemSubtitle: {
+    color: colors.text.muted,
+    marginTop: 2,
+  },
+  serviceItemInfo: {
+    flex: 1,
+  },
+  serviceDetails: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  serviceTag: {
+    backgroundColor: colors.grey[100],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    color: colors.text.secondary,
+  },
+  emptyList: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: colors.text.muted,
+    marginBottom: 16,
+  },
+  emptySubtext: {
+    color: colors.text.muted,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  createButton: {
+    backgroundColor: colors.primary[500],
+  },
+  modalFooterButton: {
+    margin: 16,
+    marginTop: 8,
   },
 });
