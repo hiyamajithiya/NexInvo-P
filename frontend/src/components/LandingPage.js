@@ -771,9 +771,9 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               </div>
               <div className="download-buttons">
                 <a
-                  href="https://expo.dev/accounts/himanshu83/projects/nexinvo/builds/45f3c360-7934-453f-a286-d27f492aab56"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/downloads/nexinvo.apk" download="NexInvo.apk"
+                  
+                  
                   className="btn-download-primary"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="download-icon">
@@ -899,8 +899,8 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               </div>
               <div className="footer-column">
                 <h4>Legal</h4>
-                <a href="#privacy">Privacy Policy</a>
-                <a href="#terms">Terms of Service</a>
+                <a href="/privacy-policy.html">Privacy Policy</a>
+                <a href="/terms-of-service.html">Terms of Service</a>
                 <button onClick={() => setShowDPDPCompliance(true)}>DPDP Compliance</button>
               </div>
               <div className="footer-column">

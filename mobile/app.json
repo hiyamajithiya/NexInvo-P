@@ -24,7 +24,12 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.nexinvo.app",
-      "label": "NexInvo"
+      "label": "NexInvo",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
