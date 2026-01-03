@@ -552,6 +552,33 @@ class ApiService {
   async deletePaymentTerm(id: number): Promise<void> {
     await this.api.delete(`payment-terms/${id}/`);
   }
+
+  // ==================== Email Settings ====================
+
+  async getEmailSettings(): Promise<any> {
+    const response = await this.api.get('settings/email/');
+    return response.data;
+  }
+
+  async updateEmailSettings(data: any): Promise<any> {
+    const response = await this.api.put('settings/email/', data);
+    return response.data;
+  }
+
+  async testEmailSettings(): Promise<any> {
+    const response = await this.api.post('settings/email/test/');
+    return response.data;
+  }
+
+  // ==================== Data Export ====================
+
+  async exportData(format: 'excel' | 'csv', dataType: 'all' | 'invoices' | 'clients' | 'payments'): Promise<Blob> {
+    const response = await this.api.get(`settings/export/`, {
+      params: { format, type: dataType },
+      responseType: 'blob',
+    });
+    return response.data;
+  }
 }
 
 export const api = new ApiService();

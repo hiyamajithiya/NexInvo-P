@@ -31,6 +31,8 @@ import CompanySettingsScreen from '../screens/settings/CompanySettingsScreen';
 import InvoiceSettingsScreen from '../screens/settings/InvoiceSettingsScreen';
 import PaymentTermsScreen from '../screens/settings/PaymentTermsScreen';
 import PaymentTermFormScreen from '../screens/settings/PaymentTermFormScreen';
+import EmailSettingsScreen from '../screens/settings/EmailSettingsScreen';
+import BackupDataScreen from '../screens/settings/BackupDataScreen';
 import ServiceMasterScreen from '../screens/services/ServiceMasterScreen';
 import ServiceFormScreen from '../screens/services/ServiceFormScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
@@ -237,6 +239,16 @@ export default function AppNavigator() {
               options={({ route }) => ({
                 title: route.params?.paymentTermId ? 'Edit Payment Term' : 'New Payment Term',
               })}
+            />
+            <Stack.Screen
+              name="EmailSettings"
+              component={EmailSettingsScreen}
+              options={{ title: 'Email Settings' }}
+            />
+            <Stack.Screen
+              name="BackupData"
+              component={BackupDataScreen}
+              options={{ title: 'Backup & Export' }}
             />
             {/* Legal Screens */}
             <Stack.Screen

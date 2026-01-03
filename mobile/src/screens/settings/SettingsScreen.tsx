@@ -141,6 +141,14 @@ export default function SettingsScreen() {
         />
         <Divider />
         <List.Item
+          title="Email Settings"
+          description="Configure SMTP for emails"
+          left={(props) => <List.Icon {...props} icon="email-outline" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('EmailSettings')}
+        />
+        <Divider />
+        <List.Item
           title="Service Master"
           description="Manage your services catalog"
           left={(props) => <List.Icon {...props} icon="briefcase" />}
@@ -154,6 +162,14 @@ export default function SettingsScreen() {
           left={(props) => <List.Icon {...props} icon="chart-bar" />}
           right={(props) => <List.Icon {...props} icon="chevron-right" />}
           onPress={() => navigation.navigate('Reports')}
+        />
+        <Divider />
+        <List.Item
+          title="Backup & Export"
+          description="Export your data"
+          left={(props) => <List.Icon {...props} icon="database-export" />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => navigation.navigate('BackupData')}
         />
       </Card>
 
