@@ -39,6 +39,7 @@ const ComponentLoader = () => (
 
 function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [invoiceFilter, setInvoiceFilter] = useState(null); // Filter to pass to Invoices component
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [stats, setStats] = useState({
     totalInvoices: 0,
@@ -218,15 +219,16 @@ function Dashboard({ user, onLogout }) {
   };
 
   // Handle menu item click (also closes mobile menu)
-  const handleMenuClick = (menuItem) => {
+  const handleMenuClick = (menuItem, filter = null) => {
     setActiveMenu(menuItem);
+    setInvoiceFilter(filter);
     setMobileMenuOpen(false);
   };
 
   const renderContent = () => {
     switch (activeMenu) {
       case 'invoices':
-        return <Invoices />;
+        return <Invoices initialFilter={invoiceFilter} />;
       case 'clients':
         return <Clients />;
       case 'services':
@@ -371,7 +373,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              <div className="stat-card orange" onClick={() => setActiveMenu('invoices')} style={{ cursor: 'pointer' }}>
+              <div className="stat-card orange" onClick={() => handleMenuClick('invoices', 'pending')} style={{ cursor: 'pointer' }}>
                 <div className="stat-header">
                   <div className="stat-icon-wrapper orange-bg">
                     <span className="stat-icon-lg">⏳</span>

@@ -5,14 +5,14 @@ import './Pages.css';
 import InvoiceForm from './InvoiceForm';
 import ScheduledInvoices from './ScheduledInvoices';
 
-function Invoices() {
+function Invoices({ initialFilter = null }) {
   const [invoices, setInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showScheduledInvoices, setShowScheduledInvoices] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(initialFilter || '');
   const [typeFilter, setTypeFilter] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -24,16 +24,23 @@ function Invoices() {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const isMountedRef = useRef(true);
 
+  // Handle initial filter from props
+  useEffect(() => {
+    if (initialFilter) {
+      setStatusFilter(initialFilter);
+    }
+  }, [initialFilter]);
+
   useEffect(() => {
     isMountedRef.current = true;
     loadInvoices();
     loadInvoiceCounts();
-    setSelectedInvoices([]); // Clear selection when tab changes
+    setSelectedInvoices([]); // Clear selection when tab or filter changes
     return () => {
       isMountedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, statusFilter]);
 
   useEffect(() => {
     loadInvoiceCounts();
@@ -45,7 +52,12 @@ function Invoices() {
     try {
       const params = {};
       if (searchTerm) params.search = searchTerm;
-      if (statusFilter) params.status = statusFilter;
+      // Handle 'pending' filter by using unpaid_only parameter
+      if (statusFilter === 'pending') {
+        params.unpaid_only = true;
+      } else if (statusFilter) {
+        params.status = statusFilter;
+      }
       // Use active tab to filter invoice type
       params.invoice_type = activeTab;
 
@@ -637,6 +649,7 @@ Thank you for your business!`;
             onChange={(e) => { setStatusFilter(e.target.value); }}
           >
             <option value="">All Status</option>
+            <option value="pending">Pending (Unpaid)</option>
             <option value="draft">Draft</option>
             <option value="sent">Sent</option>
             <option value="paid">Paid</option>

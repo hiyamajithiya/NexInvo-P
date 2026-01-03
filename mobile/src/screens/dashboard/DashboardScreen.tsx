@@ -313,7 +313,7 @@ export default function DashboardScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => navigation.navigate('Receipts')}
+        onPress={() => navigation.navigate('Invoices', { filter: 'pending' })}
         activeOpacity={0.7}
       >
         <Card style={[styles.revenueCard, { backgroundColor: colors.warning.light }]}>
