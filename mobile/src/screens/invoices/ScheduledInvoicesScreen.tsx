@@ -13,7 +13,6 @@ import {
   Searchbar,
   ActivityIndicator,
   FAB,
-  Chip,
   IconButton,
   Menu,
   Divider,
@@ -101,17 +100,30 @@ export default function ScheduledInvoicesScreen() {
   };
 
   const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
+    const normalizedStatus = status?.toLowerCase()?.trim();
+    switch (normalizedStatus) {
       case 'active':
         return { bg: colors.success.light, text: colors.success.dark };
       case 'paused':
         return { bg: colors.warning.light, text: colors.warning.dark };
       case 'completed':
-        return { bg: colors.info.light, text: colors.info.dark };
+        return { bg: '#e0e7ff', text: '#4f46e5' }; // Purple/Indigo for completed
       case 'cancelled':
         return { bg: colors.error.light, text: colors.error.dark };
       default:
-        return { bg: colors.gray[100], text: colors.gray[500] };
+        return { bg: colors.gray[200], text: colors.gray[600] };
+    }
+  };
+
+  const getStatusLabel = (status: string, statusDisplay?: string) => {
+    if (statusDisplay) return statusDisplay;
+    const normalizedStatus = status?.toLowerCase()?.trim();
+    switch (normalizedStatus) {
+      case 'active': return 'Active';
+      case 'paused': return 'Paused';
+      case 'completed': return 'Completed';
+      case 'cancelled': return 'Cancelled';
+      default: return status || 'Unknown';
     }
   };
 
@@ -204,12 +216,11 @@ export default function ScheduledInvoicesScreen() {
               </Text>
             </View>
             <View style={styles.headerRight}>
-              <Chip
-                style={[styles.statusChip, { backgroundColor: statusColor.bg }]}
-                textStyle={{ color: statusColor.text, fontSize: 11 }}
-              >
-                {item.status_display || item.status?.toUpperCase()}
-              </Chip>
+              <View style={[styles.statusBadge, { backgroundColor: statusColor.bg }]}>
+                <Text style={[styles.statusText, { color: statusColor.text }]}>
+                  {getStatusLabel(item.status, item.status_display)}
+                </Text>
+              </View>
               <Menu
                 visible={menuVisible === item.id}
                 onDismiss={() => setMenuVisible(null)}
@@ -400,8 +411,15 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: 2,
   },
-  statusChip: {
-    height: 24,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   cardBody: {
     marginTop: 12,
