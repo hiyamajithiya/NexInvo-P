@@ -113,9 +113,9 @@ function InvoiceForm({ onBack, invoice }) {
     loadInvoiceSettings();
   }, []);
 
-  // Load invoice data if editing
+  // Load invoice data if editing - wait for services to be loaded first
   useEffect(() => {
-    if (invoice) {
+    if (invoice && services.length > 0) {
       setInvoiceData({
         id: invoice.id,
         invoiceType: invoice.invoice_type,
@@ -123,17 +123,25 @@ function InvoiceForm({ onBack, invoice }) {
         client: invoice.client,
         paymentTerms: invoice.payment_terms || '',
         notes: invoice.notes || '',
-        items: invoice.items.map((item, index) => ({
-          slNo: index + 1,
-          description: item.description,
-          hsnSac: item.hsn_sac,
-          gstRate: parseFloat(item.gst_rate),
-          taxableAmount: parseFloat(item.taxable_amount),
-          totalAmount: parseFloat(item.total_amount)
-        }))
+        items: invoice.items.map((item, index) => {
+          // Try to find matching service by description or SAC code
+          const matchingService = services.find(
+            s => s.name === item.description ||
+                 (s.sac_code && s.sac_code === item.hsn_sac)
+          );
+          return {
+            slNo: index + 1,
+            description: item.description,
+            hsnSac: item.hsn_sac,
+            gstRate: parseFloat(item.gst_rate),
+            taxableAmount: parseFloat(item.taxable_amount),
+            totalAmount: parseFloat(item.total_amount),
+            serviceId: matchingService ? matchingService.id : ''
+          };
+        })
       });
     }
-  }, [invoice]);
+  }, [invoice, services]);
 
   const loadClients = async () => {
     try {
@@ -650,6 +658,7 @@ function InvoiceForm({ onBack, invoice }) {
                       <td>
                         <select
                           className="table-input"
+                          value={item.serviceId || ''}
                           onChange={(e) => updateItem(index, 'serviceId', e.target.value)}
                         >
                           <option value="">-- Select Service --</option>
@@ -659,9 +668,9 @@ function InvoiceForm({ onBack, invoice }) {
                             </option>
                           ))}
                         </select>
-                        {item.description && (
+                        {item.description && !item.serviceId && (
                           <small style={{display: 'block', marginTop: '4px', color: '#666'}}>
-                            {item.description}
+                            Current: {item.description}
                           </small>
                         )}
                       </td>

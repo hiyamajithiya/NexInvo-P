@@ -167,8 +167,38 @@ function ScheduledInvoices({ onBack }) {
 
   const handleEdit = async (schedule) => {
     try {
+      // Load form data first to ensure serviceItems are available
+      const [clientsRes, termsRes, servicesRes] = await Promise.all([
+        clientAPI.getAll(),
+        paymentTermAPI.getAll(),
+        serviceItemAPI.getAll()
+      ]);
+      const loadedClients = clientsRes.data.results || clientsRes.data || [];
+      const loadedTerms = termsRes.data.results || termsRes.data || [];
+      const loadedServices = servicesRes.data.results || servicesRes.data || [];
+
+      setClients(loadedClients);
+      setPaymentTerms(loadedTerms);
+      setServiceItems(loadedServices);
+
       const response = await scheduledInvoiceAPI.getById(schedule.id);
       const data = response.data;
+
+      // Map items with serviceId for displaying selected service
+      const mappedItems = data.items?.length > 0
+        ? data.items.map(item => {
+            // Find matching service by name/description or SAC code
+            const matchingService = loadedServices.find(
+              s => s.name === item.description ||
+                   (s.sac_code && s.sac_code === item.hsn_sac)
+            );
+            return {
+              ...item,
+              serviceId: matchingService ? matchingService.id : ''
+            };
+          })
+        : [{ description: '', hsn_sac: '', gst_rate: 18, taxable_amount: 0, total_amount: 0, serviceId: '' }];
+
       setFormData({
         name: data.name || '',
         client: data.client || '',
@@ -185,7 +215,7 @@ function ScheduledInvoices({ onBack }) {
         auto_send_email: data.auto_send_email !== false,
         email_subject: data.email_subject || '',
         email_body: data.email_body || '',
-        items: data.items?.length > 0 ? data.items : [{ description: '', hsn_sac: '', gst_rate: 18, taxable_amount: 0, total_amount: 0 }]
+        items: mappedItems
       });
       setEditingSchedule(data);
       setShowForm(true);
@@ -298,7 +328,16 @@ function ScheduledInvoices({ onBack }) {
         ...newItems[index],
         description: service.name,
         hsn_sac: service.sac_code || '',
-        gst_rate: service.gst_rate || 18
+        gst_rate: service.gst_rate || 18,
+        serviceId: service.id
+      };
+      setFormData({ ...formData, items: newItems });
+    } else {
+      // Clear serviceId if no service selected
+      const newItems = [...formData.items];
+      newItems[index] = {
+        ...newItems[index],
+        serviceId: ''
       };
       setFormData({ ...formData, items: newItems });
     }
@@ -530,6 +569,7 @@ function ScheduledInvoices({ onBack }) {
                         <td style={{ padding: '8px' }}>
                           <select
                             className="form-input"
+                            value={item.serviceId || ''}
                             onChange={(e) => handleServiceSelect(index, e.target.value)}
                             style={{ fontSize: '13px' }}
                           >

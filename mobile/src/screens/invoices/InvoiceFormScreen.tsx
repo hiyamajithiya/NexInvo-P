@@ -79,69 +79,67 @@ export default function InvoiceFormScreen({
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    fetchClients();
-    fetchServices();
-    fetchPaymentTerms();
-    if (isEditing) {
-      fetchInvoice();
-    }
+    loadInitialData();
   }, []);
 
-  const fetchClients = async () => {
+  const loadInitialData = async () => {
     try {
-      const data = await api.getClients({ page: 1 });
-      setClients(data.results || []);
-    } catch (error) {
-      console.error('Error fetching clients:', error);
-    }
-  };
+      // Fetch all data in parallel
+      const [clientsData, servicesData, paymentTermsData] = await Promise.all([
+        api.getClients({ page: 1 }),
+        api.getServiceItems({ page: 1 }),
+        api.getPaymentTerms({ page: 1 }),
+      ]);
 
-  const fetchServices = async () => {
-    try {
-      const data = await api.getServiceItems({ page: 1 });
-      setServices(data.results || []);
-    } catch (error) {
-      console.error('Error fetching services:', error);
-    }
-  };
+      const clientsList = clientsData.results || [];
+      const servicesList = servicesData.results || [];
+      const paymentTermsList = paymentTermsData.results || [];
 
-  const fetchPaymentTerms = async () => {
-    try {
-      const data = await api.getPaymentTerms({ page: 1 });
-      setPaymentTerms(data.results || []);
-    } catch (error) {
-      console.error('Error fetching payment terms:', error);
-    }
-  };
+      setClients(clientsList);
+      setServices(servicesList);
+      setPaymentTerms(paymentTermsList);
 
-  const fetchInvoice = async () => {
-    try {
-      const data = await api.getInvoice(invoiceId!);
-      setInvoiceType(data.invoice_type);
-      setInvoiceDate(data.invoice_date);
-      setNotes(data.notes || '');
+      // If editing, fetch the invoice and set the selected values
+      if (isEditing && invoiceId) {
+        const invoiceData = await api.getInvoice(invoiceId);
 
-      // Find and set client
-      const clientsData = await api.getClients({ page: 1 });
-      const client = (clientsData.results || []).find((c) => c.id === data.client);
-      setSelectedClient(client || null);
+        setInvoiceType(invoiceData.invoice_type);
+        setInvoiceDate(invoiceData.invoice_date);
+        setNotes(invoiceData.notes || '');
 
-      // Set items
-      if (data.items && data.items.length > 0) {
-        setItems(
-          data.items.map((item) => ({
-            description: item.description,
-            hsn_sac: item.hsn_sac,
-            gst_rate: String(item.gst_rate),
-            taxable_amount: String(item.taxable_amount),
-            total_amount: String(item.total_amount),
-          }))
-        );
+        // Find and set client from the fetched clients list
+        const client = clientsList.find((c) => c.id === invoiceData.client);
+        if (client) {
+          setSelectedClient(client);
+        }
+
+        // Find and set payment term if exists
+        if (invoiceData.payment_term) {
+          const paymentTerm = paymentTermsList.find((pt) => pt.id === invoiceData.payment_term);
+          if (paymentTerm) {
+            setSelectedPaymentTerm(paymentTerm);
+          }
+        }
+
+        // Set items
+        if (invoiceData.items && invoiceData.items.length > 0) {
+          setItems(
+            invoiceData.items.map((item) => ({
+              description: item.description,
+              hsn_sac: item.hsn_sac,
+              gst_rate: String(item.gst_rate),
+              taxable_amount: String(item.taxable_amount),
+              total_amount: String(item.total_amount),
+            }))
+          );
+        }
       }
     } catch (error) {
-      console.error('Error fetching invoice:', error);
-      Alert.alert('Error', 'Failed to load invoice');
-      navigation.goBack();
+      console.error('Error loading data:', error);
+      if (isEditing) {
+        Alert.alert('Error', 'Failed to load invoice');
+        navigation.goBack();
+      }
     } finally {
       setLoading(false);
     }
