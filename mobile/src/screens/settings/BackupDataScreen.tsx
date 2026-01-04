@@ -15,8 +15,8 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { documentDirectory, writeAsStringAsync, EncodingType } from 'expo-file-system';
+import { isAvailableAsync, shareAsync } from 'expo-sharing';
 import api from '../../services/api';
 import { RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -51,17 +51,17 @@ export default function BackupDataScreen({ navigation }: BackupDataScreenProps) 
           const timestamp = new Date().toISOString().split('T')[0];
           const extension = format === 'excel' ? 'xlsx' : 'csv';
           const fileName = `nexinvo_${dataType}_export_${timestamp}.${extension}`;
-          const filePath = `${FileSystem.documentDirectory}${fileName}`;
+          const filePath = `${documentDirectory}${fileName}`;
 
-          await FileSystem.writeAsStringAsync(filePath, base64Content, {
-            encoding: FileSystem.EncodingType.Base64,
+          await writeAsStringAsync(filePath, base64Content, {
+            encoding: EncodingType.Base64,
           });
 
           // Check if sharing is available
-          const isAvailable = await Sharing.isAvailableAsync();
+          const isAvailable = await isAvailableAsync();
 
           if (isAvailable) {
-            await Sharing.shareAsync(filePath, {
+            await shareAsync(filePath, {
               mimeType: format === 'excel'
                 ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 : 'text/csv',
