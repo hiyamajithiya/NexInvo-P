@@ -474,6 +474,18 @@ export interface PaymentTermListResponse {
 }
 
 // Navigation Types
+// Email Settings Type
+export interface EmailSettings {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password?: string;
+  from_email: string;
+  from_name: string;
+  use_tls: boolean;
+  email_signature: string;
+}
+
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -496,6 +508,8 @@ export type RootStackParamList = {
   InvoiceSettings: undefined;
   PaymentTerms: undefined;
   PaymentTermForm: { paymentTermId?: number };
+  EmailSettings: undefined;
+  BackupData: undefined;
   // Legal screens
   PrivacyPolicy: undefined;
   TermsOfService: undefined;

@@ -4,6 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image,
+  TouchableOpacity,
+  Platform,
 } from 'react-native';
 import {
   Text,
@@ -11,9 +14,12 @@ import {
   Button,
   Card,
   ActivityIndicator,
+  IconButton,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import api from '../../services/api';
 import { CompanySettings, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -37,9 +43,11 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
   const [pinCode, setPinCode] = useState('');
   const [stateCode, setStateCode] = useState('');
   const [gstin, setGstin] = useState('');
+  const [gstRegistrationDate, setGstRegistrationDate] = useState('');
   const [pan, setPan] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [logo, setLogo] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -57,15 +65,67 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
       setPinCode(data.pinCode || '');
       setStateCode(data.stateCode || '');
       setGstin(data.gstin || '');
+      setGstRegistrationDate(data.gstRegistrationDate || '');
       setPan(data.pan || '');
       setPhone(data.phone || '');
       setEmail(data.email || '');
+      setLogo(data.logo || null);
     } catch (error) {
       console.error('Error fetching company settings:', error);
       Alert.alert('Error', 'Failed to load company settings');
     } finally {
       setLoading(false);
     }
+  };
+
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload a logo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [2, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          const mimeType = asset.mimeType || 'image/png';
+          const base64Image = `data:${mimeType};base64,${asset.base64}`;
+          setLogo(base64Image);
+        } else if (asset.uri) {
+          // Read file and convert to base64
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const mimeType = asset.mimeType || 'image/png';
+          const base64Image = `data:${mimeType};base64,${base64}`;
+          setLogo(base64Image);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const removeLogo = () => {
+    Alert.alert(
+      'Remove Logo',
+      'Are you sure you want to remove the company logo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => setLogo(null) },
+      ]
+    );
   };
 
   const handleSave = async () => {
@@ -85,9 +145,11 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
         pinCode: pinCode.trim(),
         stateCode: stateCode.trim(),
         gstin: gstin.trim(),
+        gstRegistrationDate: gstRegistrationDate || null,
         pan: pan.trim(),
         phone: phone.trim(),
         email: email.trim(),
+        logo: logo,
       });
       Alert.alert('Success', 'Company settings updated successfully', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -114,6 +176,66 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Company Logo */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Company Logo
+            </Text>
+            <Text variant="bodySmall" style={styles.hint}>
+              Your logo will appear on invoices and receipts
+            </Text>
+
+            <View style={styles.logoContainer}>
+              {logo ? (
+                <View style={styles.logoPreviewContainer}>
+                  <Image
+                    source={{ uri: logo }}
+                    style={styles.logoPreview}
+                    resizeMode="contain"
+                  />
+                  <View style={styles.logoActions}>
+                    <Button
+                      mode="outlined"
+                      onPress={pickImage}
+                      icon="image-edit"
+                      compact
+                    >
+                      Change
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      onPress={removeLogo}
+                      icon="delete"
+                      textColor={colors.error.main}
+                      compact
+                    >
+                      Remove
+                    </Button>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.logoPlaceholder}
+                  onPress={pickImage}
+                >
+                  <IconButton
+                    icon="image-plus"
+                    size={40}
+                    iconColor={colors.primary[500]}
+                  />
+                  <Text variant="bodyMedium" style={styles.logoPlaceholderText}>
+                    Tap to upload logo
+                  </Text>
+                  <Text variant="bodySmall" style={styles.logoPlaceholderHint}>
+                    PNG, JPG (Max 2MB)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Card.Content>
+        </Card>
+
         {/* Basic Information */}
         <Card style={styles.card}>
           <Card.Content>
@@ -227,7 +349,20 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
               onChangeText={setGstin}
               autoCapitalize="characters"
               style={styles.input}
+              placeholder="e.g., 24XXXXX0000X1Z5"
             />
+
+            <TextInput
+              mode="outlined"
+              label="GST Registration Date"
+              value={gstRegistrationDate}
+              onChangeText={setGstRegistrationDate}
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+            />
+            <Text variant="bodySmall" style={styles.hint}>
+              Leave blank if not registered under GST
+            </Text>
 
             <TextInput
               mode="outlined"
@@ -236,6 +371,7 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
               onChangeText={setPan}
               autoCapitalize="characters"
               style={styles.input}
+              placeholder="e.g., XXXXX0000X"
             />
           </Card.Content>
         </Card>
@@ -284,8 +420,49 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 8,
     color: colors.text.primary,
+  },
+  hint: {
+    color: colors.text.secondary,
+    marginBottom: 12,
+  },
+  logoContainer: {
+    marginTop: 8,
+  },
+  logoPreviewContainer: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  logoPreview: {
+    width: 200,
+    height: 100,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    borderRadius: 8,
+    backgroundColor: colors.white,
+  },
+  logoActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  logoPlaceholder: {
+    borderWidth: 2,
+    borderColor: colors.gray[300],
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: colors.gray[50],
+  },
+  logoPlaceholderText: {
+    color: colors.primary[500],
+    fontWeight: '600',
+    marginTop: -8,
+  },
+  logoPlaceholderHint: {
+    color: colors.text.secondary,
+    marginTop: 4,
   },
   input: {
     marginBottom: 12,

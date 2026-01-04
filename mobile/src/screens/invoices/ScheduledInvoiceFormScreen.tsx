@@ -107,12 +107,15 @@ export default function ScheduledInvoiceFormScreen({
         api.getClients(),
         api.getServiceItems(),
       ]);
-      setClients(clientsData.results || []);
-      setServices(servicesData.results || []);
+      const clientsList = clientsData.results || [];
+      const servicesList = servicesData.results || [];
+
+      setClients(clientsList);
+      setServices(servicesList);
 
       if (isEditing && scheduledInvoiceId) {
         const scheduleData = await api.getScheduledInvoice(scheduledInvoiceId);
-        populateForm(scheduleData, clientsData.results || []);
+        populateForm(scheduleData, clientsList, servicesList);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -122,7 +125,7 @@ export default function ScheduledInvoiceFormScreen({
     }
   };
 
-  const populateForm = (schedule: ScheduledInvoice, clientsList: Client[]) => {
+  const populateForm = (schedule: ScheduledInvoice, clientsList: Client[], servicesList: ServiceItem[]) => {
     setName(schedule.name);
     setInvoiceType(schedule.invoice_type);
     setFrequency(schedule.frequency);
@@ -141,14 +144,22 @@ export default function ScheduledInvoiceFormScreen({
     const client = clientsList.find(c => c.id === schedule.client);
     if (client) setSelectedClient(client);
 
-    // Set items
+    // Set items with matching serviceId
     if (schedule.items && schedule.items.length > 0) {
-      setItems(schedule.items.map(item => ({
-        description: item.description,
-        hsn_sac: item.hsn_sac,
-        gst_rate: String(item.gst_rate),
-        taxable_amount: String(item.taxable_amount),
-      })));
+      setItems(schedule.items.map(item => {
+        // Try to find matching service by description or SAC code
+        const matchingService = servicesList.find(
+          s => s.name === item.description ||
+               (s.sac_code && s.sac_code === item.hsn_sac)
+        );
+        return {
+          description: item.description,
+          hsn_sac: item.hsn_sac,
+          gst_rate: String(item.gst_rate),
+          taxable_amount: String(item.taxable_amount),
+          serviceId: matchingService?.id,
+        };
+      }));
     }
   };
 
