@@ -18,8 +18,8 @@ import {
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { launchImageLibraryAsync, requestMediaLibraryPermissionsAsync, MediaTypeOptions } from 'expo-image-picker';
+import { readAsStringAsync, EncodingType } from 'expo-file-system';
 import api from '../../services/api';
 import { CompanySettings, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
@@ -80,15 +80,15 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
 
   const pickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult = await requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
         Alert.alert('Permission Required', 'Please allow access to your photo library to upload a logo.');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await launchImageLibraryAsync({
+        mediaTypes: MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [2, 1],
         quality: 0.8,
@@ -103,8 +103,8 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
           setLogo(base64Image);
         } else if (asset.uri) {
           // Read file and convert to base64
-          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-            encoding: FileSystem.EncodingType.Base64,
+          const base64 = await readAsStringAsync(asset.uri, {
+            encoding: EncodingType.Base64,
           });
           const mimeType = asset.mimeType || 'image/png';
           const base64Image = `data:${mimeType};base64,${base64}`;

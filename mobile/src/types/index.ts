@@ -11,6 +11,7 @@ export interface LoginResponse {
   session_token: string;
   user: User;
   organization: Organization;
+  subscription_warning?: SubscriptionWarning;
 }
 
 export interface User {
@@ -101,6 +102,7 @@ export interface Invoice {
   round_off: string;
   total_amount: string;
   payment_terms: string;
+  payment_term?: number;
   notes: string;
   items: InvoiceItem[];
   created_at: string;
@@ -126,14 +128,27 @@ export interface InvoiceListResponse {
   results: Invoice[];
 }
 
+export interface InvoiceRequestItem {
+  description: string;
+  hsn_sac: string;
+  gst_rate: string | number;
+  taxable_amount: string | number;
+  total_amount: string | number;
+}
+
 export interface InvoiceRequest {
   client: number;
   invoice_type: 'tax' | 'proforma';
   invoice_date: string;
   status?: string;
   payment_terms?: string;
+  payment_term?: number | null;
   notes?: string;
-  items: Omit<InvoiceItem, 'id' | 'cgst_amount' | 'sgst_amount' | 'igst_amount'>[];
+  subtotal?: number;
+  tax_amount?: number;
+  round_off?: number;
+  total_amount?: number;
+  items: InvoiceRequestItem[];
 }
 
 // Client Types
@@ -313,6 +328,14 @@ export interface ScheduledInvoiceListResponse {
   results: ScheduledInvoiceListItem[];
 }
 
+export interface ScheduledInvoiceRequestItem {
+  description: string;
+  hsn_sac: string;
+  gst_rate: string | number;
+  taxable_amount: string | number;
+  total_amount: string | number;
+}
+
 export interface ScheduledInvoiceRequest {
   name: string;
   client: number;
@@ -329,7 +352,7 @@ export interface ScheduledInvoiceRequest {
   auto_send_email?: boolean;
   email_subject?: string;
   email_body?: string;
-  items: Omit<ScheduledInvoiceItem, 'id'>[];
+  items: ScheduledInvoiceRequestItem[];
 }
 
 // Service Master Types
@@ -404,10 +427,11 @@ export interface CompanySettingsUpdate {
   pinCode?: string;
   stateCode?: string;
   gstin?: string;
-  gstRegistrationDate?: string;
+  gstRegistrationDate?: string | null;
   pan?: string;
   phone?: string;
   email?: string;
+  logo?: string | null;
 }
 
 export interface InvoiceSettings {
