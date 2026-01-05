@@ -8,6 +8,10 @@ function Reports() {
   const [dateFilter, setDateFilter] = useState('this_month');
   const [loading, setLoading] = useState(false);
 
+  // Custom date range states
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
   // Data states
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
@@ -80,6 +84,14 @@ function Reports() {
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), 0, 1);
       filtered = filtered.filter(inv => new Date(inv.invoice_date) >= firstDay);
+    } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      const startDate = new Date(customStartDate);
+      const endDate = new Date(customEndDate);
+      endDate.setHours(23, 59, 59, 999); // Include the entire end date
+      filtered = filtered.filter(inv => {
+        const date = new Date(inv.invoice_date);
+        return date >= startDate && date <= endDate;
+      });
     }
 
     return filtered;
@@ -109,6 +121,14 @@ function Reports() {
       const now = new Date();
       const firstDay = new Date(now.getFullYear(), 0, 1);
       filtered = filtered.filter(p => new Date(p.payment_date) >= firstDay);
+    } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      const startDate = new Date(customStartDate);
+      const endDate = new Date(customEndDate);
+      endDate.setHours(23, 59, 59, 999); // Include the entire end date
+      filtered = filtered.filter(p => {
+        const date = new Date(p.payment_date);
+        return date >= startDate && date <= endDate;
+      });
     }
 
     return filtered;
@@ -278,12 +298,16 @@ function Reports() {
   };
 
   const getDateFilterLabel = () => {
+    if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      return `${formatDate(customStartDate)} - ${formatDate(customEndDate)}`;
+    }
     const labels = {
       'this_month': 'This Month',
       'last_month': 'Last Month',
       'this_quarter': 'This Quarter',
       'this_year': 'This Year',
-      'all_time': 'All Time'
+      'all_time': 'All Time',
+      'custom': 'Custom Period'
     };
     return labels[dateFilter] || dateFilter;
   };
@@ -361,7 +385,7 @@ function Reports() {
                 <h2 className="report-view-title">{selectedReport.icon} {selectedReport.name}</h2>
                 <p className="report-view-description">{selectedReport.description}</p>
               </div>
-              <div className="report-filters" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div className="report-filters" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <select
                   className="filter-select"
                   value={dateFilter}
@@ -372,7 +396,44 @@ function Reports() {
                   <option value="this_quarter">This Quarter</option>
                   <option value="this_year">This Year</option>
                   <option value="all_time">All Time</option>
+                  <option value="custom">Custom Period</option>
                 </select>
+                {dateFilter === 'custom' && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      style={{
+                        padding: '8px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        background: '#ffffff'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                    />
+                    <span style={{ color: '#6b7280' }}>to</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      min={customStartDate}
+                      style={{
+                        padding: '8px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        background: '#ffffff'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                      onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                    />
+                  </div>
+                )}
                 <button
                   className="btn-create"
                   onClick={handleExportReport}
