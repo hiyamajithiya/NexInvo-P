@@ -160,15 +160,17 @@ function Reports() {
             daysOverdue: Math.floor((new Date() - new Date(invoice.invoice_date)) / (1000 * 60 * 60 * 24))
           }));
 
-      case 3: // GST Summary
-        return filtered.map(invoice => ({
-          invoiceNo: invoice.invoice_number,
-          date: invoice.invoice_date,
-          client: getClientName(invoice.client),
-          taxable: parseFloat(invoice.subtotal || 0),
-          gst: parseFloat(invoice.tax_amount || 0),
-          total: parseFloat(invoice.total_amount || 0)
-        }));
+      case 3: // GST Summary - Only tax invoices (exclude proforma)
+        return filtered
+          .filter(invoice => invoice.invoice_type === 'tax')
+          .map(invoice => ({
+            invoiceNo: invoice.invoice_number,
+            date: invoice.invoice_date,
+            client: getClientName(invoice.client),
+            taxable: parseFloat(invoice.subtotal || 0),
+            gst: parseFloat(invoice.tax_amount || 0),
+            total: parseFloat(invoice.total_amount || 0)
+          }));
 
       case 4: // Client-wise Report
         const clientStats = {};
