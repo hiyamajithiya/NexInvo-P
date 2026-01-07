@@ -182,7 +182,7 @@ export interface ClientListResponse {
 export interface ClientRequest {
   name: string;
   email?: string;
-  phone?: string;
+  mobile?: string;
   address?: string;
   city?: string;
   state?: string;

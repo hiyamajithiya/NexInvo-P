@@ -38,7 +38,7 @@ export default function ClientFormScreen({
   // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -58,7 +58,7 @@ export default function ClientFormScreen({
       const data = await api.getClient(clientId!);
       setName(data.name);
       setEmail(data.email || '');
-      setPhone(data.phone || '');
+      setMobile(data.mobile || data.phone || '');
       setAddress(data.address || '');
       setCity(data.city || '');
       setState(data.state || '');
@@ -93,7 +93,7 @@ export default function ClientFormScreen({
       const clientData = {
         name: name.trim(),
         email: email.trim(),
-        phone: phone.trim(),
+        mobile: mobile.trim(),
         address: address.trim(),
         city: city.trim(),
         state: state.trim(),
@@ -168,9 +168,9 @@ export default function ClientFormScreen({
 
             <TextInput
               mode="outlined"
-              label="Phone"
-              value={phone}
-              onChangeText={setPhone}
+              label="Mobile"
+              value={mobile}
+              onChangeText={setMobile}
               keyboardType="phone-pad"
               style={styles.input}
             />
