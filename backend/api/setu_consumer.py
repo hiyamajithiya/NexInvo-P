@@ -171,6 +171,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
     async def handle_tally_status(self, data):
         """Handle Tally connection status update from connector."""
         connected = data.get('connected', False)
+        company_name = data.get('companyName', '') or data.get('company_name', '')
 
         # Broadcast to web clients
         await self.channel_layer.group_send(
@@ -178,12 +179,16 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
             {
                 'type': 'tally_status_update',
                 'connected': connected,
+                'company_name': company_name,
                 'connector_id': self.connector_id
             }
         )
 
-        # Update stored status
-        await self.update_connection_info({'tally_connected': connected})
+        # Update stored status with company name
+        await self.update_connection_info({
+            'tally_connected': connected,
+            'company_name': company_name
+        })
 
     async def handle_connection_status(self, data):
         """Handle connection check response."""
