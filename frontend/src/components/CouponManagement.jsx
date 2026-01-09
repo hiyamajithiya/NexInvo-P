@@ -37,9 +37,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
   LocalOffer as LocalOfferIcon,
-  CalendarToday as CalendarIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
   ContentCopy as CopyIcon,
   TrendingUp as TrendingUpIcon,
   Schedule as ScheduleIcon,
@@ -47,8 +45,6 @@ import {
   Percent as PercentIcon,
   CurrencyRupee as RupeeIcon,
   EventAvailable as EventAvailableIcon,
-  Visibility as VisibilityIcon,
-  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -79,6 +75,7 @@ const CouponManagement = () => {
     is_active: true,
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadCoupons();
     loadPlans();
@@ -298,31 +295,6 @@ const CouponManagement = () => {
 
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
-  };
-
-  const getDiscountDisplay = (coupon) => {
-    const discountParts = [];
-    const discountTypes = coupon.discount_types || [coupon.discount_type];
-
-    if (discountTypes.includes('percentage') && coupon.discount_percentage) {
-      discountParts.push(`${coupon.discount_percentage}%`);
-    } else if (coupon.discount_type === 'percentage' && coupon.discount_value) {
-      discountParts.push(`${coupon.discount_value}%`);
-    }
-
-    if (discountTypes.includes('fixed') && coupon.discount_fixed) {
-      discountParts.push(`₹${coupon.discount_fixed}`);
-    } else if (coupon.discount_type === 'fixed' && coupon.discount_value) {
-      discountParts.push(`₹${coupon.discount_value}`);
-    }
-
-    if (discountTypes.includes('extended_period') && coupon.discount_days) {
-      discountParts.push(`+${coupon.discount_days} days`);
-    } else if (coupon.discount_type === 'extended_period' && coupon.discount_value) {
-      discountParts.push(`+${coupon.discount_value} days`);
-    }
-
-    return discountParts.length > 0 ? discountParts.join(' + ') : 'No discount';
   };
 
   const getValidityStatus = (coupon) => {

@@ -24,8 +24,6 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   // OTP verification states
   const [registrationStep, setRegistrationStep] = useState(1); // 1: email, 2: OTP, 3: details
   const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [logoutMessage, setLogoutMessage] = useState('');
   const [showForceLoginDialog, setShowForceLoginDialog] = useState(false);
@@ -66,7 +64,6 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
     try {
       await authAPI.sendOTP(username);
-      setOtpSent(true);
       setRegistrationStep(2);
       setResendTimer(60); // 60 seconds before can resend
       setSuccessMessage('OTP sent to your email. Please check your inbox.');
@@ -90,7 +87,6 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
 
     try {
       await authAPI.verifyOTP(username, otp);
-      setEmailVerified(true);
       setRegistrationStep(3);
       setSuccessMessage('Email verified successfully! Please complete your registration.');
     } catch (err) {
@@ -372,8 +368,6 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
     // Reset OTP states
     setRegistrationStep(1);
     setOtp('');
-    setOtpSent(false);
-    setEmailVerified(false);
     setResendTimer(0);
     // Reset force login states
     setShowForceLoginDialog(false);
@@ -385,10 +379,8 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
     if (registrationStep === 2) {
       setRegistrationStep(1);
       setOtp('');
-      setOtpSent(false);
     } else if (registrationStep === 3) {
       setRegistrationStep(2);
-      setEmailVerified(false);
     }
     setError('');
     setSuccessMessage('');

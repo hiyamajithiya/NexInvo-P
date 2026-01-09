@@ -23,7 +23,6 @@ import {
   InputLabel,
   Chip,
   Switch,
-  FormControlLabel,
   Grid,
   Alert,
   Snackbar,
@@ -67,6 +66,7 @@ const SubscriptionPlans = () => {
     sort_order: 0,
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadPlans();
   }, []);
@@ -452,7 +452,6 @@ const SubscriptionPlans = () => {
       >
         <DialogTitle sx={{
           fontWeight: 'bold',
-          color: '#111827',
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: 'white',
           py: 3

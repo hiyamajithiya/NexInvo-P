@@ -46,7 +46,8 @@ function TallySyncCorner() {
   });
   const [syncHistory, setSyncHistory] = useState([]);
 
-  // WebSocket for real-time Setu status
+  // WebSocket for real-time Setu status (reserved for future use)
+  // eslint-disable-next-line no-unused-vars
   const [ws, setWs] = useState(null);
 
   // Check Setu connector status

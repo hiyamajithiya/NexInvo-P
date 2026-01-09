@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI, paymentAPI, receiptAPI } from '../services/api';
+import { invoiceAPI, paymentAPI, receiptAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
 import { useToast } from './Toast';
 import './Pages.css';
@@ -8,7 +8,6 @@ function Receipts() {
   const { showSuccess } = useToast();
   const [receipts, setReceipts] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -39,14 +38,12 @@ function Receipts() {
 
   const loadData = async () => {
     try {
-      const [receiptsResponse, invoicesResponse, clientsResponse] = await Promise.all([
+      const [receiptsResponse, invoicesResponse] = await Promise.all([
         paymentAPI.getAll(),
-        invoiceAPI.getAll({ unpaid_only: 'true' }),  // Only fetch unpaid invoices for dropdown
-        clientAPI.getAll()
+        invoiceAPI.getAll({ unpaid_only: 'true' })  // Only fetch unpaid invoices for dropdown
       ]);
       setReceipts(receiptsResponse.data.results || receiptsResponse.data || []);
       setInvoices(invoicesResponse.data.results || invoicesResponse.data || []);
-      setClients(clientsResponse.data.results || clientsResponse.data || []);
     } catch (err) {
       console.error('Error loading data:', err);
     }

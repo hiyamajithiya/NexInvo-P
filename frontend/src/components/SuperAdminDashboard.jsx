@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import {
   Box,
-  Container,
   Grid,
   Paper,
   Typography,
@@ -190,6 +189,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
     };
   }, [showUserDropdown]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadData();
     loadSubscriptionPlans();
@@ -199,6 +199,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
     return () => clearInterval(notificationInterval);
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeMenu === 'users') {
       loadUsers();

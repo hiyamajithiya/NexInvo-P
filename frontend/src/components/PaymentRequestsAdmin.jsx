@@ -32,7 +32,6 @@ import {
   Cancel as RejectIcon,
   Visibility as ViewIcon,
   Receipt as ReceiptIcon,
-  AccountBalance as BankIcon,
   Image as ImageIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
@@ -53,6 +52,7 @@ const PaymentRequestsAdmin = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [imageDialog, setImageDialog] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadRequests();
   }, [activeTab]);

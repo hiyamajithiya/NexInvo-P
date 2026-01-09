@@ -13,7 +13,6 @@ function Invoices({ initialFilter = null }) {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(initialFilter || '');
-  const [typeFilter, setTypeFilter] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importProgress, setImportProgress] = useState(null);

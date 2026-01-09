@@ -62,7 +62,7 @@ function App() {
   const checkUserStatus = async (token) => {
     try {
       // Check if user is superadmin by trying to access superadmin stats
-      const response = await axios.get(`${API_BASE_URL}/superadmin/stats/`, {
+      await axios.get(`${API_BASE_URL}/superadmin/stats/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

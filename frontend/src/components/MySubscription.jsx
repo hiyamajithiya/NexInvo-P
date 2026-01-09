@@ -9,8 +9,6 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Card,
-  CardContent,
   List,
   ListItem,
   ListItemIcon,
@@ -26,8 +24,6 @@ import {
 import {
   CheckCircle as CheckIcon,
   Cancel as CancelIcon,
-  Star as StarIcon,
-  CalendarToday as CalendarIcon,
   LocalOffer as CouponIcon,
   CurrencyRupee as RupeeIcon,
   Upgrade as UpgradeIcon,
@@ -46,6 +42,7 @@ const MySubscription = ({ onNavigate }) => {
   const [paymentRequests, setPaymentRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadSubscription();
     loadPaymentRequests();

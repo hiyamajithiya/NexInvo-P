@@ -40,19 +40,15 @@ const OrganizationSwitcher = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [orgLimits, setOrgLimits] = useState(null);
-  const [loadingLimits, setLoadingLimits] = useState(false);
 
   // Load organization limits
   useEffect(() => {
     const loadLimits = async () => {
-      setLoadingLimits(true);
       try {
         const response = await organizationAPI.getLimits();
         setOrgLimits(response.data);
       } catch (error) {
         console.error('Failed to load organization limits:', error);
-      } finally {
-        setLoadingLimits(false);
       }
     };
     loadLimits();

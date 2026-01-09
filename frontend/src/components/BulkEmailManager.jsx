@@ -11,8 +11,6 @@ import {
   Select,
   MenuItem,
   Grid,
-  Card,
-  CardContent,
   Table,
   TableBody,
   TableCell,
@@ -49,7 +47,6 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Schedule as ScheduleIcon,
-  TrendingUp as TrendingUpIcon,
   ContentCopy as CopyIcon,
   Preview as PreviewIcon,
 } from '@mui/icons-material';
@@ -116,6 +113,7 @@ const BulkEmailManager = () => {
   useEffect(() => {
     fetchTemplates();
     fetchCampaigns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchTemplates = async () => {
