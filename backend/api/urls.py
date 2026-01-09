@@ -82,7 +82,8 @@ urlpatterns = [
     path('superadmin/reviews/<uuid:review_id>/reject/', views.superadmin_reject_review, name='superadmin-reject-review'),
     path('superadmin/reviews/<uuid:review_id>/toggle-featured/', views.superadmin_toggle_featured_review, name='superadmin-toggle-featured-review'),
     # Setu Desktop Connector endpoints (for Tally integration via local connector)
-    path('setu/status/', setu_views.check_setu_connector, name='setu-status'),
+    path('setu/status/', setu_views.get_setu_status, name='setu-status'),
+    path('setu/connector/', setu_views.check_setu_connector, name='setu-connector'),
     path('setu/check-tally/', setu_views.request_tally_connection_check, name='setu-check-tally'),
     path('setu/get-ledgers/', setu_views.request_tally_ledgers, name='setu-get-ledgers'),
     path('setu/sync-invoices/', setu_views.sync_invoices_via_setu, name='setu-sync-invoices'),

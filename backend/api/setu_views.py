@@ -23,6 +23,55 @@ logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_setu_status(request):
+    """
+    Get Setu connector and Tally connection status for the user's organization.
+    This is used by the web app's Tally Sync Corner to show connection status.
+    """
+    from .models import OrganizationMembership
+
+    # Get user's organization
+    try:
+        membership = OrganizationMembership.objects.filter(
+            user=request.user,
+            is_active=True
+        ).first()
+        organization_id = str(membership.organization.id) if membership else None
+    except Exception:
+        organization_id = None
+
+    if not organization_id:
+        return Response({
+            'setu_connected': False,
+            'tally_connected': False,
+            'company_name': '',
+            'message': 'No organization found'
+        })
+
+    # Check cache for connector status
+    setu_connected = False
+    tally_connected = False
+    company_name = ''
+
+    # Look for any active Setu connector for this organization
+    connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
+    connector_info = cache.get(connector_key)
+
+    if connector_info:
+        setu_connected = True
+        tally_connected = connector_info.get('tally_connected', False)
+        company_name = connector_info.get('company_name', '')
+
+    return Response({
+        'setu_connected': setu_connected,
+        'tally_connected': tally_connected,
+        'company_name': company_name,
+        'message': 'Setu connector is online' if setu_connected else 'Setu connector is offline'
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def check_setu_connector(request):
     """
     Check if a Setu connector is online for the user's organization.
