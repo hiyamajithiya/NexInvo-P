@@ -66,7 +66,7 @@ def get_setu_status(request):
 
     if connector_info:
         # Verify the connection is still fresh by checking last_heartbeat
-        # If heartbeat is older than 2 minutes, consider disconnected
+        # If heartbeat is missing or older than 2 minutes, consider disconnected
         last_heartbeat = connector_info.get('last_heartbeat')
         is_fresh = False
 
@@ -74,9 +74,16 @@ def get_setu_status(request):
             try:
                 heartbeat_time = datetime.fromisoformat(last_heartbeat)
                 # Allow 2 minutes grace period for heartbeat
-                is_fresh = (datetime.now() - heartbeat_time) < timedelta(minutes=2)
-            except (ValueError, TypeError):
+                time_diff = datetime.now() - heartbeat_time
+                is_fresh = time_diff < timedelta(minutes=2)
+                print(f"[Setu Status Debug] Heartbeat age: {time_diff.total_seconds()}s, is_fresh: {is_fresh}")
+            except (ValueError, TypeError) as e:
+                print(f"[Setu Status Debug] Failed to parse heartbeat: {e}")
                 is_fresh = False
+        else:
+            # No heartbeat field - this is a stale/old format cache entry
+            print(f"[Setu Status Debug] No last_heartbeat field in cache entry")
+            is_fresh = False
 
         if is_fresh:
             setu_connected = True
