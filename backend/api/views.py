@@ -81,8 +81,16 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         current_session_token = request.headers.get('X-Session-Token', '')
 
         # Determine session type (Setu desktop connector vs web browser)
-        session_type = 'setu' if 'Setu' in current_device_info or request.data.get('client_type') == 'setu' else 'web'
-        
+        # Check multiple ways to detect Setu client
+        client_type_param = request.data.get('client_type', '')
+        is_setu = (
+            client_type_param == 'setu' or
+            'Setu' in current_device_info or
+            'setu' in current_device_info.lower() or
+            'electron' in current_device_info.lower()
+        )
+        session_type = 'setu' if is_setu else 'web'
+
         # First validate credentials without generating tokens
         serializer = self.get_serializer(data=request.data)
         try:
