@@ -54,8 +54,14 @@ def get_setu_status(request):
     company_name = ''
 
     # Look for any active Setu connector for this organization
+    # The connector_id format is: setu_{organization_id}_{user_id}
+    # The cache key format is: setu_connector_{connector_id}
     connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
     connector_info = cache.get(connector_key)
+
+    # Debug logging
+    print(f"[Setu Status Debug] Looking for cache key: {connector_key}")
+    print(f"[Setu Status Debug] Cache result: {connector_info}")
 
     if connector_info:
         setu_connected = True
