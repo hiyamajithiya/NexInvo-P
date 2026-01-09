@@ -141,6 +141,41 @@ function TallySyncCorner() {
     }
   };
 
+  // Auto-map ledgers based on common names
+  const autoMapLedgers = (ledgers) => {
+    const findLedger = (keywords, group = null) => {
+      // First try exact match with group
+      for (const keyword of keywords) {
+        const found = ledgers.find(l =>
+          l.name.toLowerCase() === keyword.toLowerCase() &&
+          (!group || l.group.toLowerCase().includes(group.toLowerCase()))
+        );
+        if (found) return found.name;
+      }
+      // Then try partial match
+      for (const keyword of keywords) {
+        const found = ledgers.find(l =>
+          l.name.toLowerCase().includes(keyword.toLowerCase()) &&
+          (!group || l.group.toLowerCase().includes(group.toLowerCase()))
+        );
+        if (found) return found.name;
+      }
+      return '';
+    };
+
+    const autoMappings = {
+      salesLedger: findLedger(['sales', 'sales account', 'sales a/c'], 'sales'),
+      cgstLedger: findLedger(['cgst', 'cgst output', 'output cgst', 'cgst payable'], 'duties'),
+      sgstLedger: findLedger(['sgst', 'sgst output', 'output sgst', 'sgst payable'], 'duties'),
+      igstLedger: findLedger(['igst', 'igst output', 'output igst', 'igst payable'], 'duties'),
+      roundOffLedger: findLedger(['round off', 'roundoff', 'rounding off']),
+      discountLedger: findLedger(['discount', 'discount allowed', 'sales discount']),
+      defaultPartyGroup: 'Sundry Debtors'
+    };
+
+    return autoMappings;
+  };
+
   const fetchTallyLedgers = async () => {
     if (!setuStatus.tallyConnected) {
       showError('Tally is not connected. Please check Setu app.');
@@ -155,6 +190,24 @@ function TallySyncCorner() {
       setLedgersFetched(true);
       if (ledgers.length > 0) {
         showSuccess(`Fetched ${ledgers.length} ledgers from Tally`);
+
+        // Auto-map ledgers if no mappings are saved
+        if (!mappingSaved) {
+          const autoMappings = autoMapLedgers(ledgers);
+          setMappings(prev => ({
+            ...prev,
+            salesLedger: prev.salesLedger || autoMappings.salesLedger,
+            cgstLedger: prev.cgstLedger || autoMappings.cgstLedger,
+            sgstLedger: prev.sgstLedger || autoMappings.sgstLedger,
+            igstLedger: prev.igstLedger || autoMappings.igstLedger,
+            roundOffLedger: prev.roundOffLedger || autoMappings.roundOffLedger,
+            discountLedger: prev.discountLedger || autoMappings.discountLedger,
+            defaultPartyGroup: prev.defaultPartyGroup || autoMappings.defaultPartyGroup
+          }));
+          if (autoMappings.salesLedger || autoMappings.cgstLedger) {
+            showInfo('Ledgers auto-mapped based on Tally data. Please verify and save.');
+          }
+        }
       } else {
         showError('No ledgers found. Using default options.');
       }
