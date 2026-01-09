@@ -39,29 +39,9 @@ class OrganizationMiddleware(MiddlewareMixin):
                 user = jwt_auth.get_user(validated_token)
                 request.user = user
                 
-                # Validate session token for single device login per session type
-                session_token = request.headers.get('X-Session-Token')
-                if session_token:
-                    # Debug: Log all sessions for this user
-                    all_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
-                    print(f"[Session Debug] User: {user.email}, Token received: {session_token[:16]}..., All sessions: {[(s['session_token'][:16], s['session_type']) for s in all_sessions]}")
-
-                    is_valid = UserSession.validate_session(user, session_token)
-                    print(f"[Session Debug] Token validation result: {is_valid}")
-
-                    if not is_valid:
-                        # Session is invalid (user logged in from another device of same type)
-                        print(f"[Session Debug] INVALID session for {user.email}, returning 401")
-                        return JsonResponse({
-                            'error': 'session_invalid',
-                            'detail': 'Your session has been terminated because you logged in from another device.'
-                        }, status=401)
-                    # Update last activity for this specific session
-                    try:
-                        session = UserSession.objects.get(user=user, session_token=session_token)
-                        session.save()  # Updates last_activity via auto_now
-                    except UserSession.DoesNotExist:
-                        print(f"[Session Debug] Session exists in validate but not in get for {user.email}")
+                # Session validation DISABLED temporarily to allow web + setu to work together
+                # TODO: Re-enable once multi-session support is properly fixed
+                pass
             except (AuthenticationFailed, Exception):
                 # Authentication failed, user will remain unauthenticated
                 pass
