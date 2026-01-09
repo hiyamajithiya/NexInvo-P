@@ -30,6 +30,8 @@ def get_setu_status(request):
     """
     from .models import OrganizationMembership
     from datetime import datetime, timedelta
+    from django.conf import settings
+    import redis
 
     # Get user's organization
     try:
@@ -60,9 +62,22 @@ def get_setu_status(request):
     connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
     connector_info = cache.get(connector_key)
 
-    # Debug logging
+    # Debug logging - also check Redis directly for any setu keys
+    print(f"[Setu Status Debug] User ID: {request.user.id}, Org ID: {organization_id}")
     print(f"[Setu Status Debug] Looking for cache key: {connector_key}")
     print(f"[Setu Status Debug] Cache result: {connector_info}")
+
+    # Try to list all setu_connector keys for debugging
+    try:
+        redis_url = getattr(settings, 'CHANNEL_LAYERS', {}).get('default', {}).get('CONFIG', {}).get('hosts', [['localhost', 6379]])[0]
+        if isinstance(redis_url, str):
+            r = redis.from_url(redis_url)
+        else:
+            r = redis.Redis(host=redis_url[0], port=redis_url[1], db=1)
+        all_keys = r.keys('*setu_connector*')
+        print(f"[Setu Status Debug] All setu_connector keys in Redis: {all_keys}")
+    except Exception as e:
+        print(f"[Setu Status Debug] Could not list Redis keys: {e}")
 
     if connector_info:
         # Verify the connection is still fresh by checking last_heartbeat
