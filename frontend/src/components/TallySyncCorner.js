@@ -144,36 +144,69 @@ function TallySyncCorner() {
 
   // Auto-map ledgers based on common names
   const autoMapLedgers = (ledgers) => {
-    const findLedger = (keywords, group = null) => {
-      // First try exact match with group
+    console.log('[AutoMap] Starting auto-mapping with', ledgers.length, 'ledgers');
+
+    // Log unique groups for debugging
+    const groups = [...new Set(ledgers.map(l => l.group))];
+    console.log('[AutoMap] Available groups:', groups);
+
+    const findLedger = (keywords, groups = []) => {
+      // First try exact match with group filter
+      for (const keyword of keywords) {
+        const found = ledgers.find(l => {
+          const nameMatch = l.name.toLowerCase() === keyword.toLowerCase();
+          const groupMatch = groups.length === 0 || groups.some(g =>
+            l.group.toLowerCase().includes(g.toLowerCase())
+          );
+          return nameMatch && groupMatch;
+        });
+        if (found) {
+          console.log(`[AutoMap] Found exact match: "${found.name}" in group "${found.group}" for keyword "${keyword}"`);
+          return found.name;
+        }
+      }
+
+      // Then try partial match with group filter
+      for (const keyword of keywords) {
+        const found = ledgers.find(l => {
+          const nameMatch = l.name.toLowerCase().includes(keyword.toLowerCase());
+          const groupMatch = groups.length === 0 || groups.some(g =>
+            l.group.toLowerCase().includes(g.toLowerCase())
+          );
+          return nameMatch && groupMatch;
+        });
+        if (found) {
+          console.log(`[AutoMap] Found partial match: "${found.name}" in group "${found.group}" for keyword "${keyword}"`);
+          return found.name;
+        }
+      }
+
+      // Final fallback: try without group filter
       for (const keyword of keywords) {
         const found = ledgers.find(l =>
-          l.name.toLowerCase() === keyword.toLowerCase() &&
-          (!group || l.group.toLowerCase().includes(group.toLowerCase()))
+          l.name.toLowerCase().includes(keyword.toLowerCase())
         );
-        if (found) return found.name;
+        if (found) {
+          console.log(`[AutoMap] Found fallback match (no group): "${found.name}" in group "${found.group}" for keyword "${keyword}"`);
+          return found.name;
+        }
       }
-      // Then try partial match
-      for (const keyword of keywords) {
-        const found = ledgers.find(l =>
-          l.name.toLowerCase().includes(keyword.toLowerCase()) &&
-          (!group || l.group.toLowerCase().includes(group.toLowerCase()))
-        );
-        if (found) return found.name;
-      }
+
+      console.log(`[AutoMap] No match found for keywords:`, keywords);
       return '';
     };
 
     const autoMappings = {
-      salesLedger: findLedger(['sales', 'sales account', 'sales a/c'], 'sales'),
-      cgstLedger: findLedger(['cgst', 'cgst output', 'output cgst', 'cgst payable'], 'duties'),
-      sgstLedger: findLedger(['sgst', 'sgst output', 'output sgst', 'sgst payable'], 'duties'),
-      igstLedger: findLedger(['igst', 'igst output', 'output igst', 'igst payable'], 'duties'),
-      roundOffLedger: findLedger(['round off', 'roundoff', 'rounding off']),
-      discountLedger: findLedger(['discount', 'discount allowed', 'sales discount']),
+      salesLedger: findLedger(['sales', 'sales account', 'sales a/c', 'sale'], ['sales', 'revenue', 'income']),
+      cgstLedger: findLedger(['cgst', 'cgst output', 'output cgst', 'cgst payable', 'central gst'], ['duties', 'tax', 'gst']),
+      sgstLedger: findLedger(['sgst', 'sgst output', 'output sgst', 'sgst payable', 'state gst'], ['duties', 'tax', 'gst']),
+      igstLedger: findLedger(['igst', 'igst output', 'output igst', 'igst payable', 'integrated gst'], ['duties', 'tax', 'gst']),
+      roundOffLedger: findLedger(['round off', 'roundoff', 'rounding off', 'round-off'], []),
+      discountLedger: findLedger(['discount', 'discount allowed', 'sales discount', 'discount given'], []),
       defaultPartyGroup: 'Sundry Debtors'
     };
 
+    console.log('[AutoMap] Auto-mapping results:', autoMappings);
     return autoMappings;
   };
 
