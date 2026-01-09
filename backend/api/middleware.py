@@ -36,18 +36,18 @@ class OrganizationMiddleware(MiddlewareMixin):
                 user = jwt_auth.get_user(validated_token)
                 request.user = user
                 
-                # Validate session token for single device login
+                # Validate session token for single device login per session type
                 session_token = request.headers.get('X-Session-Token')
                 if session_token:
                     if not UserSession.validate_session(user, session_token):
-                        # Session is invalid (user logged in from another device)
+                        # Session is invalid (user logged in from another device of same type)
                         return JsonResponse({
                             'error': 'session_invalid',
                             'detail': 'Your session has been terminated because you logged in from another device.'
                         }, status=401)
-                    # Update last activity
+                    # Update last activity for this specific session
                     try:
-                        session = UserSession.objects.get(user=user)
+                        session = UserSession.objects.get(user=user, session_token=session_token)
                         session.save()  # Updates last_activity via auto_now
                     except UserSession.DoesNotExist:
                         pass
