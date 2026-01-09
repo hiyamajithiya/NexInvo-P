@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import setu_views
 
 router = DefaultRouter()
 router.register(r'organizations', views.OrganizationViewSet, basename='organization')
@@ -80,4 +81,10 @@ urlpatterns = [
     path('superadmin/reviews/<uuid:review_id>/approve/', views.superadmin_approve_review, name='superadmin-approve-review'),
     path('superadmin/reviews/<uuid:review_id>/reject/', views.superadmin_reject_review, name='superadmin-reject-review'),
     path('superadmin/reviews/<uuid:review_id>/toggle-featured/', views.superadmin_toggle_featured_review, name='superadmin-toggle-featured-review'),
+    # Setu Desktop Connector endpoints (for Tally integration via local connector)
+    path('setu/status/', setu_views.check_setu_connector, name='setu-status'),
+    path('setu/check-tally/', setu_views.request_tally_connection_check, name='setu-check-tally'),
+    path('setu/get-ledgers/', setu_views.request_tally_ledgers, name='setu-get-ledgers'),
+    path('setu/sync-invoices/', setu_views.sync_invoices_via_setu, name='setu-sync-invoices'),
+    path('setu/sync-status/<int:sync_id>/', setu_views.get_setu_sync_status, name='setu-sync-status'),
 ]

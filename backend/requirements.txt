@@ -130,6 +130,11 @@ python-socketio==5.15.0
 python-engineio==4.12.3
 simple-websocket==1.1.0
 
+# Django Channels (for Setu WebSocket integration)
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.2.0
+
 # Testing & Load Testing
 pytest==9.0.2
 locust==2.42.6

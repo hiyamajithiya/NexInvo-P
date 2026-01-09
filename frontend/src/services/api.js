@@ -295,6 +295,26 @@ export const tallySyncAPI = {
   getSyncHistory: () => api.get('/tally-sync/sync-history/'),
 };
 
+
+// Setu Desktop Connector APIs (for remote Tally via desktop connector)
+export const setuAPI = {
+  // Check if Setu connector is online
+  checkConnector: () => api.get('/setu/status/'),
+  // Request Tally connection check via Setu
+  checkTallyConnection: () => api.post('/setu/check-tally/'),
+  // Request ledgers from Tally via Setu
+  getLedgers: () => api.post('/setu/get-ledgers/'),
+  // Sync invoices via Setu connector
+  syncInvoices: (startDate, endDate, forceResync = false, invoiceIds = []) => api.post('/setu/sync-invoices/', {
+    start_date: startDate,
+    end_date: endDate,
+    force_resync: forceResync,
+    invoice_ids: invoiceIds
+  }),
+  // Get sync operation status
+  getSyncStatus: (syncId) => api.get(`/setu/sync-status/${syncId}/`),
+};
+
 // Scheduled Invoice APIs
 export const scheduledInvoiceAPI = {
   getAll: (params) => api.get('/scheduled-invoices/', { params }),
