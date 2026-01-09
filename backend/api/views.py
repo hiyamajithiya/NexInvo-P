@@ -229,14 +229,31 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 def logout_view(request):
     """
     Logout the current user by invalidating their session.
-    This clears the UserSession record so they can login again.
+    This clears only the specific session (web or setu) that made the logout request,
+    not all sessions for the user.
     """
     from .models import UserSession
 
     try:
-        # Delete the user's active session
-        UserSession.invalidate_session(request.user)
-        print(f"[Logout] Session invalidated for user: {request.user.email}")
+        # Get the session token from header to identify which session to invalidate
+        session_token = request.headers.get('X-Session-Token')
+
+        if session_token:
+            # Delete only the specific session making the logout request
+            deleted_count = UserSession.objects.filter(
+                user=request.user,
+                session_token=session_token
+            ).delete()[0]
+            print(f"[Logout] Session invalidated for user: {request.user.email} (token-based, deleted: {deleted_count})")
+        else:
+            # Fallback: If no session token, try to determine session type from user-agent
+            user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+            if 'electron' in user_agent or 'setu' in user_agent:
+                session_type = 'setu'
+            else:
+                session_type = 'web'
+            UserSession.invalidate_session(request.user, session_type)
+            print(f"[Logout] Session invalidated for user: {request.user.email} (type: {session_type})")
 
         return Response({
             'success': True,
@@ -244,8 +261,10 @@ def logout_view(request):
         }, status=status.HTTP_200_OK)
     except Exception as e:
         print(f"[Logout] Error during logout for {request.user.email}: {e}")
-        # Even if there's an error, try to delete the session
-        UserSession.objects.filter(user=request.user).delete()
+        # Even if there's an error, try to delete based on session token
+        session_token = request.headers.get('X-Session-Token')
+        if session_token:
+            UserSession.objects.filter(user=request.user, session_token=session_token).delete()
         return Response({
             'success': True,
             'message': 'Logged out'
