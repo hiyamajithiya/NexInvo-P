@@ -113,10 +113,12 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
                 await self.handle_register(data)
 
             elif message_type == 'PING':
+                # Refresh cache timeout on each ping to keep connection alive
+                await self.refresh_heartbeat()
                 await self.send_json({'type': 'PONG', 'timestamp': datetime.now().isoformat()})
 
             elif message_type == 'PONG':
-                # Handle pong response (for connection health check)
+                # Handle pong response (if server sends ping)
                 pass
 
             elif message_type == 'TALLY_STATUS':
@@ -408,9 +410,10 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
                 'organization_id': self.organization_id,
                 'connected_at': datetime.now().isoformat(),
                 'channel_name': self.channel_name,
-                'tally_connected': False
+                'tally_connected': False,
+                'last_heartbeat': datetime.now().isoformat()
             },
-            timeout=3600  # 1 hour
+            timeout=120  # 2 minutes - requires periodic heartbeat to stay alive
         )
 
     @database_sync_to_async
@@ -421,13 +424,18 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         key = f"setu_connector_{self.connector_id}"
         info = cache.get(key, {})
         info.update(data)
-        cache.set(key, info, timeout=3600)
+        info['last_heartbeat'] = datetime.now().isoformat()
+        cache.set(key, info, timeout=120)  # Reset 2 minute timeout on each update
 
     @database_sync_to_async
     def remove_connection_info(self):
         """Remove connector info from cache."""
         from django.core.cache import cache
         cache.delete(f"setu_connector_{self.connector_id}")
+
+    async def refresh_heartbeat(self):
+        """Refresh the cache timeout to keep connection alive."""
+        await self.update_connection_info({})
 
     @database_sync_to_async
     def update_sync_history(self, request_id, success, failed):
