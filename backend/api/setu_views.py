@@ -29,6 +29,7 @@ def get_setu_status(request):
     This is used by the web app's Tally Sync Corner to show connection status.
     """
     from .models import OrganizationMembership
+    from datetime import datetime, timedelta
 
     # Get user's organization
     try:
@@ -64,9 +65,27 @@ def get_setu_status(request):
     print(f"[Setu Status Debug] Cache result: {connector_info}")
 
     if connector_info:
-        setu_connected = True
-        tally_connected = connector_info.get('tally_connected', False)
-        company_name = connector_info.get('company_name', '')
+        # Verify the connection is still fresh by checking last_heartbeat
+        # If heartbeat is older than 2 minutes, consider disconnected
+        last_heartbeat = connector_info.get('last_heartbeat')
+        is_fresh = False
+
+        if last_heartbeat:
+            try:
+                heartbeat_time = datetime.fromisoformat(last_heartbeat)
+                # Allow 2 minutes grace period for heartbeat
+                is_fresh = (datetime.now() - heartbeat_time) < timedelta(minutes=2)
+            except (ValueError, TypeError):
+                is_fresh = False
+
+        if is_fresh:
+            setu_connected = True
+            tally_connected = connector_info.get('tally_connected', False)
+            company_name = connector_info.get('company_name', '')
+        else:
+            # Stale connection - delete the cache entry
+            cache.delete(connector_key)
+            print(f"[Setu Status Debug] Deleted stale cache entry: {connector_key}")
 
     return Response({
         'setu_connected': setu_connected,
