@@ -335,27 +335,27 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
     def get_user_organization(self, user):
         """Get user's organization ID from membership."""
         from api.models import OrganizationMembership
-        
-        # Check if user has organization_id attribute
-        if hasattr(user, 'organization_id') and user.organization_id:
-            return user.organization_id
-            
-        # Check if user has direct organization
-        if hasattr(user, 'organization') and user.organization:
-            return user.organization.id
-        
+
         # Check organization memberships (primary method for NexInvo)
         try:
             membership = OrganizationMembership.objects.filter(
                 user=user,
                 is_active=True
             ).first()
-            
+
             if membership:
                 return str(membership.organization.id)
         except Exception as e:
             logger.error(f"Error getting organization membership: {e}")
-        
+
+        # Fallback: Check if user has organization_id attribute
+        if hasattr(user, 'organization_id') and user.organization_id:
+            return user.organization_id
+
+        # Fallback: Check if user has direct organization
+        if hasattr(user, 'organization') and user.organization:
+            return user.organization.id
+
         return None
 
     @database_sync_to_async

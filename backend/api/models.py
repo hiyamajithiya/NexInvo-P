@@ -2202,11 +2202,19 @@ class ScheduledInvoiceLog(models.Model):
 
 class UserSession(models.Model):
     """
-    Tracks active user sessions to enforce single device login.
-    Only one active session per user is allowed at a time.
+    Tracks active user sessions to enforce single device login per session type.
+    - 'web' sessions: Only one active web session per user
+    - 'setu' sessions: Only one active Setu (desktop connector) session per user
+    Both can coexist simultaneously.
     """
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='active_session')
+    SESSION_TYPES = [
+        ('web', 'Web Browser'),
+        ('setu', 'Setu Desktop Connector'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
     session_token = models.CharField(max_length=64, unique=True)
+    session_type = models.CharField(max_length=20, choices=SESSION_TYPES, default='web')
     device_info = models.CharField(max_length=255, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2215,26 +2223,29 @@ class UserSession(models.Model):
     class Meta:
         verbose_name = "User Session"
         verbose_name_plural = "User Sessions"
+        unique_together = ['user', 'session_type']  # One session per type per user
 
     def __str__(self):
-        return f"{self.user.email} - {self.created_at}"
+        return f"{self.user.email} - {self.session_type} - {self.created_at}"
 
     @classmethod
-    def create_session(cls, user, device_info='', ip_address=None):
+    def create_session(cls, user, device_info='', ip_address=None, session_type='web'):
         """
-        Create a new session for user, invalidating any existing session.
+        Create a new session for user of the specified type.
+        Only invalidates existing sessions of the same type.
         Returns the new session token.
         """
         import secrets
-        
-        # Delete existing session (if any) to enforce single device
-        cls.objects.filter(user=user).delete()
-        
+
+        # Delete existing session of same type (if any)
+        cls.objects.filter(user=user, session_type=session_type).delete()
+
         # Create new session with unique token
         session_token = secrets.token_hex(32)
         session = cls.objects.create(
             user=user,
             session_token=session_token,
+            session_type=session_type,
             device_info=device_info,
             ip_address=ip_address
         )
@@ -2246,16 +2257,15 @@ class UserSession(models.Model):
         Validate if the session token is valid for the user.
         Returns True if valid, False otherwise.
         """
-        try:
-            session = cls.objects.get(user=user)
-            return session.session_token == session_token
-        except cls.DoesNotExist:
-            return False
+        return cls.objects.filter(user=user, session_token=session_token).exists()
 
     @classmethod
-    def invalidate_session(cls, user):
-        """Invalidate user's session (logout)"""
-        cls.objects.filter(user=user).delete()
+    def invalidate_session(cls, user, session_type=None):
+        """Invalidate user's session(s). If session_type is None, invalidate all."""
+        if session_type:
+            cls.objects.filter(user=user, session_type=session_type).delete()
+        else:
+            cls.objects.filter(user=user).delete()
 
 
 # =============================================================================

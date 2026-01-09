@@ -72,13 +72,16 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         from .models import UserSession
         from django.utils import timezone
         from datetime import timedelta
-        
+
         # Check if force_login is requested
         force_login = request.data.get('force_login', False)
-        
+
         # Get current device info and session token from request
         current_device_info = request.META.get('HTTP_USER_AGENT', '')[:255]
         current_session_token = request.headers.get('X-Session-Token', '')
+
+        # Determine session type (Setu desktop connector vs web browser)
+        session_type = 'setu' if 'Setu' in current_device_info or request.data.get('client_type') == 'setu' else 'web'
         
         # First validate credentials without generating tokens
         serializer = self.get_serializer(data=request.data)
@@ -91,26 +94,27 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             )
         
         user = serializer.user
-        
-        # Check if user already has an active session
+
+        # Check if user already has an active session of the SAME type
+        # (web sessions and setu sessions can coexist)
         try:
-            existing_session = UserSession.objects.get(user=user)
-            
+            existing_session = UserSession.objects.get(user=user, session_type=session_type)
+
             # Session expiry check (24 hours)
             session_age = timezone.now() - existing_session.last_activity
             session_expired = session_age > timedelta(hours=24)
-            
+
             # Check if it's the same device (matching session token or similar device info)
             is_same_session = (
-                current_session_token and 
+                current_session_token and
                 existing_session.session_token == current_session_token
             )
             is_same_device = (
-                current_device_info and 
+                current_device_info and
                 existing_session.device_info and
                 current_device_info == existing_session.device_info
             )
-            
+
             # Allow login if:
             # 1. force_login is requested
             # 2. Session has expired (older than 24 hours)
@@ -123,9 +127,9 @@ class EmailTokenObtainPairView(TokenObtainPairView):
                     'device_info': existing_session.device_info[:100] if existing_session.device_info else 'Unknown device',
                     'last_activity': existing_session.last_activity.strftime('%Y-%m-%d %H:%M:%S') if existing_session.last_activity else None
                 }, status=status.HTTP_409_CONFLICT)
-                
+
         except UserSession.DoesNotExist:
-            # No existing session, proceed normally
+            # No existing session of this type, proceed normally
             pass
 
         # Check subscription status for non-superusers
@@ -162,10 +166,10 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         response = super().post(request, *args, **kwargs)
 
         if response.status_code == 200:
-            # Create a new session token (invalidates any existing session)
+            # Create a new session token (only invalidates existing sessions of same type)
             device_info = current_device_info
             ip_address = request.META.get('REMOTE_ADDR')
-            session_token = UserSession.create_session(user, device_info, ip_address)
+            session_token = UserSession.create_session(user, device_info, ip_address, session_type)
 
             # Add session token to response
             response.data['session_token'] = session_token
