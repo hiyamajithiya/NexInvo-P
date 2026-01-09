@@ -259,6 +259,14 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         cache.set(cache_key, data, timeout=60)  # Store for 60 seconds
         print(f"[cache_ledgers_response] Cached response at key: {cache_key}")
 
+    @database_sync_to_async
+    def cache_sync_response(self, request_id, data):
+        """Store sync response in cache for synchronous API retrieval."""
+        from django.core.cache import cache
+        cache_key = f"sync_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=120)  # Store for 2 minutes
+        print(f"[cache_sync_response] Cached response at key: {cache_key}")
+
     async def handle_sync_result(self, data):
         """Handle sync result from connector."""
         request_id = data.get('requestId')
@@ -269,6 +277,15 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
         # Update sync history in database
         await self.update_sync_history(request_id, success, failed)
+
+        # Cache the response for synchronous API retrieval
+        await self.cache_sync_response(request_id, {
+            'success_count': len(success),
+            'failed_count': len(failed),
+            'success': success,
+            'failed': failed,
+            'errors': [f.get('error', '') for f in failed]
+        })
 
         # Notify web clients
         await self.channel_layer.group_send(
@@ -289,6 +306,15 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
         # Update sync history
         await self.update_sync_history_error(request_id, error)
+
+        # Cache the error response for synchronous API retrieval
+        await self.cache_sync_response(request_id, {
+            'success_count': 0,
+            'failed_count': 0,
+            'success': [],
+            'failed': [],
+            'errors': [error]
+        })
 
         # Notify web clients
         await self.channel_layer.group_send(
