@@ -398,3 +398,13 @@ PAYMENT_REMINDER_MINUTE = 0
 # Scheduled Invoice Time (11:35 AM IST)
 SCHEDULED_INVOICE_HOUR = 6
 SCHEDULED_INVOICE_MINUTE = 5
+
+# Channel Layers configuration (for WebSocket support)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
