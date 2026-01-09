@@ -90,15 +90,18 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
+        print(f"[Setu Disconnect] WebSocket disconnecting, close_code: {close_code}, connector_id: {self.connector_id}")
+
         if self.group_name:
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
         if hasattr(self, 'user_group'):
             await self.channel_layer.group_discard(self.user_group, self.channel_name)
 
-        # Remove connection info
+        # Remove connection info from cache immediately
         if self.connector_id:
             await self.remove_connection_info()
+            print(f"[Setu Disconnect] Removed cache entry for: {self.connector_id}")
             logger.info(f"Setu connector disconnected: {self.connector_id}")
 
     async def receive_json(self, content):
