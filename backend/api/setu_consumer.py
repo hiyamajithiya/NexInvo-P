@@ -120,6 +120,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
                 pass
 
             elif message_type == 'TALLY_STATUS':
+                print(f"[TALLY_STATUS] Received from {self.connector_id}: {data}")
                 await self.handle_tally_status(data)
 
             elif message_type == 'CONNECTION_STATUS':
@@ -173,6 +174,8 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         connected = data.get('connected', False)
         company_name = data.get('companyName', '') or data.get('company_name', '')
 
+        print(f"[handle_tally_status] Processing: connected={connected}, company_name={company_name}")
+
         # Broadcast to web clients
         await self.channel_layer.group_send(
             f"web_org_{self.organization_id}",
@@ -185,10 +188,12 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         )
 
         # Update stored status with company name
+        print(f"[handle_tally_status] Updating cache for {self.connector_id}")
         await self.update_connection_info({
             'tally_connected': connected,
             'company_name': company_name
         })
+        print(f"[handle_tally_status] Cache updated successfully")
 
     async def handle_connection_status(self, data):
         """Handle connection check response."""
@@ -204,6 +209,16 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
     async def handle_ledgers_response(self, data):
         """Handle ledgers list response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        ledgers = data.get('ledgers', [])
+
+        print(f"[handle_ledgers_response] Received {len(ledgers)} ledgers for request {request_id}")
+
+        # Store in cache for synchronous API to retrieve
+        if request_id:
+            await self.cache_ledgers_response(request_id, {'ledgers': ledgers})
+
+        # Also broadcast to web clients for real-time updates
         await self.channel_layer.group_send(
             f"web_org_{self.organization_id}",
             {
@@ -215,6 +230,16 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
     async def handle_ledgers_error(self, data):
         """Handle ledgers fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+
+        print(f"[handle_ledgers_error] Error for request {request_id}: {error}")
+
+        # Store error in cache for synchronous API to retrieve
+        if request_id:
+            await self.cache_ledgers_response(request_id, {'error': error, 'ledgers': []})
+
+        # Also broadcast to web clients
         await self.channel_layer.group_send(
             f"web_org_{self.organization_id}",
             {
@@ -223,6 +248,14 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
                 'connector_id': self.connector_id
             }
         )
+
+    @database_sync_to_async
+    def cache_ledgers_response(self, request_id, data):
+        """Store ledgers response in cache for synchronous API retrieval."""
+        from django.core.cache import cache
+        cache_key = f"ledgers_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=60)  # Store for 60 seconds
+        print(f"[cache_ledgers_response] Cached response at key: {cache_key}")
 
     async def handle_sync_result(self, data):
         """Handle sync result from connector."""

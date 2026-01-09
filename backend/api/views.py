@@ -5139,9 +5139,13 @@ def tally_check_connection(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def tally_get_ledgers(request):
-    """Get list of ledgers from Tally"""
-    from .tally_sync import TallyConnector
-    from .models import TallyMapping
+    """Get list of ledgers from Tally via Setu connector"""
+    from django.core.cache import cache
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    from .models import OrganizationMembership
+    import time
+    import uuid
 
     org_id = request.headers.get('X-Organization-ID')
     if not org_id:
@@ -5158,20 +5162,77 @@ def tally_get_ledgers(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # Try to get mapping for host/port, use defaults if not exists
+    # Check if Setu connector is online
+    connector_key = f"setu_connector_setu_{org_id}_{request.user.id}"
+    connector_info = cache.get(connector_key)
+
+    if not connector_info:
+        return Response(
+            {'error': 'Setu connector is offline. Please start the Setu desktop app.', 'ledgers': []},
+            status=status.HTTP_200_OK
+        )
+
+    if not connector_info.get('tally_connected'):
+        return Response(
+            {'error': 'Tally is not connected. Please check Tally in the Setu app.', 'ledgers': []},
+            status=status.HTTP_200_OK
+        )
+
+    # Generate unique request ID
+    request_id = f"ledgers_{uuid.uuid4().hex[:8]}"
+    cache_key = f"ledgers_response_{org_id}_{request_id}"
+
+    # Clear any previous response
+    cache.delete(cache_key)
+
     try:
-        mapping = TallyMapping.objects.get(organization=org)
-        host = mapping.tally_host
-        port = mapping.tally_port
-    except TallyMapping.DoesNotExist:
-        # Use defaults - Tally typically runs on localhost:9000
-        host = 'localhost'
-        port = 9000
+        channel_layer = get_channel_layer()
 
-    connector = TallyConnector(host=host, port=port)
-    ledgers = connector.get_ledgers()
+        # Send get ledgers request to Setu connector
+        async_to_sync(channel_layer.group_send)(
+            f"setu_org_{org_id}",
+            {
+                'type': 'get_ledgers',
+                'data': {
+                    'request_id': request_id
+                }
+            }
+        )
 
-    return Response({'ledgers': ledgers})
+        # Wait for response (poll cache with timeout)
+        timeout = 15  # seconds
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            response_data = cache.get(cache_key)
+            if response_data is not None:
+                # Clean up cache
+                cache.delete(cache_key)
+
+                if response_data.get('error'):
+                    return Response({
+                        'error': response_data['error'],
+                        'ledgers': []
+                    })
+
+                return Response({
+                    'ledgers': response_data.get('ledgers', [])
+                })
+
+            time.sleep(0.3)  # Poll every 300ms
+
+        # Timeout
+        return Response({
+            'error': 'Timeout waiting for Tally response. Please try again.',
+            'ledgers': []
+        })
+
+    except Exception as e:
+        print(f"[tally_get_ledgers] Error: {e}")
+        return Response({
+            'error': f'Failed to request ledgers: {str(e)}',
+            'ledgers': []
+        })
 
 
 @api_view(['GET', 'POST'])
