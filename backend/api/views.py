@@ -93,8 +93,8 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         )
         session_type = 'setu' if is_setu else 'web'
 
-        # Debug logging
-        logger.info(f"[Login Debug] client_type_param: '{client_type_param}', User-Agent: '{current_device_info[:50]}...', is_setu: {is_setu}, session_type: {session_type}")
+        # Debug logging (using print for visibility in daphne logs)
+        print(f"[Login Debug] client_type_param: '{client_type_param}', User-Agent: '{current_device_info[:50]}...', is_setu: {is_setu}, session_type: {session_type}")
 
         # First validate credentials without generating tokens
         serializer = self.get_serializer(data=request.data)
@@ -185,13 +185,13 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 
             # Debug: Log sessions BEFORE creating new one
             existing_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
-            logger.info(f"[Login Debug] User {user.email} - BEFORE create_session - existing sessions: {existing_sessions}")
+            print(f"[Login Debug] User {user.email} - BEFORE create_session - existing sessions: {[(s['session_token'][:16], s['session_type']) for s in existing_sessions]}")
 
             session_token = UserSession.create_session(user, device_info, ip_address, session_type)
 
             # Debug: Log sessions AFTER creating new one
             after_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
-            logger.info(f"[Login Debug] User {user.email} - AFTER create_session({session_type}) - sessions now: {after_sessions}")
+            print(f"[Login Debug] User {user.email} - AFTER create_session({session_type}) - sessions now: {[(s['session_token'][:16], s['session_type']) for s in after_sessions]}")
 
             # Add session token to response
             response.data['session_token'] = session_token

@@ -44,14 +44,14 @@ class OrganizationMiddleware(MiddlewareMixin):
                 if session_token:
                     # Debug: Log all sessions for this user
                     all_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
-                    logger.info(f"[Session Debug] User: {user.email}, Token received: {session_token[:16]}..., All sessions: {all_sessions}")
+                    print(f"[Session Debug] User: {user.email}, Token received: {session_token[:16]}..., All sessions: {[(s['session_token'][:16], s['session_type']) for s in all_sessions]}")
 
                     is_valid = UserSession.validate_session(user, session_token)
-                    logger.info(f"[Session Debug] Token validation result: {is_valid}")
+                    print(f"[Session Debug] Token validation result: {is_valid}")
 
                     if not is_valid:
                         # Session is invalid (user logged in from another device of same type)
-                        logger.warning(f"[Session Debug] INVALID session for {user.email}, returning 401")
+                        print(f"[Session Debug] INVALID session for {user.email}, returning 401")
                         return JsonResponse({
                             'error': 'session_invalid',
                             'detail': 'Your session has been terminated because you logged in from another device.'
@@ -61,7 +61,7 @@ class OrganizationMiddleware(MiddlewareMixin):
                         session = UserSession.objects.get(user=user, session_token=session_token)
                         session.save()  # Updates last_activity via auto_now
                     except UserSession.DoesNotExist:
-                        logger.warning(f"[Session Debug] Session exists in validate but not in get for {user.email}")
+                        print(f"[Session Debug] Session exists in validate but not in get for {user.email}")
             except (AuthenticationFailed, Exception):
                 # Authentication failed, user will remain unauthenticated
                 pass
