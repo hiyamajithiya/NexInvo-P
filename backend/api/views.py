@@ -72,6 +72,8 @@ class EmailTokenObtainPairView(TokenObtainPairView):
         from .models import UserSession
         from django.utils import timezone
         from datetime import timedelta
+        import logging
+        logger = logging.getLogger(__name__)
 
         # Check if force_login is requested
         force_login = request.data.get('force_login', False)
@@ -90,6 +92,9 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             'electron' in current_device_info.lower()
         )
         session_type = 'setu' if is_setu else 'web'
+
+        # Debug logging
+        logger.info(f"[Login Debug] client_type_param: '{client_type_param}', User-Agent: '{current_device_info[:50]}...', is_setu: {is_setu}, session_type: {session_type}")
 
         # First validate credentials without generating tokens
         serializer = self.get_serializer(data=request.data)
@@ -177,7 +182,16 @@ class EmailTokenObtainPairView(TokenObtainPairView):
             # Create a new session token (only invalidates existing sessions of same type)
             device_info = current_device_info
             ip_address = request.META.get('REMOTE_ADDR')
+
+            # Debug: Log sessions BEFORE creating new one
+            existing_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
+            logger.info(f"[Login Debug] User {user.email} - BEFORE create_session - existing sessions: {existing_sessions}")
+
             session_token = UserSession.create_session(user, device_info, ip_address, session_type)
+
+            # Debug: Log sessions AFTER creating new one
+            after_sessions = list(UserSession.objects.filter(user=user).values('session_token', 'session_type'))
+            logger.info(f"[Login Debug] User {user.email} - AFTER create_session({session_type}) - sessions now: {after_sessions}")
 
             # Add session token to response
             response.data['session_token'] = session_token
