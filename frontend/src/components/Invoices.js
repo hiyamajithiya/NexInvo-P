@@ -159,10 +159,8 @@ function Invoices({ initialFilter = null }) {
 
   const handleShareWhatsApp = async (invoice) => {
     try {
-      // Generate PDF URL for sharing
-      const response = await invoiceAPI.generatePDF(invoice.id);
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const pdfUrl = window.URL.createObjectURL(blob);
+      // Generate PDF for sharing
+      await invoiceAPI.generatePDF(invoice.id);
 
       // Format currency
       const formatAmount = (amount) => {

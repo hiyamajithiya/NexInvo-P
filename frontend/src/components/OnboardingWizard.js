@@ -108,7 +108,6 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [stepsCompleted, setStepsCompleted] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isFirstTimeUser, setIsFirstTimeUser] = useState(true);
 
   // Check actual completion status from backend
   const checkStepsCompletion = useCallback(async () => {

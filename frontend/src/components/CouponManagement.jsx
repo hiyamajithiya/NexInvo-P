@@ -75,10 +75,10 @@ const CouponManagement = () => {
     is_active: true,
   });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadCoupons();
     loadPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadCoupons = async () => {

@@ -85,11 +85,11 @@ const OrganizationSettings = () => {
   }, [currentOrganization]);
 
   // Load members
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (currentOrganization) {
       loadMembers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrganization]);
 
   const loadMembers = async () => {

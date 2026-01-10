@@ -47,9 +47,9 @@ const ReviewsAdmin = () => {
 
   const tabFilters = ['all', 'pending', 'approved', 'rejected'];
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const loadReviews = async () => {

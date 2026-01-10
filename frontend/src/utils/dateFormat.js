@@ -99,9 +99,11 @@ export const formatDateLocale = (dateInput, options = {}) => {
   }
 };
 
-export default {
+const dateFormatUtils = {
   formatDate,
   formatDateTime,
   formatDateTimeAMPM,
   formatDateLocale
 };
+
+export default dateFormatUtils;

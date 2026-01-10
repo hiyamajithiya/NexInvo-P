@@ -5,8 +5,6 @@ import {
   Grid,
   Paper,
   Typography,
-  Card,
-  CardContent,
   Table,
   TableBody,
   TableCell,
@@ -36,18 +34,14 @@ import {
 import {
   Business as BusinessIcon,
   People as PeopleIcon,
-  Receipt as ReceiptIcon,
   TrendingUp as TrendingUpIcon,
   MoreVert as MoreVertIcon,
   AccountCircle as AccountCircleIcon,
-  Logout as LogoutIcon,
   Settings as SettingsIcon,
   Speed as SpeedIcon,
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
   AttachMoney as AttachMoneyIcon,
-  Notifications as NotificationsIcon,
-  NotificationsActive as NotificationsActiveIcon,
 } from '@mui/icons-material';
 import { superadminAPI, subscriptionAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
@@ -68,7 +62,6 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [stats, setStats] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [anchorEl, setAnchorEl] = useState(null);
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [users, setUsers] = useState([]);
@@ -103,8 +96,6 @@ const SuperAdminDashboard = ({ onLogout }) => {
   // Notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
   // Upgrade requests state
   const [upgradeRequests, setUpgradeRequests] = useState([]);
@@ -384,14 +375,6 @@ const SuperAdminDashboard = ({ onLogout }) => {
       console.error('Error rejecting request:', error);
       showSnackbar('Failed to reject request', 'error');
     }
-  };
-
-  const handleMenuClick = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
   };
 
   const handleOrgMenuOpen = (event, org) => {

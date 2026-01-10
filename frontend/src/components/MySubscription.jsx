@@ -42,10 +42,10 @@ const MySubscription = ({ onNavigate }) => {
   const [paymentRequests, setPaymentRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadSubscription();
     loadPaymentRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSubscription = async () => {

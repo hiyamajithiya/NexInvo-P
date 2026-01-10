@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import axios from 'axios';
 import './LandingPage.css';
@@ -17,7 +17,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   const [loadingReviews, setLoadingReviews] = useState(true);
 
   // Static testimonials data (fallback when no reviews from API)
-  const staticTestimonials = [
+  const staticTestimonials = useMemo(() => [
     {
       name: "Rajesh Kumar",
       role: "CA, Kumar & Associates",
@@ -36,7 +36,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
       content: "Managing multiple organizations from one dashboard is a game-changer. Highly recommended for agencies.",
       rating: 5
     }
-  ];
+  ], []);
 
   // Use customerReviews if available, otherwise static testimonials
   const displayTestimonials = customerReviews.length > 0 ? customerReviews : staticTestimonials;
@@ -874,12 +874,12 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
                 Modern invoice management for growing Indian businesses. GST-compliant, secure, and easy to use.
               </p>
               <div className="footer-social">
-                <a href="#" aria-label="Twitter" className="social-link">
+                <button type="button" aria-label="Twitter" className="social-link" onClick={() => window.open('https://twitter.com', '_blank')}>
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                </a>
-                <a href="#" aria-label="LinkedIn" className="social-link">
+                </button>
+                <button type="button" aria-label="LinkedIn" className="social-link" onClick={() => window.open('https://linkedin.com', '_blank')}>
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg>
-                </a>
+                </button>
               </div>
             </div>
             <div className="footer-links">

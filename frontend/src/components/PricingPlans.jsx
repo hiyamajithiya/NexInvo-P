@@ -68,9 +68,9 @@ const PricingPlans = ({ onNavigate }) => {
 
   const steps = ['Select Plan', 'Make Payment', 'Submit Proof'];
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPlans = async () => {
