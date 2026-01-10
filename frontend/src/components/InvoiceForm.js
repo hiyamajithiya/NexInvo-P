@@ -52,6 +52,11 @@ function InvoiceForm({ onBack, invoice }) {
     notes: ''
   });
 
+  const [formatSettings, setFormatSettings] = useState({
+    show_quantity_column: false,
+    show_rate_column: false
+  });
+
   const [invoiceData, setInvoiceData] = useState({
     invoiceType: 'tax',
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -63,6 +68,8 @@ function InvoiceForm({ onBack, invoice }) {
         slNo: 1,
         description: '',
         hsnSac: '',
+        quantity: null,
+        rate: null,
         gstRate: 18,
         taxableAmount: 0,
         totalAmount: 0
@@ -111,6 +118,7 @@ function InvoiceForm({ onBack, invoice }) {
     loadServices();
     loadPaymentTerms();
     loadInvoiceSettings();
+    loadFormatSettings();
   }, []);
 
   // Load invoice data if editing - wait for services to be loaded first
@@ -133,6 +141,8 @@ function InvoiceForm({ onBack, invoice }) {
             slNo: index + 1,
             description: item.description,
             hsnSac: item.hsn_sac,
+            quantity: item.quantity ? parseFloat(item.quantity) : null,
+            rate: item.rate ? parseFloat(item.rate) : null,
             gstRate: parseFloat(item.gst_rate),
             taxableAmount: parseFloat(item.taxable_amount),
             totalAmount: parseFloat(item.total_amount),
@@ -191,11 +201,27 @@ function InvoiceForm({ onBack, invoice }) {
     }
   };
 
+  const loadFormatSettings = async () => {
+    try {
+      const response = await settingsAPI.getInvoiceFormatSettings();
+      if (response.data) {
+        setFormatSettings({
+          show_quantity_column: response.data.show_quantity_column || false,
+          show_rate_column: response.data.show_rate_column || false
+        });
+      }
+    } catch (err) {
+      console.error('Error loading format settings:', err);
+    }
+  };
+
   const addItem = () => {
     const newItem = {
       slNo: invoiceData.items.length + 1,
       description: '',
       hsnSac: '',
+      quantity: null,
+      rate: null,
       gstRate: invoiceSettings.defaultGstRate || 18,
       taxableAmount: 0,
       totalAmount: 0
@@ -233,8 +259,16 @@ function InvoiceForm({ onBack, invoice }) {
       newItems[index][field] = value;
     }
 
+    // Auto-calculate taxable amount when quantity and rate are both provided
+    if (field === 'quantity' || field === 'rate') {
+      const item = newItems[index];
+      if (item.quantity && item.rate) {
+        item.taxableAmount = item.quantity * item.rate;
+      }
+    }
+
     // Calculate total amount if taxableAmount or gstRate changes
-    if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId') {
+    if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId' || field === 'quantity' || field === 'rate') {
       const item = newItems[index];
       item.totalAmount = item.taxableAmount + (item.taxableAmount * item.gstRate / 100);
     }
@@ -430,6 +464,8 @@ function InvoiceForm({ onBack, invoice }) {
         items: invoiceData.items.map(item => ({
           description: item.description,
           hsn_sac: item.hsnSac,
+          quantity: item.quantity,
+          rate: item.rate,
           gst_rate: item.gstRate,
           taxable_amount: item.taxableAmount,
           total_amount: item.totalAmount
@@ -483,6 +519,8 @@ function InvoiceForm({ onBack, invoice }) {
         items: invoiceData.items.map(item => ({
           description: item.description,
           hsn_sac: item.hsnSac,
+          quantity: item.quantity,
+          rate: item.rate,
           gst_rate: item.gstRate,
           taxable_amount: item.taxableAmount,
           total_amount: item.totalAmount
@@ -643,11 +681,17 @@ function InvoiceForm({ onBack, invoice }) {
                 <thead>
                   <tr>
                     <th style={{width: '50px'}}>Sl No</th>
-                    <th style={{width: '35%'}}>Service</th>
-                    <th style={{width: '120px'}}>SAC Code</th>
-                    <th style={{width: '100px'}}>GST %</th>
-                    <th style={{width: '150px'}}>Amount (₹)</th>
-                    <th style={{width: '150px', textAlign: 'center'}}>Total (₹)</th>
+                    <th style={{width: formatSettings.show_quantity_column || formatSettings.show_rate_column ? '25%' : '35%'}}>Service</th>
+                    <th style={{width: '100px'}}>SAC Code</th>
+                    {formatSettings.show_quantity_column && (
+                      <th style={{width: '80px'}}>Qty</th>
+                    )}
+                    {formatSettings.show_rate_column && (
+                      <th style={{width: '100px'}}>Rate (₹)</th>
+                    )}
+                    <th style={{width: '80px'}}>GST %</th>
+                    <th style={{width: '120px'}}>Amount (₹)</th>
+                    <th style={{width: '120px', textAlign: 'center'}}>Total (₹)</th>
                     <th style={{width: '50px', textAlign: 'center'}}></th>
                   </tr>
                 </thead>
@@ -677,6 +721,34 @@ function InvoiceForm({ onBack, invoice }) {
                       <td className="text-center">
                         {item.hsnSac || '-'}
                       </td>
+                      {formatSettings.show_quantity_column && (
+                        <td>
+                          <input
+                            type="number"
+                            className="table-input"
+                            value={item.quantity || ''}
+                            onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || null)}
+                            min="0"
+                            step="0.01"
+                            placeholder="0"
+                            style={{width: '100%'}}
+                          />
+                        </td>
+                      )}
+                      {formatSettings.show_rate_column && (
+                        <td>
+                          <input
+                            type="number"
+                            className="table-input"
+                            value={item.rate || ''}
+                            onChange={(e) => updateItem(index, 'rate', parseFloat(e.target.value) || null)}
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            style={{width: '100%'}}
+                          />
+                        </td>
+                      )}
                       <td className="text-center">
                         {item.gstRate}%
                       </td>

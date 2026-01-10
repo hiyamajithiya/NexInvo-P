@@ -59,6 +59,8 @@ function InvoiceFormatEditor() {
     table_header_text_color: '#ffffff',
     show_hsn_sac_column: false,
     show_serial_number: true,
+    show_quantity_column: false,
+    show_rate_column: false,
     show_taxable_value: true,
     show_cgst_sgst_separate: true,
     show_igst: true,
@@ -154,6 +156,8 @@ function InvoiceFormatEditor() {
         table_header_text_color: '#ffffff',
         show_hsn_sac_column: false,
         show_serial_number: true,
+        show_quantity_column: false,
+        show_rate_column: false,
         show_taxable_value: true,
         show_cgst_sgst_separate: true,
         show_igst: true,
@@ -523,6 +527,22 @@ function InvoiceFormatEditor() {
                     onChange={(e) => handleChange('show_hsn_sac_column', e.target.checked)}
                   />
                   HSN/SAC Column
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <input
+                    type="checkbox"
+                    checked={formatSettings.show_quantity_column}
+                    onChange={(e) => handleChange('show_quantity_column', e.target.checked)}
+                  />
+                  Quantity Column
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <input
+                    type="checkbox"
+                    checked={formatSettings.show_rate_column}
+                    onChange={(e) => handleChange('show_rate_column', e.target.checked)}
+                  />
+                  Rate Column
                 </label>
                 <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                   <input

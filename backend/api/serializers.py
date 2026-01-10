@@ -105,7 +105,7 @@ class PaymentTermSerializer(serializers.ModelSerializer):
 class InvoiceItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceItem
-        fields = ['id', 'description', 'hsn_sac', 'gst_rate',
+        fields = ['id', 'description', 'hsn_sac', 'quantity', 'rate', 'gst_rate',
                   'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount']
         read_only_fields = ['id', 'cgst_amount', 'sgst_amount', 'igst_amount']
 
@@ -462,7 +462,8 @@ class InvoiceFormatSettingsSerializer(serializers.ModelSerializer):
             'show_phone', 'show_email', 'show_invoice_number', 'show_invoice_date',
             'show_due_date', 'show_client_gstin', 'show_client_pan', 'show_client_phone',
             'show_client_email', 'table_header_bg_color', 'table_header_text_color',
-            'show_hsn_sac_column', 'show_serial_number', 'show_taxable_value',
+            'show_hsn_sac_column', 'show_serial_number', 'show_quantity_column',
+            'show_rate_column', 'show_taxable_value',
             'show_cgst_sgst_separate', 'show_igst', 'show_gst_percentage',
             'show_subtotal', 'show_tax_breakup', 'show_grand_total_in_words',
             'show_bank_details', 'bank_account_number', 'bank_name', 'bank_ifsc',

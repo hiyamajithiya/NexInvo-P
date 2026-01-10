@@ -283,16 +283,24 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
 
     # ==================== ITEMS TABLE ====================
 
-    # Table header
-    table_data = [[
-        'S.No',
-        'Description',
+    # Check format settings for quantity/rate columns
+    show_quantity = format_settings.show_quantity_column if format_settings else False
+    show_rate = format_settings.show_rate_column if format_settings else False
+
+    # Build table header dynamically
+    header_row = ['S.No', 'Description']
+    if show_quantity:
+        header_row.append('Qty')
+    if show_rate:
+        header_row.append('Rate\n(Rs.)')
+    header_row.extend([
         'Taxable\nValue',
         'CGST\n(Rs.)',
         'SGST\n(Rs.)',
         'IGST\n(Rs.)',
         'Amount\n(Rs.)'
-    ]]
+    ])
+    table_data = [header_row]
 
     # Table rows
     for idx, item in enumerate(invoice.items.all(), 1):
@@ -301,7 +309,7 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
             cgst = float(item.cgst_amount) if item.cgst_amount else 0
             sgst = float(item.sgst_amount) if item.sgst_amount else 0
             igst = float(item.igst_amount) if item.igst_amount else 0
-            
+
             # If all are zero but there's tax, fall back to calculation
             if cgst == 0 and sgst == 0 and igst == 0:
                 gst_amount = float(item.total_amount) - float(item.taxable_amount)
@@ -359,67 +367,97 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
                     cgst = gst_amount / 2
                     sgst = gst_amount / 2
 
-        table_data.append([
-            str(idx),
-            item.description,
+        # Build row dynamically based on enabled columns
+        row = [str(idx), item.description]
+        if show_quantity:
+            qty = float(item.quantity) if item.quantity else 0
+            row.append(f"{qty:,.2f}" if qty > 0 else "-")
+        if show_rate:
+            rate = float(item.rate) if item.rate else 0
+            row.append(f"{rate:,.2f}" if rate > 0 else "-")
+        row.extend([
             f"{item.taxable_amount:,.2f}",
             f"{cgst:,.2f}" if cgst > 0 else "-",
             f"{sgst:,.2f}" if sgst > 0 else "-",
             f"{igst:,.2f}" if igst > 0 else "-",
             f"{item.total_amount:,.2f}"
         ])
+        table_data.append(row)
+
+    # Calculate column indexes for GST columns (varies based on qty/rate columns)
+    base_cols = 2  # S.No and Description
+    if show_quantity:
+        base_cols += 1
+    if show_rate:
+        base_cols += 1
+    cgst_col_idx = base_cols + 1  # After taxable value
+    sgst_col_idx = base_cols + 2
+    igst_col_idx = base_cols + 3
+    amount_col_idx = base_cols + 4
 
     # Calculate totals from table data
-    total_cgst = sum([float(row[3].replace(',', '')) for row in table_data[1:] if row[3] != '-'])
-    total_sgst = sum([float(row[4].replace(',', '')) for row in table_data[1:] if row[4] != '-'])
-    total_igst = sum([float(row[5].replace(',', '')) for row in table_data[1:] if row[5] != '-'])
+    total_cgst = sum([float(row[cgst_col_idx].replace(',', '')) for row in table_data[1:] if row[cgst_col_idx] != '-'])
+    total_sgst = sum([float(row[sgst_col_idx].replace(',', '')) for row in table_data[1:] if row[sgst_col_idx] != '-'])
+    total_igst = sum([float(row[igst_col_idx].replace(',', '')) for row in table_data[1:] if row[igst_col_idx] != '-'])
 
-    # Subtotal row (before GST)
-    table_data.append([
-        '',
-        'Sub Total',
+    # Build subtotal row
+    subtotal_row = ['', 'Sub Total']
+    if show_quantity:
+        subtotal_row.append('')
+    if show_rate:
+        subtotal_row.append('')
+    subtotal_row.extend([
         f"{invoice.subtotal:,.2f}",
         f"{total_cgst:,.2f}" if total_cgst > 0 else "-",
         f"{total_sgst:,.2f}" if total_sgst > 0 else "-",
         f"{total_igst:,.2f}" if total_igst > 0 else "-",
         f"{float(invoice.subtotal) + float(invoice.tax_amount):,.2f}"
     ])
+    table_data.append(subtotal_row)
 
     # Round Off row (only show if round_off is not zero)
     round_off_value = float(invoice.round_off) if invoice.round_off else 0
     if round_off_value != 0:
         round_off_display = f"+{round_off_value:,.2f}" if round_off_value > 0 else f"{round_off_value:,.2f}"
-        table_data.append([
-            '',
-            'Round Off',
-            '',
-            '',
-            '',
-            '',
-            round_off_display
-        ])
+        round_off_row = ['', 'Round Off']
+        if show_quantity:
+            round_off_row.append('')
+        if show_rate:
+            round_off_row.append('')
+        round_off_row.extend(['', '', '', '', round_off_display])
+        table_data.append(round_off_row)
 
     # Grand Total row
-    table_data.append([
-        '',
-        'GRAND TOTAL',
-        '',
-        '',
-        '',
-        '',
-        f"{invoice.total_amount:,.2f}"
-    ])
+    grand_total_row = ['', 'GRAND TOTAL']
+    if show_quantity:
+        grand_total_row.append('')
+    if show_rate:
+        grand_total_row.append('')
+    grand_total_row.extend(['', '', '', '', f"{invoice.total_amount:,.2f}"])
+    table_data.append(grand_total_row)
 
-    # Create table with reduced width (85% of page width)
-    col_widths = [
-        table_width * 0.06,   # S.No (6%)
-        table_width * 0.40,   # Description (40%)
-        table_width * 0.14,   # Taxable Value (14%)
-        table_width * 0.13,   # CGST (13%)
-        table_width * 0.13,   # SGST (13%)
+    # Calculate column widths based on enabled columns
+    num_extra_cols = (1 if show_quantity else 0) + (1 if show_rate else 0)
+
+    # Build column widths dynamically
+    col_widths = [table_width * 0.06]  # S.No (6%)
+
+    # Adjust description width based on extra columns
+    desc_width = 0.40 - (num_extra_cols * 0.07)  # Reduce for each extra column
+    col_widths.append(table_width * desc_width)  # Description
+
+    if show_quantity:
+        col_widths.append(table_width * 0.07)  # Qty (7%)
+    if show_rate:
+        col_widths.append(table_width * 0.08)  # Rate (8%)
+
+    col_widths.extend([
+        table_width * 0.12,   # Taxable Value (12%)
+        table_width * 0.11,   # CGST (11%)
+        table_width * 0.11,   # SGST (11%)
         table_width * 0.13,   # IGST (13%)
         table_width * 0.14    # Amount (14%)
-    ]
+    ])
 
     # Determine how many summary rows we have (Sub Total, Round Off (optional), Grand Total)
     num_summary_rows = 2  # Sub Total + Grand Total
