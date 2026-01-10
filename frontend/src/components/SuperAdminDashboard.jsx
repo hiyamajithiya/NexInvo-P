@@ -96,6 +96,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
   // Notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   // Upgrade requests state
   const [upgradeRequests, setUpgradeRequests] = useState([]);
