@@ -5385,6 +5385,25 @@ def tally_sync_invoices(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
 
+    # Verify the connection is still fresh by checking last_heartbeat
+    from datetime import datetime, timedelta
+    last_heartbeat = connector_info.get('last_heartbeat')
+    is_fresh = False
+
+    if last_heartbeat:
+        try:
+            heartbeat_time = datetime.fromisoformat(last_heartbeat)
+            time_diff = datetime.now() - heartbeat_time
+            is_fresh = time_diff < timedelta(minutes=2)
+        except (ValueError, TypeError):
+            is_fresh = False
+
+    if not is_fresh:
+        return Response(
+            {'error': 'Setu connector connection is stale. Please check the Setu desktop app.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
     if not connector_info.get('tally_connected'):
         return Response(
             {'error': 'Tally is not connected. Please check Tally connection in Setu app.'},
@@ -5428,110 +5447,120 @@ def tally_sync_invoices(request):
             'skipped_existing': 0
         })
 
-    # Create sync history record
-    sync_history = TallySyncHistory.objects.create(
-        organization=org,
-        user=request.user,
-        start_date=start_date,
-        end_date=end_date,
-        status='pending',
-        invoices_synced=0,
-        invoices_failed=0
-    )
+    try:
+        # Create sync history record
+        sync_history = TallySyncHistory.objects.create(
+            organization=org,
+            user=request.user,
+            start_date=start_date,
+            end_date=end_date,
+            status='pending',
+            invoices_synced=0,
+            invoices_failed=0
+        )
 
-    # Prepare invoice data for Setu
-    invoice_data = []
-    for inv in invoices:
-        invoice_data.append({
-            'id': str(inv.id),
-            'invoice_number': inv.invoice_number,
-            'invoice_date': inv.invoice_date.isoformat(),
-            'subtotal': str(inv.subtotal),
-            'tax_amount': str(inv.tax_amount),
-            'total_amount': str(inv.total_amount),
-            'round_off': str(inv.round_off) if inv.round_off else '0',
-            'notes': inv.notes or '',
-            'client': {
-                'id': str(inv.client.id),
-                'name': inv.client.name,
-                'gstin': inv.client.gstin or '',
-                'state': inv.client.state or '',
-                'state_code': inv.client.gstin[:2] if inv.client.gstin else '',
-                'address': inv.client.address or '',
-                'city': inv.client.city or '',
-                'pinCode': inv.client.pin_code or ''
-            }
-        })
-
-    # Prepare mapping data
-    mapping_data = {
-        'salesLedger': mapping.sales_ledger,
-        'cgstLedger': mapping.cgst_ledger,
-        'sgstLedger': mapping.sgst_ledger,
-        'igstLedger': mapping.igst_ledger,
-        'roundOffLedger': mapping.round_off_ledger or '',
-        'discountLedger': mapping.discount_ledger or '',
-        'defaultPartyGroup': mapping.default_party_group,
-        'companyGstin': org.gstin if hasattr(org, 'gstin') and org.gstin else ''
-    }
-
-    # Generate unique request ID
-    request_id = str(sync_history.id)
-    cache_key = f"sync_response_{org_id}_{request_id}"
-
-    # Send sync request to Setu connector via WebSocket
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"setu_org_{org_id}",
-        {
-            'type': 'sync_request',
-            'data': {
-                'requestId': request_id,
-                'invoices': invoice_data,
-                'mapping': mapping_data,
-                'forceResync': force_resync
-            }
-        }
-    )
-
-    print(f"[Tally Sync] Sent sync request for {len(invoice_data)} invoices, request_id: {request_id}")
-
-    # Wait for response from Setu (poll cache with timeout)
-    timeout = 60  # 60 seconds for sync operation
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        response_data = cache.get(cache_key)
-        if response_data is not None:
-            # Clear the cache entry
-            cache.delete(cache_key)
-
-            # Update sync history
-            sync_history.status = 'success' if response_data.get('success_count', 0) > 0 else 'failed'
-            sync_history.invoices_synced = response_data.get('success_count', 0)
-            sync_history.invoices_failed = response_data.get('failed_count', 0)
-            sync_history.save()
-
-            return Response({
-                'success': True,
-                'message': f"Synced {response_data.get('success_count', 0)} invoices to Tally",
-                'synced_count': response_data.get('success_count', 0),
-                'total_count': len(invoice_data),
-                'failed_count': response_data.get('failed_count', 0),
-                'errors': response_data.get('errors', [])
+        # Prepare invoice data for Setu
+        invoice_data = []
+        for inv in invoices:
+            invoice_data.append({
+                'id': str(inv.id),
+                'invoice_number': inv.invoice_number,
+                'invoice_date': inv.invoice_date.isoformat(),
+                'subtotal': str(inv.subtotal),
+                'tax_amount': str(inv.tax_amount),
+                'total_amount': str(inv.total_amount),
+                'round_off': str(inv.round_off) if inv.round_off else '0',
+                'notes': inv.notes or '',
+                'client': {
+                    'id': str(inv.client.id),
+                    'name': inv.client.name,
+                    'gstin': inv.client.gstin or '',
+                    'state': inv.client.state or '',
+                    'state_code': inv.client.gstin[:2] if inv.client.gstin else '',
+                    'address': inv.client.address or '',
+                    'city': inv.client.city or '',
+                    'pinCode': inv.client.pin_code or ''
+                }
             })
 
-        time.sleep(0.5)
+        # Prepare mapping data
+        mapping_data = {
+            'salesLedger': mapping.sales_ledger,
+            'cgstLedger': mapping.cgst_ledger,
+            'sgstLedger': mapping.sgst_ledger,
+            'igstLedger': mapping.igst_ledger,
+            'roundOffLedger': mapping.round_off_ledger or '',
+            'discountLedger': mapping.discount_ledger or '',
+            'defaultPartyGroup': mapping.default_party_group,
+            'companyGstin': org.gstin if hasattr(org, 'gstin') and org.gstin else ''
+        }
 
-    # Timeout - sync may still be in progress
-    # For now, return optimistic response that sync was initiated
-    return Response({
-        'success': True,
-        'message': f"Sync initiated for {len(invoice_data)} invoices. Check sync history for results.",
-        'synced_count': len(invoice_data),
-        'total_count': len(invoice_data),
-        'skipped_existing': 0
-    })
+        # Generate unique request ID
+        request_id = str(sync_history.id)
+        cache_key = f"sync_response_{org_id}_{request_id}"
+
+        # Send sync request to Setu connector via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"setu_org_{org_id}",
+            {
+                'type': 'sync_request',
+                'data': {
+                    'requestId': request_id,
+                    'invoices': invoice_data,
+                    'mapping': mapping_data,
+                    'forceResync': force_resync
+                }
+            }
+        )
+
+        print(f"[Tally Sync] Sent sync request for {len(invoice_data)} invoices, request_id: {request_id}")
+
+        # Wait for response from Setu (poll cache with timeout)
+        timeout = 60  # 60 seconds for sync operation
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            response_data = cache.get(cache_key)
+            if response_data is not None:
+                # Clear the cache entry
+                cache.delete(cache_key)
+
+                # Update sync history
+                sync_history.status = 'success' if response_data.get('success_count', 0) > 0 else 'failed'
+                sync_history.invoices_synced = response_data.get('success_count', 0)
+                sync_history.invoices_failed = response_data.get('failed_count', 0)
+                sync_history.save()
+
+                return Response({
+                    'success': True,
+                    'message': f"Synced {response_data.get('success_count', 0)} invoices to Tally",
+                    'synced_count': response_data.get('success_count', 0),
+                    'total_count': len(invoice_data),
+                    'failed_count': response_data.get('failed_count', 0),
+                    'errors': response_data.get('errors', [])
+                })
+
+            time.sleep(0.5)
+
+        # Timeout - sync may still be in progress
+        # For now, return optimistic response that sync was initiated
+        return Response({
+            'success': True,
+            'message': f"Sync initiated for {len(invoice_data)} invoices. Check sync history for results.",
+            'synced_count': len(invoice_data),
+            'total_count': len(invoice_data),
+            'skipped_existing': 0
+        })
+
+    except Exception as e:
+        print(f"[Tally Sync] Error during sync: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': f'Sync failed: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['POST'])
