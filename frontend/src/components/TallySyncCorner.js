@@ -578,7 +578,7 @@ function TallySyncCorner() {
                         Don't have Setu installed?
                       </p>
                       <a
-                        href="/downloads/setu-setup.zip"
+                        href="/downloads/Setu-v1.0.0-win64-portable.zip"
                         download="Setu-Connector.zip"
                         className="btn-create"
                         style={{ textDecoration: 'none', display: 'inline-block' }}
