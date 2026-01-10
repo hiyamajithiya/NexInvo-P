@@ -63,6 +63,7 @@ urlpatterns = [
     path('tally-sync/tally-ledgers/', views.tally_get_ledgers, name='tally-get-ledgers'),
     path('tally-sync/mappings/', views.tally_mappings, name='tally-mappings'),
     path('tally-sync/sync-invoices/', views.tally_sync_invoices, name='tally-sync-invoices'),
+    path('tally-sync/preview-invoices/', views.tally_preview_invoices, name='tally-preview-invoices'),
     path('tally-sync/sync-history/', views.tally_sync_history, name='tally-sync-history'),
     # Payment Settings & Payment Requests
     path('superadmin/payment-settings/', views.superadmin_payment_settings, name='superadmin-payment-settings'),

@@ -5391,18 +5391,31 @@ def tally_sync_invoices(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
 
-    # Build query for invoices
-    invoices_query = Invoice.objects.filter(
-        organization_id=org_id,
-        invoice_date__gte=start_date,
-        invoice_date__lte=end_date,
-        invoice_type='tax',  # Only tax invoices
-        status__in=['sent', 'paid']  # Only finalized invoices
-    ).select_related('client')
+    # Get selected invoice IDs (if provided)
+    selected_invoice_ids = request.data.get('invoice_ids', [])
 
-    if not force_resync:
-        # Exclude already synced invoices
-        invoices_query = invoices_query.filter(tally_sync__isnull=True)
+    # Build query for invoices
+    if selected_invoice_ids:
+        # Sync only selected invoices
+        invoices_query = Invoice.objects.filter(
+            organization_id=org_id,
+            id__in=selected_invoice_ids,
+            invoice_type='tax',  # Only tax invoices
+            status__in=['sent', 'paid']  # Only finalized invoices
+        ).select_related('client')
+    else:
+        # Sync all invoices in date range (original behavior)
+        invoices_query = Invoice.objects.filter(
+            organization_id=org_id,
+            invoice_date__gte=start_date,
+            invoice_date__lte=end_date,
+            invoice_type='tax',  # Only tax invoices
+            status__in=['sent', 'paid']  # Only finalized invoices
+        ).select_related('client')
+
+        if not force_resync:
+            # Exclude already synced invoices
+            invoices_query = invoices_query.filter(tally_sync__isnull=True)
 
     invoices = list(invoices_query)
 
@@ -5518,6 +5531,74 @@ def tally_sync_invoices(request):
         'synced_count': len(invoice_data),
         'total_count': len(invoice_data),
         'skipped_existing': 0
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_preview_invoices(request):
+    """Preview invoices available for Tally sync based on date range"""
+    from .models import Invoice, InvoiceTallySync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response(
+            {'error': 'Organization ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    start_date = request.data.get('start_date')
+    end_date = request.data.get('end_date')
+    force_resync = request.data.get('force_resync', False)
+
+    if not start_date or not end_date:
+        return Response(
+            {'error': 'Start date and end date are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Build query for invoices
+    invoices_query = Invoice.objects.filter(
+        organization_id=org_id,
+        invoice_date__gte=start_date,
+        invoice_date__lte=end_date,
+        invoice_type='tax',  # Only tax invoices
+        status__in=['sent', 'paid']  # Only finalized invoices
+    ).select_related('client').order_by('-invoice_date')
+
+    # Get already synced invoice IDs
+    synced_invoice_ids = set(
+        InvoiceTallySync.objects.filter(
+            invoice__organization_id=org_id,
+            synced=True
+        ).values_list('invoice_id', flat=True)
+    )
+
+    invoices_data = []
+    for inv in invoices_query:
+        is_synced = inv.id in synced_invoice_ids
+        invoices_data.append({
+            'id': str(inv.id),
+            'invoice_number': inv.invoice_number,
+            'invoice_date': inv.invoice_date.isoformat(),
+            'client_name': inv.client.name if inv.client else 'Unknown',
+            'total_amount': str(inv.total_amount),
+            'status': inv.status,
+            'is_synced': is_synced,
+            'can_sync': not is_synced or force_resync
+        })
+
+    # Count stats
+    total_count = len(invoices_data)
+    synced_count = sum(1 for inv in invoices_data if inv['is_synced'])
+    pending_count = total_count - synced_count
+
+    return Response({
+        'invoices': invoices_data,
+        'total_count': total_count,
+        'synced_count': synced_count,
+        'pending_count': pending_count,
+        'force_resync': force_resync
     })
 
 

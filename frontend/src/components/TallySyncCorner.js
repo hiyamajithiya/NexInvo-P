@@ -46,6 +46,13 @@ function TallySyncCorner() {
   });
   const [syncHistory, setSyncHistory] = useState([]);
 
+  // Invoice preview popup state
+  const [showInvoicePopup, setShowInvoicePopup] = useState(false);
+  const [previewInvoices, setPreviewInvoices] = useState([]);
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewStats, setPreviewStats] = useState({ total: 0, synced: 0, pending: 0 });
+
   // WebSocket for real-time Setu status (reserved for future use)
   // eslint-disable-next-line no-unused-vars
   const [ws, setWs] = useState(null);
@@ -272,7 +279,8 @@ function TallySyncCorner() {
     }
   };
 
-  const syncInvoicesToTally = async () => {
+  // Preview invoices before sync
+  const previewInvoicesForSync = async () => {
     if (!syncParams.startDate || !syncParams.endDate) {
       showError('Please select both start and end dates');
       return;
@@ -288,11 +296,76 @@ function TallySyncCorner() {
       return;
     }
 
-    setSyncProgress({ inProgress: true, current: 0, total: 0, status: 'Preparing...' });
+    setPreviewLoading(true);
+    try {
+      const response = await api.post('/tally-sync/preview-invoices/', {
+        start_date: syncParams.startDate,
+        end_date: syncParams.endDate,
+        force_resync: syncParams.forceResync
+      });
+
+      const data = response.data;
+      setPreviewInvoices(data.invoices || []);
+      setPreviewStats({
+        total: data.total_count || 0,
+        synced: data.synced_count || 0,
+        pending: data.pending_count || 0
+      });
+
+      // Pre-select all invoices that can be synced
+      const syncableIds = (data.invoices || [])
+        .filter(inv => inv.can_sync)
+        .map(inv => inv.id);
+      setSelectedInvoices(syncableIds);
+
+      setShowInvoicePopup(true);
+    } catch (err) {
+      console.error('Error previewing invoices:', err);
+      showError('Failed to fetch invoices for preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Toggle invoice selection
+  const toggleInvoiceSelection = (invoiceId) => {
+    setSelectedInvoices(prev =>
+      prev.includes(invoiceId)
+        ? prev.filter(id => id !== invoiceId)
+        : [...prev, invoiceId]
+    );
+  };
+
+  // Select all syncable invoices
+  const selectAllInvoices = () => {
+    const syncableIds = previewInvoices
+      .filter(inv => inv.can_sync)
+      .map(inv => inv.id);
+    setSelectedInvoices(syncableIds);
+  };
+
+  // Deselect all invoices
+  const deselectAllInvoices = () => {
+    setSelectedInvoices([]);
+  };
+
+  const syncInvoicesToTally = async () => {
+    if (selectedInvoices.length === 0) {
+      showError('Please select at least one invoice to sync');
+      return;
+    }
+
+    setShowInvoicePopup(false);
+    setSyncProgress({ inProgress: true, current: 0, total: selectedInvoices.length, status: 'Preparing...' });
     setLoading(true);
 
     try {
-      const response = await tallySyncAPI.syncInvoices(syncParams.startDate, syncParams.endDate, syncParams.forceResync);
+      const response = await api.post('/tally-sync/sync-invoices/', {
+        start_date: syncParams.startDate,
+        end_date: syncParams.endDate,
+        force_resync: syncParams.forceResync,
+        invoice_ids: selectedInvoices
+      });
       const result = response.data;
 
       setSyncProgress({
@@ -317,6 +390,8 @@ function TallySyncCorner() {
       showError('Failed to sync invoices to Tally');
     } finally {
       setLoading(false);
+      setSelectedInvoices([]);
+      setPreviewInvoices([]);
     }
   };
 
@@ -840,12 +915,12 @@ function TallySyncCorner() {
 
                     <button
                       className="btn-create"
-                      onClick={syncInvoicesToTally}
-                      disabled={loading || syncProgress.inProgress}
+                      onClick={previewInvoicesForSync}
+                      disabled={loading || syncProgress.inProgress || previewLoading}
                       style={{ minWidth: '250px', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', fontSize: '16px', padding: '14px 28px' }}
                     >
-                      <span className="btn-icon">{loading || syncProgress.inProgress ? '⏳' : '🚀'}</span>
-                      {loading || syncProgress.inProgress ? 'Syncing...' : 'Start Sync to Tally'}
+                      <span className="btn-icon">{previewLoading ? '⏳' : '🚀'}</span>
+                      {previewLoading ? 'Loading Invoices...' : 'Start Sync to Tally'}
                     </button>
                   </>
                 )}
@@ -903,6 +978,263 @@ function TallySyncCorner() {
           </div>
         </div>
       </div>
+
+      {/* Invoice Selection Popup */}
+      {showInvoicePopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+          }}>
+            {/* Popup Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+              color: 'white'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '20px' }}>Select Invoices to Sync</h2>
+                  <p style={{ margin: '4px 0 0 0', opacity: 0.9, fontSize: '14px' }}>
+                    {syncParams.startDate} to {syncParams.endDate}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowInvoicePopup(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    color: 'white',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: '20px'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* Stats Bar */}
+            <div style={{
+              padding: '16px 24px',
+              background: '#f8f9fa',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              gap: '24px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#1e40af' }}>{previewStats.total}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Total Invoices</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981' }}>{previewStats.synced}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Already Synced</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#f59e0b' }}>{previewStats.pending}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Pending Sync</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#8b5cf6' }}>{selectedInvoices.length}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Selected</div>
+              </div>
+            </div>
+
+            {/* Selection Actions */}
+            <div style={{
+              padding: '12px 24px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              gap: '12px'
+            }}>
+              <button
+                onClick={selectAllInvoices}
+                style={{
+                  padding: '8px 16px',
+                  background: '#eff6ff',
+                  border: '1px solid #3b82f6',
+                  borderRadius: '6px',
+                  color: '#1e40af',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Select All Syncable
+              </button>
+              <button
+                onClick={deselectAllInvoices}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Deselect All
+              </button>
+            </div>
+
+            {/* Invoice List */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '16px 24px'
+            }}>
+              {previewInvoices.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                  <span style={{ fontSize: '48px' }}>📄</span>
+                  <p style={{ marginTop: '16px' }}>No invoices found for the selected period.</p>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8f9fa' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb', width: '40px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoices.length === previewInvoices.filter(i => i.can_sync).length && selectedInvoices.length > 0}
+                          onChange={(e) => e.target.checked ? selectAllInvoices() : deselectAllInvoices()}
+                        />
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Invoice #</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Date</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Client</th>
+                      <th style={{ padding: '12px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
+                      <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewInvoices.map(invoice => (
+                      <tr
+                        key={invoice.id}
+                        style={{
+                          background: selectedInvoices.includes(invoice.id) ? '#eff6ff' : 'white',
+                          opacity: invoice.can_sync ? 1 : 0.6
+                        }}
+                      >
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedInvoices.includes(invoice.id)}
+                            onChange={() => toggleInvoiceSelection(invoice.id)}
+                            disabled={!invoice.can_sync}
+                          />
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', fontWeight: '500' }}>
+                          {invoice.invoice_number}
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
+                          {new Date(invoice.invoice_date).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                          {invoice.client_name}
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '500' }}>
+                          ₹{parseFloat(invoice.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                          {invoice.is_synced ? (
+                            <span style={{
+                              background: '#d1fae5',
+                              color: '#065f46',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px'
+                            }}>
+                              ✓ Synced
+                            </span>
+                          ) : (
+                            <span style={{
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px'
+                            }}>
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Popup Footer */}
+            <div style={{
+              padding: '16px 24px',
+              borderTop: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#f8f9fa'
+            }}>
+              <span style={{ color: '#6b7280' }}>
+                {selectedInvoices.length} invoice(s) selected
+              </span>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => setShowInvoicePopup(false)}
+                  style={{
+                    padding: '10px 20px',
+                    background: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={syncInvoicesToTally}
+                  disabled={selectedInvoices.length === 0}
+                  style={{
+                    padding: '10px 24px',
+                    background: selectedInvoices.length === 0 ? '#d1d5db' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    cursor: selectedInvoices.length === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}
+                >
+                  🚀 Sync {selectedInvoices.length} Invoice(s)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin {
