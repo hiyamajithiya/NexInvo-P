@@ -92,15 +92,16 @@ export default function ClientFormScreen({
     try {
       const clientData = {
         name: name.trim(),
-        email: email.trim(),
-        mobile: mobile.trim(),
-        address: address.trim(),
-        city: city.trim(),
-        state: state.trim(),
-        pinCode: pinCode.trim(),
+        email: email.trim() || '',
+        phone: '',  // Send empty phone to avoid backend issues
+        mobile: mobile.trim() || '',
+        address: address.trim() || '',
+        city: city.trim() || '',
+        state: state.trim() || '',
+        pinCode: pinCode.trim() || '',
         stateCode: stateCode.trim() || (gstin ? gstin.substring(0, 2) : ''),
-        gstin: gstin.trim().toUpperCase(),
-        pan: pan.trim().toUpperCase(),
+        gstin: gstin.trim().toUpperCase() || '',
+        pan: pan.trim().toUpperCase() || '',
       };
 
       if (isEditing) {

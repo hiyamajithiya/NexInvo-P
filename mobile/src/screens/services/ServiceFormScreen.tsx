@@ -83,9 +83,9 @@ export default function ServiceFormScreen({
     try {
       const serviceData = {
         name: name.trim(),
-        description: description.trim() || undefined,
-        sac_code: sacCode.trim() || undefined,
-        gst_rate: parseFloat(gstRate),
+        description: description.trim() || '',
+        sac_code: sacCode.trim() || '',
+        gst_rate: parseFloat(gstRate) || 18,
       };
 
       if (isEditing && serviceId) {

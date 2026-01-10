@@ -113,13 +113,13 @@ export default function RecordPaymentScreen({
     try {
       const paymentData = {
         invoice: selectedInvoice.id,
-        amount: amount,
+        amount: amount || '0',
         tds_amount: tdsAmount || '0',
         gst_tds_amount: gstTdsAmount || '0',
         payment_date: paymentDate,
-        payment_method: paymentMethod,
-        reference_number: referenceNumber,
-        notes: notes,
+        payment_method: paymentMethod || 'bank_transfer',
+        reference_number: referenceNumber || '',
+        notes: notes || '',
       };
 
       await api.createPayment(paymentData);

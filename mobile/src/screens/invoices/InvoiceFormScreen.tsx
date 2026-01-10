@@ -250,8 +250,8 @@ export default function InvoiceFormScreen({
         round_off: totals.roundOff,
         total_amount: totals.roundedTotal,
         items: validItems.map((item) => ({
-          description: item.description,
-          hsn_sac: item.hsn_sac,
+          description: item.description || '',
+          hsn_sac: item.hsn_sac || '',
           gst_rate: parseFloat(item.gst_rate) || 18,
           taxable_amount: parseFloat(item.taxable_amount) || 0,
           total_amount: parseFloat(item.total_amount) || 0,

@@ -84,7 +84,7 @@ export default function ScheduledInvoiceFormScreen({
   const [invoiceType, setInvoiceType] = useState<'tax' | 'proforma'>('tax');
   const [frequency, setFrequency] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [dayOfMonth, setDayOfMonth] = useState('1');
-  const [dayOfWeek, setDayOfWeek] = useState('1');
+  const [dayOfWeek, setDayOfWeek] = useState('0');
   const [monthOfYear, setMonthOfYear] = useState('1');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState('');
@@ -130,7 +130,7 @@ export default function ScheduledInvoiceFormScreen({
     setInvoiceType(schedule.invoice_type);
     setFrequency(schedule.frequency);
     setDayOfMonth(schedule.day_of_month.toString());
-    setDayOfWeek(schedule.day_of_week?.toString() || '1');
+    setDayOfWeek(schedule.day_of_week?.toString() || '0');
     setMonthOfYear(schedule.month_of_year?.toString() || '1');
     setStartDate(schedule.start_date);
     setEndDate(schedule.end_date || '');
@@ -225,7 +225,7 @@ export default function ScheduledInvoiceFormScreen({
         invoice_type: invoiceType,
         frequency,
         day_of_month: parseInt(dayOfMonth) || 1,
-        day_of_week: frequency === 'weekly' ? parseInt(dayOfWeek) || 1 : undefined,
+        day_of_week: frequency === 'weekly' ? parseInt(dayOfWeek) || 0 : undefined,
         month_of_year: frequency === 'yearly' ? parseInt(monthOfYear) || 1 : undefined,
         start_date: startDate,
         end_date: endDate || undefined,
@@ -235,14 +235,14 @@ export default function ScheduledInvoiceFormScreen({
         email_subject: autoSendEmail ? emailSubject : undefined,
         email_body: autoSendEmail ? emailBody : undefined,
         items: items.map(item => ({
-          description: item.description,
-          hsn_sac: item.hsn_sac,
+          description: item.description || '',
+          hsn_sac: item.hsn_sac || '',
           gst_rate: parseFloat(item.gst_rate) || 18,
           taxable_amount: parseFloat(item.taxable_amount) || 0,
-          total_amount: (
-            parseFloat(item.taxable_amount) +
-            (parseFloat(item.taxable_amount) * parseFloat(item.gst_rate)) / 100
-          ).toFixed(2),
+          total_amount: parseFloat((
+            (parseFloat(item.taxable_amount) || 0) +
+            ((parseFloat(item.taxable_amount) || 0) * (parseFloat(item.gst_rate) || 18)) / 100
+          ).toFixed(2)),
         })),
       };
 
@@ -356,11 +356,12 @@ export default function ScheduledInvoiceFormScreen({
             {frequency === 'weekly' && (
               <TextInput
                 mode="outlined"
-                label="Day of Week (1-7, Mon-Sun)"
+                label="Day of Week (0-6, Mon-Sun)"
                 value={dayOfWeek}
                 onChangeText={setDayOfWeek}
                 keyboardType="numeric"
                 style={styles.input}
+                placeholder="0=Monday, 6=Sunday"
               />
             )}
 
