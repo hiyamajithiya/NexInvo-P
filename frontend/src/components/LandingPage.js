@@ -771,18 +771,17 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
               </div>
               <div className="download-buttons">
                 <a
-                  href="/downloads/nexinvo.apk" download="NexInvo.apk"
-                  
-                  
+                  href="https://play.google.com/store/apps/details?id=com.nexinvo.app&hl=en_IN"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="btn-download-primary"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="download-icon">
-                    <path d="M17.523 15.341l-.001-.002c-.215.136-.447.254-.696.35-.677.262-1.484.32-2.281.32h-5.09c-.797 0-1.604-.058-2.281-.32a3.017 3.017 0 01-.696-.35l-.001.002L3 18.819V21c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2v-2.181l-3.477-3.478zM18 4H6C4.895 4 4 4.895 4 6v10.586l2.293-2.293a1 1 0 011.414 0l.002.001c.131.084.29.166.478.239.481.186 1.131.267 1.813.267h4c.682 0 1.332-.081 1.813-.267.188-.073.347-.155.478-.239l.002-.001a1 1 0 011.414 0L20 16.586V6c0-1.105-.895-2-2-2z"/>
-                    <path d="M12 14a1 1 0 01-.707-.293l-3-3a1 1 0 111.414-1.414L11 10.586V7a1 1 0 112 0v3.586l1.293-1.293a1 1 0 111.414 1.414l-3 3A1 1 0 0112 14z"/>
+                    <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/>
                   </svg>
                   <div className="btn-download-text">
-                    <span className="download-label">Download for</span>
-                    <span className="download-platform">Android</span>
+                    <span className="download-label">Get it on</span>
+                    <span className="download-platform">Google Play</span>
                   </div>
                 </a>
                 <div className="coming-soon-badge">
@@ -793,7 +792,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
                 </div>
               </div>
               <p className="download-note">
-                * Requires Android 8.0 or higher. iOS version is under development.
+                * Available on Google Play Store. Requires Android 8.0 or higher. iOS version is under development.
               </p>
             </div>
             <div className="download-visual">

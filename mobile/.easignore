@@ -1,6 +1,32 @@
+# Socket files
 *.sock
+**/*.sock
+nexinvo.sock
+
+# Node modules (EAS will install fresh)
+node_modules/
+
+# Build artifacts
+.expo/
+dist/
+build/
+
+# Git
+.git/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Parent directory socket files
 ../nexinvo.sock
 ../*.sock
-*.sock
-../nexinvo.sock
-../*.sock
+../../*.sock
