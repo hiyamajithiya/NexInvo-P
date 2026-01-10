@@ -564,27 +564,83 @@ function TallySyncCorner() {
                   {loading ? 'Checking...' : 'Refresh Status'}
                 </button>
 
-                {/* Download Setu link */}
+                {/* Download Setu link and Instructions */}
                 {!setuStatus.connected && (
                   <div style={{
                     marginTop: '24px',
-                    padding: '16px',
+                    padding: '20px',
                     background: '#eff6ff',
                     border: '1px solid #3b82f6',
-                    borderRadius: '8px',
-                    textAlign: 'center'
+                    borderRadius: '12px'
                   }}>
-                    <p style={{ color: '#1e40af', marginBottom: '12px' }}>
-                      Don't have Setu installed?
-                    </p>
-                    <a
-                      href="/downloads/setu-setup.exe"
-                      className="btn-create"
-                      style={{ textDecoration: 'none', display: 'inline-block' }}
-                    >
-                      <span className="btn-icon">📥</span>
-                      Download Setu Connector
-                    </a>
+                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                      <p style={{ color: '#1e40af', marginBottom: '12px', fontWeight: '600', fontSize: '16px' }}>
+                        Don't have Setu installed?
+                      </p>
+                      <a
+                        href="/downloads/setu-setup.zip"
+                        download="Setu-Connector.zip"
+                        className="btn-create"
+                        style={{ textDecoration: 'none', display: 'inline-block' }}
+                      >
+                        <span className="btn-icon">📥</span>
+                        Download Setu Connector
+                      </a>
+                    </div>
+
+                    {/* Installation Instructions */}
+                    <div style={{
+                      background: 'white',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginTop: '16px'
+                    }}>
+                      <h4 style={{ color: '#1e40af', marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>
+                        Installation Instructions
+                      </h4>
+                      <ol style={{ color: '#374151', fontSize: '13px', lineHeight: '1.8', paddingLeft: '20px', margin: 0 }}>
+                        <li>Download and extract the ZIP file to a folder (e.g., <code style={{ background: '#e5e7eb', padding: '2px 6px', borderRadius: '4px' }}>C:\Setu</code>)</li>
+                        <li>Open the extracted folder and run <strong>Setu.exe</strong></li>
+                        <li>On first run, enter your NexInvo login credentials</li>
+                        <li>Ensure <strong>Tally ERP/Prime</strong> is running on your computer</li>
+                        <li>Setu will automatically detect and connect to Tally</li>
+                      </ol>
+                    </div>
+
+                    {/* How to Use Instructions */}
+                    <div style={{
+                      background: 'white',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      marginTop: '12px'
+                    }}>
+                      <h4 style={{ color: '#1e40af', marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>
+                        How to Sync Invoices to Tally
+                      </h4>
+                      <ol style={{ color: '#374151', fontSize: '13px', lineHeight: '1.8', paddingLeft: '20px', margin: 0 }}>
+                        <li>Keep <strong>Setu</strong> running in the background on your computer</li>
+                        <li>Make sure both badges show <span style={{ color: '#10b981', fontWeight: '500' }}>Connected</span> (Setu + Tally)</li>
+                        <li>Go to <strong>Ledger Mapping</strong> tab and map your Chart of Accounts</li>
+                        <li>Go to <strong>Sync Invoices</strong> tab, select date range, and click sync</li>
+                        <li>Invoices will be created as Sales Vouchers in Tally automatically</li>
+                      </ol>
+                    </div>
+
+                    {/* Requirements */}
+                    <div style={{
+                      background: '#fef3c7',
+                      borderRadius: '8px',
+                      padding: '12px 16px',
+                      marginTop: '12px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px'
+                    }}>
+                      <span style={{ fontSize: '16px' }}>⚠️</span>
+                      <div style={{ fontSize: '12px', color: '#92400e' }}>
+                        <strong>Requirements:</strong> Windows 10/11, Tally ERP 9 or Tally Prime with TDL enabled (default port 9000)
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
