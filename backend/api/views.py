@@ -5345,9 +5345,39 @@ def tally_sync_invoices(request):
     # Check for force_resync parameter
     force_resync = request.data.get('force_resync', False)
 
-    # Check if Setu connector is online
-    connector_key = f"setu_connector_setu_{org_id}_{request.user.id}"
-    connector_info = cache.get(connector_key)
+    # Check if ANY Setu connector is online for this organization
+    # Scan Redis for any connector key matching the org pattern
+    import redis
+    from django.conf import settings
+
+    connector_info = None
+    try:
+        redis_url = getattr(settings, 'CACHES', {}).get('default', {}).get('LOCATION', 'redis://localhost:6379/1')
+        if isinstance(redis_url, str):
+            r = redis.from_url(redis_url)
+        else:
+            r = redis.Redis(host='localhost', port=6379, db=1)
+
+        # Find all setu_connector keys for this organization
+        pattern = f":1:setu_connector_setu_{org_id}_*"
+        matching_keys = r.keys(pattern)
+
+        for key in matching_keys:
+            key_str = key.decode() if isinstance(key, bytes) else key
+            cache_key = key_str.replace(":1:", "", 1) if key_str.startswith(":1:") else key_str
+            connector_info = cache.get(cache_key)
+            if connector_info:
+                break
+
+        # Fallback to user-specific key
+        if not connector_info:
+            connector_key = f"setu_connector_setu_{org_id}_{request.user.id}"
+            connector_info = cache.get(connector_key)
+
+    except Exception as e:
+        print(f"[Tally Sync] Error scanning Redis: {e}")
+        connector_key = f"setu_connector_setu_{org_id}_{request.user.id}"
+        connector_info = cache.get(connector_key)
 
     if not connector_info:
         return Response(
