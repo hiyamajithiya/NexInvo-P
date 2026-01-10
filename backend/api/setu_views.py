@@ -27,6 +27,10 @@ def get_setu_status(request):
     """
     Get Setu connector and Tally connection status for the user's organization.
     This is used by the web app's Tally Sync Corner to show connection status.
+
+    IMPORTANT: This looks for ANY Setu connector for the organization, not just
+    the one for the current user. This allows the web app to detect Setu connections
+    regardless of which user logged in first.
     """
     from .models import OrganizationMembership
     from datetime import datetime, timedelta
@@ -55,29 +59,52 @@ def get_setu_status(request):
     setu_connected = False
     tally_connected = False
     company_name = ''
+    connector_info = None
 
-    # Look for any active Setu connector for this organization
-    # The connector_id format is: setu_{organization_id}_{user_id}
-    # The cache key format is: setu_connector_{connector_id}
-    connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
-    connector_info = cache.get(connector_key)
-
-    # Debug logging - also check Redis directly for any setu keys
-    print(f"[Setu Status Debug] User ID: {request.user.id}, Org ID: {organization_id}")
-    print(f"[Setu Status Debug] Looking for cache key: {connector_key}")
-    print(f"[Setu Status Debug] Cache result: {connector_info}")
-
-    # Try to list all setu_connector keys for debugging
+    # Look for ANY active Setu connector for this organization
+    # The cache key format is: setu_connector_setu_{organization_id}_{user_id}
+    # We need to find any key matching setu_connector_setu_{organization_id}_*
     try:
-        redis_url = getattr(settings, 'CHANNEL_LAYERS', {}).get('default', {}).get('CONFIG', {}).get('hosts', [['localhost', 6379]])[0]
+        # Get Redis connection to scan for keys
+        redis_url = getattr(settings, 'CACHES', {}).get('default', {}).get('LOCATION', 'redis://localhost:6379/1')
         if isinstance(redis_url, str):
             r = redis.from_url(redis_url)
         else:
-            r = redis.Redis(host=redis_url[0], port=redis_url[1], db=1)
-        all_keys = r.keys('*setu_connector*')
-        print(f"[Setu Status Debug] All setu_connector keys in Redis: {all_keys}")
+            r = redis.Redis(host='localhost', port=6379, db=1)
+
+        # Find all setu_connector keys for this organization
+        pattern = f":1:setu_connector_setu_{organization_id}_*"
+        matching_keys = r.keys(pattern)
+
+        print(f"[Setu Status Debug] Org ID: {organization_id}, Pattern: {pattern}")
+        print(f"[Setu Status Debug] Matching keys: {matching_keys}")
+
+        # Try each matching key until we find a fresh connection
+        for key in matching_keys:
+            # Django cache adds prefix, so we need to get via Django cache
+            # Extract the cache key without the prefix
+            key_str = key.decode() if isinstance(key, bytes) else key
+            # Remove the ":1:" prefix that Redis adds
+            cache_key = key_str.replace(":1:", "", 1) if key_str.startswith(":1:") else key_str
+
+            connector_info = cache.get(cache_key)
+            print(f"[Setu Status Debug] Checking key {cache_key}: {connector_info}")
+
+            if connector_info:
+                break
+
+        # If no match with pattern, also try the user-specific key as fallback
+        if not connector_info:
+            user_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
+            connector_info = cache.get(user_key)
+            print(f"[Setu Status Debug] Fallback to user key {user_key}: {connector_info}")
+
     except Exception as e:
-        print(f"[Setu Status Debug] Could not list Redis keys: {e}")
+        print(f"[Setu Status Debug] Error scanning Redis: {e}")
+        # Fallback to user-specific key
+        connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
+        connector_info = cache.get(connector_key)
+        print(f"[Setu Status Debug] Fallback cache result: {connector_info}")
 
     if connector_info:
         # Verify the connection is still fresh by checking last_heartbeat
