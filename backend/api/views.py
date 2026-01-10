@@ -5479,7 +5479,7 @@ def tally_sync_invoices(request):
                     'state_code': inv.client.gstin[:2] if inv.client.gstin else '',
                     'address': inv.client.address or '',
                     'city': inv.client.city or '',
-                    'pinCode': inv.client.pin_code or ''
+                    'pinCode': inv.client.pinCode or ''
                 }
             })
 
