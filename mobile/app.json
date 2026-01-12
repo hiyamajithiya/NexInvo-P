@@ -25,7 +25,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.nexinvo.app",
       "label": "NexInvo",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE"
