@@ -19,7 +19,7 @@ const PricingPlans = lazy(() => import('./PricingPlans'));
 const MySubscription = lazy(() => import('./MySubscription'));
 const HelpCenter = lazy(() => import('./HelpCenter'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
-const TallySyncCorner = lazy(() => import('./TallySyncCorner'));
+const SetuDownload = lazy(() => import('./SetuDownload'));
 const ReviewSubmitPage = lazy(() => import('./ReviewSubmitPage'));
 
 // Goods Trader Components
@@ -269,7 +269,7 @@ function Dashboard({ user, onLogout }) {
       case 'help':
         return <HelpCenter />;
       case 'tally-sync':
-        return <TallySyncCorner />;
+        return <SetuDownload />;
       case 'submit-review':
         return <ReviewSubmitPage onNavigate={setActiveMenu} onReviewSubmitted={handleReviewSubmitted} />;
       case 'profile':
@@ -571,7 +571,7 @@ function Dashboard({ user, onLogout }) {
       case 'pricing': return 'Subscription Plans';
       case 'subscription': return 'My Subscription';
       case 'help': return 'Help Center';
-      case 'tally-sync': return 'Tally Sync Corner';
+      case 'tally-sync': return 'Setu - Tally Connector';
       case 'submit-review': return 'Submit Review';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';
@@ -857,8 +857,8 @@ function Dashboard({ user, onLogout }) {
             className={`nav-item ${activeMenu === 'tally-sync' ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); handleMenuClick('tally-sync'); }}
           >
-            <span className="nav-icon">🔄</span>
-            <span className="nav-text">Tally Sync Corner</span>
+            <span className="nav-icon">⬇️</span>
+            <span className="nav-text">Setu Download</span>
           </a>
           <a
             href="#help"
