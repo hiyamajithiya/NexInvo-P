@@ -400,11 +400,21 @@ SCHEDULED_INVOICE_HOUR = 6
 SCHEDULED_INVOICE_MINUTE = 5
 
 # Channel Layers configuration (for WebSocket support)
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
+# Use in-memory channel layer for local development (no Redis required)
+# For production, use Redis channel layer
+if DEBUG:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [("127.0.0.1", 6379)],
+            },
         },
-    },
-}
+    }
+

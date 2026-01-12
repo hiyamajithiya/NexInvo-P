@@ -146,6 +146,23 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
             elif message_type == 'SYNC_QUEUED':
                 await self.handle_sync_queued(data)
 
+            elif message_type == 'PARTIES_RESPONSE':
+                await self.handle_parties_response(data)
+
+            elif message_type == 'PARTIES_ERROR':
+                await self.handle_parties_error(data)
+
+            elif message_type == 'STOCK_ITEMS_RESPONSE':
+                await self.handle_stock_items_response(data)
+
+            elif message_type == 'STOCK_ITEMS_ERROR':
+                await self.handle_stock_items_error(data)
+
+            elif message_type == 'SALES_VOUCHERS_RESPONSE':
+                await self.handle_sales_vouchers_response(data)
+
+            elif message_type == 'SALES_VOUCHERS_ERROR':
+                await self.handle_sales_vouchers_error(data)
             else:
                 logger.warning(f"Unknown message type from Setu: {message_type}")
 
@@ -340,6 +357,146 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
+    async def handle_parties_response(self, data):
+        """Handle parties list response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        parties = data.get('parties', [])
+
+        print(f"[handle_parties_response] Received {len(parties)} parties for request {request_id}")
+
+        # Store in cache for synchronous API to retrieve
+        if request_id:
+            await self.cache_parties_response(request_id, {'parties': parties})
+
+        # Broadcast to web clients
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'parties_response',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    async def handle_parties_error(self, data):
+        """Handle parties fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+
+        print(f"[handle_parties_error] Error for request {request_id}: {error}")
+
+        if request_id:
+            await self.cache_parties_response(request_id, {'error': error, 'parties': []})
+
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'parties_error',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    @database_sync_to_async
+    def cache_parties_response(self, request_id, data):
+        """Store parties response in cache for synchronous API retrieval."""
+        from django.core.cache import cache
+        cache_key = f"parties_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=60)
+        print(f"[cache_parties_response] Cached response at key: {cache_key}")
+
+    async def handle_stock_items_response(self, data):
+        """Handle stock items list response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        stock_items = data.get('stock_items', [])
+
+        print(f"[handle_stock_items_response] Received {len(stock_items)} stock items for request {request_id}")
+
+        if request_id:
+            await self.cache_stock_items_response(request_id, {'stock_items': stock_items})
+
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'stock_items_response',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    async def handle_stock_items_error(self, data):
+        """Handle stock items fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+
+        print(f"[handle_stock_items_error] Error for request {request_id}: {error}")
+
+        if request_id:
+            await self.cache_stock_items_response(request_id, {'error': error, 'stock_items': []})
+
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'stock_items_error',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    @database_sync_to_async
+    def cache_stock_items_response(self, request_id, data):
+        """Store stock items response in cache for synchronous API retrieval."""
+        from django.core.cache import cache
+        cache_key = f"stock_items_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=60)
+        print(f"[cache_stock_items_response] Cached response at key: {cache_key}")
+
+    async def handle_sales_vouchers_response(self, data):
+        """Handle sales vouchers list response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        vouchers = data.get('vouchers', [])
+
+        print(f"[handle_sales_vouchers_response] Received {len(vouchers)} sales vouchers for request {request_id}")
+
+        if request_id:
+            await self.cache_sales_vouchers_response(request_id, {'vouchers': vouchers})
+
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'sales_vouchers_response',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    async def handle_sales_vouchers_error(self, data):
+        """Handle sales vouchers fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+
+        print(f"[handle_sales_vouchers_error] Error for request {request_id}: {error}")
+
+        if request_id:
+            await self.cache_sales_vouchers_response(request_id, {'error': error, 'vouchers': []})
+
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {
+                'type': 'sales_vouchers_error',
+                'data': data,
+                'connector_id': self.connector_id
+            }
+        )
+
+    @database_sync_to_async
+    def cache_sales_vouchers_response(self, request_id, data):
+        """Store sales vouchers response in cache for synchronous API retrieval."""
+        from django.core.cache import cache
+        cache_key = f"sales_vouchers_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=120)  # 2 minutes as it may have more data
+        print(f"[cache_sales_vouchers_response] Cached response at key: {cache_key}")
+
     # Channel layer message handlers (from web app)
 
     async def sync_request(self, event):
@@ -368,6 +525,27 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({
             'type': 'PING',
             'timestamp': datetime.now().isoformat()
+        })
+
+    async def get_parties(self, event):
+        """Forward get parties request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_PARTIES',
+            'data': event.get('data', {})
+        })
+
+    async def get_stock_items(self, event):
+        """Forward get stock items request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_STOCK_ITEMS',
+            'data': event.get('data', {})
+        })
+
+    async def get_sales_vouchers(self, event):
+        """Forward get sales vouchers request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_SALES_VOUCHERS',
+            'data': event.get('data', {})
         })
 
     # Helper methods
