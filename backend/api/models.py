@@ -1941,6 +1941,25 @@ class TallyMapping(models.Model):
     # Party/Client Settings
     default_party_group = models.CharField(max_length=255, default='Sundry Debtors')
 
+    # Invoice Number Series Mapping
+    # When importing from Tally, map Tally voucher numbers to NexInvo series
+    # Options: 'keep' = keep Tally number, 'nexinvo' = generate NexInvo number, 'custom' = use custom prefix
+    invoice_number_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('keep', 'Keep Tally Number'),
+            ('nexinvo', 'Use NexInvo Series'),
+            ('custom', 'Custom Prefix')
+        ],
+        default='keep'
+    )
+    # Custom prefix for Tally imports (e.g., 'TALLY-' to differentiate from NexInvo invoices)
+    tally_invoice_prefix = models.CharField(max_length=50, default='', blank=True)
+    # Whether to auto-detect and map Tally invoice series during import
+    auto_detect_series = models.BooleanField(default=True)
+    # Detected Tally invoice prefix pattern (updated during imports)
+    detected_tally_prefix = models.CharField(max_length=50, default='', blank=True)
+
     # Tally Company Info (cached from last connection)
     tally_company_name = models.CharField(max_length=255, blank=True)
     tally_version = models.CharField(max_length=50, blank=True)

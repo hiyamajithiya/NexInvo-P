@@ -74,6 +74,19 @@ urlpatterns = [
     path('tally-sync/sync-invoices/', views.tally_sync_invoices, name='tally-sync-invoices'),
     path('tally-sync/preview-invoices/', views.tally_preview_invoices, name='tally-preview-invoices'),
     path('tally-sync/sync-history/', views.tally_sync_history, name='tally-sync-history'),
+    # Tally Import endpoints
+    path('tally-sync/parties/', views.tally_get_parties, name='tally-get-parties'),
+    path('tally-sync/preview-clients/', views.tally_preview_clients, name='tally-preview-clients'),
+    path('tally-sync/import-clients/', views.tally_import_clients, name='tally-import-clients'),
+    path('tally-sync/stock-items/', views.tally_get_stock_items, name='tally-get-stock-items'),
+    path('tally-sync/preview-products/', views.tally_preview_products, name='tally-preview-products'),
+    path('tally-sync/preview-services/', views.tally_preview_services, name='tally-preview-services'),
+    path('tally-sync/import-products/', views.tally_import_products, name='tally-import-products'),
+    path('tally-sync/import-services/', views.tally_import_services, name='tally-import-services'),
+    # Two-way Tally sync
+    path('tally-sync/sales-vouchers/', views.tally_get_sales_vouchers, name='tally-get-sales-vouchers'),
+    path('tally-sync/two-way-preview/', views.tally_two_way_sync_preview, name='tally-two-way-preview'),
+    path('tally-sync/sync-to-nexinvo/', views.tally_sync_to_nexinvo, name='tally-sync-to-nexinvo'),
     # Payment Settings & Payment Requests
     path('superadmin/payment-settings/', views.superadmin_payment_settings, name='superadmin-payment-settings'),
     path('payment-settings/', views.get_payment_settings_public, name='payment-settings-public'),
