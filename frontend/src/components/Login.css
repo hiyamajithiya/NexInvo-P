@@ -1066,3 +1066,93 @@
   font-family: 'Courier New', monospace;
   font-weight: 600;
 }
+
+/* Business Type Selector Styles */
+.business-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.business-type-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fff;
+}
+
+.business-type-option:hover {
+  border-color: var(--primary-color);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.business-type-option.selected {
+  border-color: var(--primary-color);
+  background: rgba(139, 92, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+.business-type-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.business-type-option.selected .business-type-icon {
+  background: var(--primary-color);
+}
+
+.business-type-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.business-type-title {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.business-type-desc {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.business-type-option.selected .business-type-title {
+  color: var(--primary-color);
+}
+
+/* Mobile responsive for business type */
+@media (max-width: 480px) {
+  .business-type-option {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .business-type-icon {
+    font-size: 20px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .business-type-title {
+    font-size: 13px;
+  }
+
+  .business-type-desc {
+    font-size: 11px;
+  }
+}

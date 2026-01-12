@@ -13,11 +13,20 @@ router.register(r'payments', views.PaymentViewSet, basename='payment')
 router.register(r'receipts', views.ReceiptViewSet, basename='receipt')
 router.register(r'users', views.UserViewSet, basename='user')
 router.register(r'subscription-plans', views.SubscriptionPlanViewSet, basename='subscription-plan')
+router.register(r'staff-profiles', views.StaffProfileViewSet, basename='staff-profile')
 router.register(r'coupons', views.CouponViewSet, basename='coupon')
 router.register(r'coupon-usages', views.CouponUsageViewSet, basename='coupon-usage')
 router.register(r'subscriptions', views.SubscriptionViewSet, basename='subscription')
 router.register(r'subscription-upgrade-requests', views.SubscriptionUpgradeRequestViewSet, basename='subscription-upgrade-request')
 router.register(r'scheduled-invoices', views.ScheduledInvoiceViewSet, basename='scheduled-invoice')
+
+# Goods Trader routes
+router.register(r'units', views.UnitOfMeasurementViewSet, basename='unit')
+router.register(r'products', views.ProductViewSet, basename='product')
+router.register(r'suppliers', views.SupplierViewSet, basename='supplier')
+router.register(r'purchases', views.PurchaseViewSet, basename='purchase')
+router.register(r'inventory-movements', views.InventoryMovementViewSet, basename='inventory-movement')
+router.register(r'supplier-payments', views.SupplierPaymentViewSet, basename='supplier-payment')
 urlpatterns = [
     # Invoice-specific endpoints must come before router to avoid conflicts
     path('invoices/import/', views.import_invoices, name='import-invoices'),
@@ -89,4 +98,7 @@ urlpatterns = [
     path('setu/get-ledgers/', setu_views.request_tally_ledgers, name='setu-get-ledgers'),
     path('setu/sync-invoices/', setu_views.sync_invoices_via_setu, name='setu-sync-invoices'),
     path('setu/sync-status/<int:sync_id>/', setu_views.get_setu_sync_status, name='setu-sync-status'),
+
+    # Goods Trader additional endpoints
+    path('units/predefined/', views.predefined_units_view, name='predefined-units'),
 ]

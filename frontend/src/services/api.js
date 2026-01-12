@@ -122,15 +122,18 @@ export const authAPI = {
 export const organizationAPI = {
   getAll: () => api.get('/organizations/'),
   getById: (id) => api.get(`/organizations/${id}/`),
+  getDetails: (id) => api.get(`/organizations/${id}/details/`),
   create: (data) => api.post('/organizations/', data),
   update: (id, data) => api.put(`/organizations/${id}/`, data),
-  delete: (id) => api.delete(`/organizations/${id}/`),
+  patch: (id, data) => api.patch(`/organizations/${id}/`, data),
+  delete: (id, confirm = false) => api.delete(`/organizations/${id}/${confirm ? "?confirm=true" : ""}`),
   switch: (id) => api.post(`/organizations/${id}/switch/`),
   getLimits: () => api.get('/organizations/limits/'),
   getMembers: (id) => api.get(`/organizations/${id}/members/`),
   inviteMember: (id, data) => api.post(`/organizations/${id}/invite/`, data),
   updateMember: (orgId, userId, data) => api.put(`/organizations/${orgId}/members/${userId}/`, data),
   removeMember: (orgId, userId) => api.delete(`/organizations/${orgId}/members/${userId}/`),
+  updateAcquisition: (id, data) => api.patch(`/organizations/${id}/`, data),
 };
 
 // Settings APIs
@@ -269,6 +272,19 @@ export const superadminAPI = {
   deleteNotification: (id) => api.delete(`/superadmin/notifications/${id}/delete/`),
 };
 
+
+// Staff Management API (Support & Sales Team)
+export const staffAPI = {
+  getAll: (staffType = null) => api.get('/staff-profiles/', { params: { staff_type: staffType } }),
+  getById: (id) => api.get(`/staff-profiles/${id}/`),
+  create: (data) => api.post('/staff-profiles/', data),
+  update: (id, data) => api.put(`/staff-profiles/${id}/`, data),
+  delete: (id) => api.delete(`/staff-profiles/${id}/`),
+  getStats: () => api.get('/staff-profiles/stats/'),
+  getSalesPerformance: () => api.get('/staff-profiles/sales_performance/'),
+  getMyPerformance: () => api.get('/staff-profiles/my_performance/'),
+};
+
 // Subscription APIs
 export const subscriptionAPI = {
   getPlans: () => api.get('/subscription-plans/'),
@@ -328,6 +344,67 @@ export const scheduledInvoiceAPI = {
   getLogs: (id) => api.get(`/scheduled-invoices/${id}/logs/`),
   generateNow: (id) => api.post(`/scheduled-invoices/${id}/generate_now/`),
   getStats: () => api.get('/scheduled-invoices/stats/'),
+};
+
+// ==================== GOODS TRADER APIs ====================
+
+// Unit of Measurement APIs
+export const unitAPI = {
+  getAll: (params) => api.get('/units/', { params }),
+  getPredefined: () => api.get('/units/predefined/'),
+  getById: (id) => api.get(`/units/${id}/`),
+  create: (data) => api.post('/units/', data),
+  update: (id, data) => api.put(`/units/${id}/`, data),
+  delete: (id) => api.delete(`/units/${id}/`),
+};
+
+// Product APIs
+export const productAPI = {
+  getAll: (params) => api.get('/products/', { params }),
+  getById: (id) => api.get(`/products/${id}/`),
+  create: (data) => api.post('/products/', data),
+  update: (id, data) => api.put(`/products/${id}/`, data),
+  delete: (id) => api.delete(`/products/${id}/`),
+  adjustStock: (id, data) => api.post(`/products/${id}/adjust_stock/`, data),
+  getLowStock: () => api.get('/products/low_stock/'),
+};
+
+// Supplier APIs
+export const supplierAPI = {
+  getAll: (params) => api.get('/suppliers/', { params }),
+  getById: (id) => api.get(`/suppliers/${id}/`),
+  create: (data) => api.post('/suppliers/', data),
+  update: (id, data) => api.put(`/suppliers/${id}/`, data),
+  delete: (id) => api.delete(`/suppliers/${id}/`),
+  getStatement: (id, params) => api.get(`/suppliers/${id}/statement/`, { params }),
+};
+
+// Purchase APIs
+export const purchaseAPI = {
+  getAll: (params) => api.get('/purchases/', { params }),
+  getById: (id) => api.get(`/purchases/${id}/`),
+  create: (data) => api.post('/purchases/', data),
+  update: (id, data) => api.put(`/purchases/${id}/`, data),
+  delete: (id) => api.delete(`/purchases/${id}/`),
+  markReceived: (id) => api.post(`/purchases/${id}/mark_received/`),
+  generatePDF: (id) => api.get(`/purchases/${id}/pdf/`, { responseType: 'blob' }),
+};
+
+// Inventory Movement APIs
+export const inventoryAPI = {
+  getAll: (params) => api.get('/inventory-movements/', { params }),
+  getById: (id) => api.get(`/inventory-movements/${id}/`),
+  create: (data) => api.post('/inventory-movements/', data),
+  getByProduct: (productId) => api.get('/inventory-movements/', { params: { product: productId } }),
+};
+
+// Supplier Payment APIs
+export const supplierPaymentAPI = {
+  getAll: (params) => api.get('/supplier-payments/', { params }),
+  getById: (id) => api.get(`/supplier-payments/${id}/`),
+  create: (data) => api.post('/supplier-payments/', data),
+  update: (id, data) => api.put(`/supplier-payments/${id}/`, data),
+  delete: (id) => api.delete(`/supplier-payments/${id}/`),
 };
 
 export default api;

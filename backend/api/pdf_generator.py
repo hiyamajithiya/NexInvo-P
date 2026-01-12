@@ -7,6 +7,7 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER, TA_JUSTIFY
 from reportlab.pdfgen import canvas
 from io import BytesIO
 import base64
+from django.db.models import Sum
 
 
 def number_to_words(number):
@@ -832,6 +833,91 @@ def generate_receipt_pdf(receipt, company_settings):
     elements.append(Paragraph(f"<b>Payment Method:</b> {receipt.payment.get_payment_method_display()}", normal_style))
     if receipt.payment.reference_number:
         elements.append(Paragraph(f"<b>Reference Number:</b> {receipt.payment.reference_number}", normal_style))
+    elements.append(Spacer(1, 20))
+
+    # Payment Summary Section - Show invoice total, paid till date, balance
+    from api.models import Payment
+    invoice = receipt.invoice
+    invoice_total = float(invoice.total_amount)
+
+    # Calculate total paid till date (including this payment)
+    total_paid_till_date = Payment.objects.filter(invoice=invoice).aggregate(
+        total=Sum('amount')
+    )['total'] or 0
+    total_paid_till_date = float(total_paid_till_date)
+
+    balance_remaining = invoice_total - total_paid_till_date
+
+    # Payment Summary Table
+    elements.append(Paragraph("<b>Payment Summary</b>", heading_style))
+
+    summary_data = [
+        ['Description', 'Amount'],
+        ['Invoice Total', f"₹ {invoice_total:,.2f}"],
+        ['Total Paid Till Date', f"₹ {total_paid_till_date:,.2f}"],
+        ['Balance Remaining', f"₹ {balance_remaining:,.2f}"]
+    ]
+
+    summary_table = Table(summary_data, colWidths=[doc.width * 0.7, doc.width * 0.3])
+
+    summary_style_list = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6c757d')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('TOPPADDING', (0, 0), (-1, 0), 10),
+        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f8f9fa')),  # Invoice total row
+        ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#d4edda')),  # Paid till date row (green)
+    ]
+
+    # Highlight balance row based on status
+    if balance_remaining > 0:
+        summary_style_list.extend([
+            ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#fff3cd')),  # Yellow for pending
+            ('TEXTCOLOR', (0, 3), (-1, 3), colors.HexColor('#856404')),
+            ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'),
+        ])
+    else:
+        summary_style_list.extend([
+            ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#d4edda')),  # Green for fully paid
+            ('TEXTCOLOR', (0, 3), (-1, 3), colors.HexColor('#155724')),
+            ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'),
+        ])
+
+    summary_table.setStyle(TableStyle(summary_style_list))
+    elements.append(summary_table)
+
+    # Add status message
+    if balance_remaining > 0:
+        elements.append(Spacer(1, 10))
+        status_style = ParagraphStyle(
+            'StatusPending',
+            parent=normal_style,
+            fontSize=10,
+            textColor=colors.HexColor('#856404'),
+            backColor=colors.HexColor('#fff3cd'),
+            borderPadding=8,
+        )
+        elements.append(Paragraph(f"<b>Status:</b> Partial Payment Received - Balance of ₹ {balance_remaining:,.2f} pending", status_style))
+    else:
+        elements.append(Spacer(1, 10))
+        status_style = ParagraphStyle(
+            'StatusPaid',
+            parent=normal_style,
+            fontSize=10,
+            textColor=colors.HexColor('#155724'),
+            backColor=colors.HexColor('#d4edda'),
+            borderPadding=8,
+        )
+        elements.append(Paragraph("<b>Status:</b> Invoice Fully Paid - Thank You!", status_style))
+
     elements.append(Spacer(1, 20))
 
     # Notes

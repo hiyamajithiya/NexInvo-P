@@ -42,12 +42,15 @@ import {
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
   AttachMoney as AttachMoneyIcon,
+  Support as SupportIcon,
+  Sell as SalesIcon,
 } from '@mui/icons-material';
-import { superadminAPI, subscriptionAPI } from '../services/api';
+import { superadminAPI, subscriptionAPI, organizationAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import SubscriptionPlans from './SubscriptionPlans';
 import CouponManagement from './CouponManagement';
+import StaffManagement from './StaffManagement';
 import BulkEmailManager from './BulkEmailManager';
 import PaymentSettingsAdmin from './PaymentSettingsAdmin';
 import PaymentRequestsAdmin from './PaymentRequestsAdmin';
@@ -74,11 +77,26 @@ const SuperAdminDashboard = ({ onLogout }) => {
   const [selectedPlan, setSelectedPlan] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [orgDetailsDialog, setOrgDetailsDialog] = useState(false);
+  const [orgDetails, setOrgDetails] = useState(null);
+  const [orgDetailsLoading, setOrgDetailsLoading] = useState(false);
   const [orgMembersDialog, setOrgMembersDialog] = useState(false);
   const [orgMembers, setOrgMembers] = useState([]);
   const [userProfileDialog, setUserProfileDialog] = useState(false);
   const [userOrgsDialog, setUserOrgsDialog] = useState(false);
   const [userOrganizations, setUserOrganizations] = useState([]);
+  const [deleteOrgDialog, setDeleteOrgDialog] = useState({ open: false, org: null, loading: false });
+  const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, user: null, loading: false });
+  const [acquisitionDialog, setAcquisitionDialog] = useState({ open: false, org: null, loading: false });
+  const [acquisitionForm, setAcquisitionForm] = useState({
+    acquisition_source: 'organic',
+    acquired_by: '',
+    referred_by: '',
+    acquisition_coupon: '',
+    acquisition_campaign: '',
+    acquisition_notes: '',
+  });
+  const [salesStaff, setSalesStaff] = useState([]);
+  const [coupons, setCoupons] = useState([]);
   const [emailConfig, setEmailConfig] = useState({
     host: '',
     port: '',
@@ -469,13 +487,25 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
   };
 
-  const handleViewOrgDetails = () => {
-    handleOrgMenuClose();
+  const handleViewOrgDetails = async () => {
+    setOrgMenuAnchor(null);  // Close menu but keep selectedOrg
     setOrgDetailsDialog(true);
+    setOrgDetailsLoading(true);
+    setOrgDetails(null);
+
+    try {
+      const response = await organizationAPI.getDetails(selectedOrg.id);
+      setOrgDetails(response.data);
+    } catch (error) {
+      console.error('Error loading organization details:', error);
+      showSnackbar('Failed to load organization details', 'error');
+    } finally {
+      setOrgDetailsLoading(false);
+    }
   };
 
   const handleViewOrgMembers = async () => {
-    handleOrgMenuClose();
+    setOrgMenuAnchor(null);  // Close menu but keep selectedOrg
     try {
       const token = sessionStorage.getItem('access_token');
       const response = await axios.get(
@@ -511,6 +541,54 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const handleDeleteOrganization = async () => {
+    if (!deleteOrgDialog.org) return;
+
+    setDeleteOrgDialog(prev => ({ ...prev, loading: true }));
+    try {
+      await organizationAPI.delete(deleteOrgDialog.org.id, true);
+      showSnackbar(`Organization "${deleteOrgDialog.org.name}" deleted successfully`, 'success');
+      setDeleteOrgDialog({ open: false, org: null, loading: false });
+      // Refresh organizations list
+      loadData();
+    } catch (error) {
+      console.error('Error deleting organization:', error);
+      showSnackbar(error.response?.data?.error || 'Failed to delete organization', 'error');
+      setDeleteOrgDialog(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleOpenDeleteDialog = () => {
+    setDeleteOrgDialog({ open: true, org: selectedOrg, loading: false });
+    handleOrgMenuClose();
+  };
+
+  const handleOpenDeleteUserDialog = () => {
+    setDeleteUserDialog({ open: true, user: selectedUser, loading: false });
+    setUserMenuAnchor(null);  // Close menu but keep selectedUser for dialog
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserDialog.user) return;
+
+    setDeleteUserDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const token = sessionStorage.getItem('access_token');
+      await axios.delete(
+        `${API_BASE_URL}/users/${deleteUserDialog.user.id}/`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showSnackbar(`User "${deleteUserDialog.user.email}" deleted successfully`, 'success');
+      setDeleteUserDialog({ open: false, user: null, loading: false });
+      // Refresh users list
+      loadUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      showSnackbar(error.response?.data?.error || 'Failed to delete user', 'error');
+      setDeleteUserDialog(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const handleResetPassword = async () => {
     handleUserMenuClose();
     try {
@@ -528,10 +606,85 @@ const SuperAdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const handleOpenAcquisitionDialog = async () => {
+    setOrgMenuAnchor(null);
+    // Load sales staff and coupons if not already loaded
+    try {
+      const token = sessionStorage.getItem('access_token');
+      const [staffResponse, couponsResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/staff-profiles/?staff_type=sales`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_BASE_URL}/coupons/`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      setSalesStaff(staffResponse.data);
+      setCoupons(couponsResponse.data);
+    } catch (error) {
+      console.error('Error loading acquisition data:', error);
+    }
+
+    // Set form values from selected org
+    setAcquisitionForm({
+      acquisition_source: selectedOrg?.acquisition_source || 'organic',
+      acquired_by: selectedOrg?.acquired_by || '',
+      referred_by: selectedOrg?.referred_by || '',
+      acquisition_coupon: selectedOrg?.acquisition_coupon || '',
+      acquisition_campaign: selectedOrg?.acquisition_campaign || '',
+      acquisition_notes: selectedOrg?.acquisition_notes || '',
+    });
+    setAcquisitionDialog({ open: true, org: selectedOrg, loading: false });
+  };
+
+  const handleSaveAcquisition = async () => {
+    if (!acquisitionDialog.org) return;
+
+    setAcquisitionDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const token = sessionStorage.getItem('access_token');
+      const data = {
+        acquisition_source: acquisitionForm.acquisition_source,
+        acquisition_campaign: acquisitionForm.acquisition_campaign,
+        acquisition_notes: acquisitionForm.acquisition_notes,
+      };
+
+      // Only include fields based on acquisition source
+      if (acquisitionForm.acquisition_source === 'sales' && acquisitionForm.acquired_by) {
+        data.acquired_by = acquisitionForm.acquired_by;
+      } else {
+        data.acquired_by = null;
+      }
+
+      if (acquisitionForm.acquisition_source === 'referral' && acquisitionForm.referred_by) {
+        data.referred_by = acquisitionForm.referred_by;
+      } else {
+        data.referred_by = null;
+      }
+
+      if (['coupon', 'advertisement'].includes(acquisitionForm.acquisition_source) && acquisitionForm.acquisition_coupon) {
+        data.acquisition_coupon = acquisitionForm.acquisition_coupon;
+      } else {
+        data.acquisition_coupon = null;
+      }
+
+      await axios.patch(
+        `${API_BASE_URL}/organizations/${acquisitionDialog.org.id}/`,
+        data,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      showSnackbar('Acquisition information updated successfully', 'success');
+      setAcquisitionDialog({ open: false, org: null, loading: false });
+      loadData();
+    } catch (error) {
+      console.error('Error updating acquisition:', error);
+      showSnackbar(error.response?.data?.error || 'Failed to update acquisition information', 'error');
+      setAcquisitionDialog(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const getPageTitle = () => {
     switch (activeMenu) {
       case 'dashboard': return 'Dashboard Overview';
       case 'organizations': return 'Organizations Management';
+      case 'staff': return 'Staff Management';
       case 'users': return 'User Management';
       case 'analytics': return 'Analytics & Reports';
       case 'billing': return 'Billing & Subscriptions';
@@ -816,6 +969,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
               <TableRow sx={{ bgcolor: '#f9fafb' }}>
                 <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Organization</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Plan</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Source</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Members</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: '#374151' }}>Created</TableCell>
@@ -825,7 +979,7 @@ const SuperAdminDashboard = ({ onLogout }) => {
             <TableBody>
               {filteredOrganizations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography sx={{ color: '#6b7280' }}>
                       {organizations.length === 0 ? 'No organizations found' : 'No organizations match your search criteria'}
                     </Typography>
@@ -868,6 +1022,33 @@ const SuperAdminDashboard = ({ onLogout }) => {
                         fontWeight: 'bold'
                       }}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={org.acquisition_source_display || 'Organic'}
+                      size="small"
+                      sx={{
+                        bgcolor:
+                          org.acquisition_source === 'sales' ? '#ddd6fe' :
+                          org.acquisition_source === 'advertisement' ? '#fef3c7' :
+                          org.acquisition_source === 'referral' ? '#e0e7ff' :
+                          org.acquisition_source === 'coupon' ? '#fef3c7' :
+                          '#d1fae5',
+                        color:
+                          org.acquisition_source === 'sales' ? '#5b21b6' :
+                          org.acquisition_source === 'advertisement' ? '#92400e' :
+                          org.acquisition_source === 'referral' ? '#3730a3' :
+                          org.acquisition_source === 'coupon' ? '#92400e' :
+                          '#065f46',
+                        fontWeight: 500,
+                        fontSize: '0.7rem'
+                      }}
+                    />
+                    {org.acquired_by_name && (
+                      <Typography variant="caption" sx={{ display: 'block', color: '#6b7280', mt: 0.5 }}>
+                        {org.acquired_by_name}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -933,12 +1114,26 @@ const SuperAdminDashboard = ({ onLogout }) => {
               <Typography>Change Plan</Typography>
             </Box>
           </MenuItem>
+          <MenuItem onClick={handleOpenAcquisitionDialog}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SalesIcon fontSize="small" sx={{ color: '#f59e0b' }} />
+              <Typography>Edit Acquisition</Typography>
+            </Box>
+          </MenuItem>
           <Divider />
           <MenuItem onClick={handleToggleOrgStatus}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
               <Typography sx={{ color: '#ef4444' }}>
                 {selectedOrg?.is_active ? 'Deactivate' : 'Activate'}
+              </Typography>
+            </Box>
+          </MenuItem>
+          <MenuItem onClick={handleOpenDeleteDialog}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <BlockIcon fontSize="small" sx={{ color: '#dc2626' }} />
+              <Typography sx={{ color: '#dc2626', fontWeight: 600 }}>
+                Delete Organization
               </Typography>
             </Box>
           </MenuItem>
@@ -1181,9 +1376,17 @@ const SuperAdminDashboard = ({ onLogout }) => {
             <Divider />
             <MenuItem onClick={handleToggleUserStatus}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <BlockIcon fontSize="small" sx={{ color: '#ef4444' }} />
-                <Typography sx={{ color: '#ef4444' }}>
+                <BlockIcon fontSize="small" sx={{ color: '#f59e0b' }} />
+                <Typography sx={{ color: '#f59e0b' }}>
                   {selectedUser?.is_active ? 'Deactivate User' : 'Activate User'}
+                </Typography>
+              </Box>
+            </MenuItem>
+            <MenuItem onClick={handleOpenDeleteUserDialog}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <BlockIcon fontSize="small" sx={{ color: '#dc2626' }} />
+                <Typography sx={{ color: '#dc2626' }}>
+                  Delete User
                 </Typography>
               </Box>
             </MenuItem>
@@ -2023,6 +2226,8 @@ const SuperAdminDashboard = ({ onLogout }) => {
         return renderOrganizationsContent();
       case 'users':
         return renderUsersContent();
+      case 'staff':
+        return <StaffManagement />;
       case 'analytics':
         return renderAnalyticsContent();
       case 'billing':
@@ -2101,6 +2306,14 @@ const SuperAdminDashboard = ({ onLogout }) => {
           >
             <span className="nav-icon">👥</span>
             <span className="nav-text">Users</span>
+          </a>
+          <a
+            href="#staff"
+            className={`nav-item ${activeMenu === 'staff' ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveMenu('staff'); }}
+          >
+            <span className="nav-icon">🎧</span>
+            <span className="nav-text">Staff Team</span>
           </a>
           <a
             href="#analytics"
@@ -2342,67 +2555,346 @@ const SuperAdminDashboard = ({ onLogout }) => {
       {/* Organization Details Dialog */}
       <Dialog
         open={orgDetailsDialog}
-        onClose={() => setOrgDetailsDialog(false)}
+        onClose={() => { setOrgDetailsDialog(false); setOrgDetails(null); }}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle sx={{ fontWeight: 'bold', color: '#111827', borderBottom: '1px solid #e5e7eb' }}>
-          Organization Details
+        <DialogTitle sx={{
+          fontWeight: 'bold',
+          color: '#111827',
+          borderBottom: '1px solid #e5e7eb',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <BusinessIcon />
+            Organization Details
+          </Box>
         </DialogTitle>
-        <DialogContent sx={{ p: 4 }}>
-          {selectedOrg && (
+        <DialogContent sx={{ p: 0 }}>
+          {orgDetailsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+              <CircularProgress />
+            </Box>
+          ) : orgDetails ? (
             <Box>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
-                    {selectedOrg.name}
-                  </Typography>
-                  <Chip
-                    label={selectedOrg.plan.toUpperCase()}
-                    size="small"
-                    sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold' }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Organization ID</Typography>
-                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{selectedOrg.id}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Member Count</Typography>
-                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>{selectedOrg.member_count || 0} members</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Status</Typography>
-                    <Chip
-                      label={selectedOrg.is_active ? 'Active' : 'Inactive'}
-                      size="small"
-                      sx={{
-                        bgcolor: selectedOrg.is_active ? '#d1fae5' : '#fee2e2',
-                        color: selectedOrg.is_active ? '#065f46' : '#991b1b',
-                        fontWeight: 'bold'
-                      }}
-                    />
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Created At</Typography>
-                    <Typography sx={{ fontWeight: 600, color: '#111827' }}>
-                      {new Date(selectedOrg.created_at).toLocaleString('en-IN')}
+              {/* Header Section */}
+              <Box sx={{ p: 3, bgcolor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827', mb: 1 }}>
+                      {orgDetails.name}
                     </Typography>
-                  </Paper>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip
+                        label={orgDetails.plan?.toUpperCase() || 'FREE'}
+                        size="small"
+                        sx={{ bgcolor: '#ddd6fe', color: '#5b21b6', fontWeight: 'bold' }}
+                      />
+                      <Chip
+                        label={orgDetails.is_active ? 'Active' : 'Inactive'}
+                        size="small"
+                        sx={{
+                          bgcolor: orgDetails.is_active ? '#d1fae5' : '#fee2e2',
+                          color: orgDetails.is_active ? '#065f46' : '#991b1b',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                      <Chip
+                        label={orgDetails.business_type_display || 'Service Provider'}
+                        size="small"
+                        sx={{ bgcolor: '#e0e7ff', color: '#3730a3', fontWeight: 'bold' }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Owner Section */}
+              {orgDetails.owner && (
+                <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#374151', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccountCircleIcon fontSize="small" /> Owner Information
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Name</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>{orgDetails.owner.full_name}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Email</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>{orgDetails.owner.email}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Joined</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.owner.date_joined ? new Date(orgDetails.owner.date_joined).toLocaleDateString('en-IN') : 'N/A'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Last Login</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.owner.last_login ? new Date(orgDetails.owner.last_login).toLocaleString('en-IN') : 'Never'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Subscription Section */}
+              {orgDetails.subscription_info && (
+                <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#374151', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AttachMoneyIcon fontSize="small" /> Subscription Details
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Plan</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>{orgDetails.subscription_info.plan_name || 'N/A'}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Status</Typography>
+                        <Chip
+                          label={orgDetails.subscription_info.status?.toUpperCase() || 'N/A'}
+                          size="small"
+                          sx={{
+                            bgcolor: orgDetails.subscription_info.status === 'active' ? '#d1fae5' :
+                                    orgDetails.subscription_info.status === 'trial' ? '#fef3c7' : '#fee2e2',
+                            color: orgDetails.subscription_info.status === 'active' ? '#065f46' :
+                                   orgDetails.subscription_info.status === 'trial' ? '#92400e' : '#991b1b',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Amount Paid</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.subscription_info.amount_paid ? `₹${parseFloat(orgDetails.subscription_info.amount_paid).toLocaleString('en-IN')}` : 'N/A'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Start Date</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.subscription_info.start_date ? new Date(orgDetails.subscription_info.start_date).toLocaleDateString('en-IN') : 'N/A'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>End Date</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.subscription_info.end_date ? new Date(orgDetails.subscription_info.end_date).toLocaleDateString('en-IN') : 'N/A'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Auto Renew</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.subscription_info.auto_renew ? 'Yes' : 'No'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Statistics Section */}
+              {orgDetails.stats && (
+                <Box sx={{ p: 3 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#374151', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TrendingUpIcon fontSize="small" /> Organization Statistics
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#eff6ff', borderRadius: 2, textAlign: 'center' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1d4ed8' }}>{orgDetails.stats.total_clients}</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Total Clients</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f0fdf4', borderRadius: 2, textAlign: 'center' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#16a34a' }}>{orgDetails.stats.total_invoices}</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Total Invoices</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#faf5ff', borderRadius: 2, textAlign: 'center' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#7c3aed' }}>
+                          ₹{parseFloat(orgDetails.stats.total_revenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Total Revenue</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#fef3c7', borderRadius: 2, textAlign: 'center' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#d97706' }}>{orgDetails.stats.pending_invoices}</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Pending Invoices</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={6}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#d1fae5', borderRadius: 2, textAlign: 'center' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#059669' }}>{orgDetails.stats.paid_invoices}</Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280' }}>Paid Invoices</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Acquisition Info Section */}
+              {orgDetails.acquisition_info && (
+                <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#374151', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SalesIcon fontSize="small" /> Acquisition Information
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Source</Typography>
+                        <Chip
+                          label={orgDetails.acquisition_info.source_display}
+                          size="small"
+                          sx={{
+                            bgcolor: orgDetails.acquisition_info.source === 'sales' ? '#ddd6fe' :
+                                    orgDetails.acquisition_info.source === 'organic' ? '#d1fae5' :
+                                    orgDetails.acquisition_info.source === 'advertisement' ? '#fef3c7' :
+                                    orgDetails.acquisition_info.source === 'referral' ? '#e0e7ff' :
+                                    '#f3f4f6',
+                            color: orgDetails.acquisition_info.source === 'sales' ? '#5b21b6' :
+                                   orgDetails.acquisition_info.source === 'organic' ? '#065f46' :
+                                   orgDetails.acquisition_info.source === 'advertisement' ? '#92400e' :
+                                   orgDetails.acquisition_info.source === 'referral' ? '#3730a3' :
+                                   '#374151',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Acquisition Date</Typography>
+                        <Typography sx={{ fontWeight: 600, color: '#111827' }}>
+                          {orgDetails.acquisition_info.date ? new Date(orgDetails.acquisition_info.date).toLocaleDateString('en-IN') : 'N/A'}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                    {orgDetails.acquisition_info.sales_person && (
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#ddd6fe', borderRadius: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Sales Person</Typography>
+                          <Typography sx={{ fontWeight: 600, color: '#5b21b6' }}>
+                            {orgDetails.acquisition_info.sales_person.name}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#7c3aed' }}>
+                            {orgDetails.acquisition_info.sales_person.email}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+                    {orgDetails.acquisition_info.referred_by && (
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#e0e7ff', borderRadius: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Referred By</Typography>
+                          <Typography sx={{ fontWeight: 600, color: '#3730a3' }}>
+                            {orgDetails.acquisition_info.referred_by.name}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+                    {orgDetails.acquisition_info.coupon && (
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#fef3c7', borderRadius: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Coupon Used</Typography>
+                          <Typography sx={{ fontWeight: 600, color: '#92400e' }}>
+                            {orgDetails.acquisition_info.coupon.code}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#b45309' }}>
+                            {orgDetails.acquisition_info.coupon.name}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+                    {orgDetails.acquisition_info.campaign && (
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#fef3c7', borderRadius: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Campaign</Typography>
+                          <Typography sx={{ fontWeight: 600, color: '#92400e' }}>
+                            {orgDetails.acquisition_info.campaign}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+                    {orgDetails.acquisition_info.notes && (
+                      <Grid item xs={12}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#6b7280', mb: 0.5 }}>Notes</Typography>
+                          <Typography sx={{ fontWeight: 500, color: '#111827' }}>
+                            {orgDetails.acquisition_info.notes}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Organization Info Section */}
+              <Box sx={{ p: 3, bgcolor: '#f8fafc', borderTop: '1px solid #e5e7eb' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#374151', mb: 2 }}>
+                  Additional Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>Organization ID</Typography>
+                    <Typography sx={{ fontWeight: 500, color: '#111827', fontSize: '0.875rem', wordBreak: 'break-all' }}>{orgDetails.id}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>Members</Typography>
+                    <Typography sx={{ fontWeight: 500, color: '#111827' }}>{orgDetails.member_count} member(s)</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>Created</Typography>
+                    <Typography sx={{ fontWeight: 500, color: '#111827' }}>
+                      {new Date(orgDetails.created_at).toLocaleString('en-IN')}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" sx={{ color: '#6b7280' }}>Last Updated</Typography>
+                    <Typography sx={{ fontWeight: 500, color: '#111827' }}>
+                      {new Date(orgDetails.updated_at).toLocaleString('en-IN')}
+                    </Typography>
+                  </Grid>
                 </Grid>
-              </Grid>
+              </Box>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+              <Typography sx={{ color: '#6b7280' }}>No details available</Typography>
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
-          <Button onClick={() => setOrgDetailsDialog(false)} sx={{ textTransform: 'none' }}>
+        <DialogActions sx={{ p: 2, borderTop: '1px solid #e5e7eb' }}>
+          <Button
+            onClick={() => { setOrgDetailsDialog(false); setOrgDetails(null); }}
+            variant="outlined"
+            sx={{ textTransform: 'none' }}
+          >
             Close
           </Button>
         </DialogActions>
@@ -2606,6 +3098,242 @@ const SuperAdminDashboard = ({ onLogout }) => {
         <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
           <Button onClick={() => setUserOrgsDialog(false)} sx={{ textTransform: 'none' }}>
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Organization Confirmation Dialog */}
+      <Dialog
+        open={deleteOrgDialog.open}
+        onClose={() => !deleteOrgDialog.loading && setDeleteOrgDialog({ open: false, org: null, loading: false })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', color: '#dc2626' }}>
+          Delete Organization
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            This action cannot be undone!
+          </Alert>
+          <Typography sx={{ mb: 2 }}>
+            Are you sure you want to permanently delete the organization <strong>"{deleteOrgDialog.org?.name}"</strong>?
+          </Typography>
+          <Typography sx={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            This will permanently delete:
+          </Typography>
+          <Box component="ul" sx={{ color: '#6b7280', fontSize: '0.875rem', mt: 1 }}>
+            <li>All invoices and receipts</li>
+            <li>All clients and their data</li>
+            <li>All user memberships</li>
+            <li>All settings and configurations</li>
+            <li>Subscription information</li>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #e5e7eb', px: 3, py: 2 }}>
+          <Button
+            onClick={() => setDeleteOrgDialog({ open: false, org: null, loading: false })}
+            variant="outlined"
+            disabled={deleteOrgDialog.loading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteOrganization}
+            variant="contained"
+            color="error"
+            disabled={deleteOrgDialog.loading}
+            sx={{ textTransform: 'none' }}
+          >
+            {deleteOrgDialog.loading ? 'Deleting...' : 'Delete Organization'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog
+        open={deleteUserDialog.open}
+        onClose={() => !deleteUserDialog.loading && setDeleteUserDialog({ open: false, user: null, loading: false })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', color: '#dc2626' }}>
+          Delete User
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            This action cannot be undone!
+          </Alert>
+          <Typography sx={{ mb: 2 }}>
+            Are you sure you want to permanently delete the user <strong>"{deleteUserDialog.user?.email}"</strong>?
+          </Typography>
+          <Typography sx={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            This will permanently delete:
+          </Typography>
+          <Box component="ul" sx={{ color: '#6b7280', fontSize: '0.875rem', mt: 1 }}>
+            <li>User account and profile</li>
+            <li>All organization memberships</li>
+            <li>All user activity and logs</li>
+            <li>Staff profile (if applicable)</li>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #e5e7eb', px: 3, py: 2 }}>
+          <Button
+            onClick={() => setDeleteUserDialog({ open: false, user: null, loading: false })}
+            variant="outlined"
+            disabled={deleteUserDialog.loading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteUser}
+            variant="contained"
+            color="error"
+            disabled={deleteUserDialog.loading}
+            sx={{ textTransform: 'none' }}
+          >
+            {deleteUserDialog.loading ? 'Deleting...' : 'Delete User'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Acquisition Dialog */}
+      <Dialog
+        open={acquisitionDialog.open}
+        onClose={() => !acquisitionDialog.loading && setAcquisitionDialog({ open: false, org: null, loading: false })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', borderBottom: '1px solid #e5e7eb', bgcolor: '#fef3c7', color: '#92400e' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SalesIcon />
+            Edit Acquisition - {acquisitionDialog.org?.name}
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Acquisition Source</InputLabel>
+                <Select
+                  value={acquisitionForm.acquisition_source}
+                  label="Acquisition Source"
+                  onChange={(e) => setAcquisitionForm({ ...acquisitionForm, acquisition_source: e.target.value })}
+                >
+                  <MenuItem value="organic">Direct/Organic</MenuItem>
+                  <MenuItem value="sales">Sales Team</MenuItem>
+                  <MenuItem value="advertisement">Advertisement</MenuItem>
+                  <MenuItem value="referral">Referral</MenuItem>
+                  <MenuItem value="partner">Partner</MenuItem>
+                  <MenuItem value="coupon">Coupon Campaign</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {acquisitionForm.acquisition_source === 'sales' && (
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Sales Person</InputLabel>
+                  <Select
+                    value={acquisitionForm.acquired_by}
+                    label="Sales Person"
+                    onChange={(e) => setAcquisitionForm({ ...acquisitionForm, acquired_by: e.target.value })}
+                  >
+                    <MenuItem value="">-- Select Sales Person --</MenuItem>
+                    {salesStaff.map((staff) => (
+                      <MenuItem key={staff.id} value={staff.user}>
+                        {staff.user_name} ({staff.user_email})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
+
+            {acquisitionForm.acquisition_source === 'referral' && (
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Referred By Organization</InputLabel>
+                  <Select
+                    value={acquisitionForm.referred_by}
+                    label="Referred By Organization"
+                    onChange={(e) => setAcquisitionForm({ ...acquisitionForm, referred_by: e.target.value })}
+                  >
+                    <MenuItem value="">-- Select Organization --</MenuItem>
+                    {organizations.filter(org => org.id !== acquisitionDialog.org?.id).map((org) => (
+                      <MenuItem key={org.id} value={org.id}>
+                        {org.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
+
+            {['coupon', 'advertisement'].includes(acquisitionForm.acquisition_source) && (
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Coupon/Campaign Code</InputLabel>
+                  <Select
+                    value={acquisitionForm.acquisition_coupon}
+                    label="Coupon/Campaign Code"
+                    onChange={(e) => setAcquisitionForm({ ...acquisitionForm, acquisition_coupon: e.target.value })}
+                  >
+                    <MenuItem value="">-- Select Coupon --</MenuItem>
+                    {coupons.map((coupon) => (
+                      <MenuItem key={coupon.id} value={coupon.id}>
+                        {coupon.code} - {coupon.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
+
+            {acquisitionForm.acquisition_source === 'advertisement' && (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Campaign Name"
+                  value={acquisitionForm.acquisition_campaign}
+                  onChange={(e) => setAcquisitionForm({ ...acquisitionForm, acquisition_campaign: e.target.value })}
+                  placeholder="e.g., Google Ads Jan 2026"
+                />
+              </Grid>
+            )}
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Notes"
+                value={acquisitionForm.acquisition_notes}
+                onChange={(e) => setAcquisitionForm({ ...acquisitionForm, acquisition_notes: e.target.value })}
+                placeholder="Additional details about how this tenant was acquired..."
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #e5e7eb', px: 3, py: 2 }}>
+          <Button
+            onClick={() => setAcquisitionDialog({ open: false, org: null, loading: false })}
+            variant="outlined"
+            disabled={acquisitionDialog.loading}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveAcquisition}
+            variant="contained"
+            disabled={acquisitionDialog.loading}
+            sx={{ textTransform: 'none', bgcolor: '#f59e0b', '&:hover': { bgcolor: '#d97706' } }}
+          >
+            {acquisitionDialog.loading ? 'Saving...' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

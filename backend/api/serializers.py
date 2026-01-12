@@ -2,22 +2,38 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from .models import (
-    Organization, OrganizationMembership, CompanySettings, InvoiceSettings,
+    Organization, OrganizationMembership, StaffProfile, CompanySettings, InvoiceSettings,
     Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings,
     InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon,
     CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification,
-    ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog
+    ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog,
+    # Goods Trader models
+    UnitOfMeasurement, Product, Supplier, Purchase, PurchaseItem,
+    InventoryMovement, SupplierPayment
 )
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
+    business_type_display = serializers.SerializerMethodField()
+    acquisition_source_display = serializers.SerializerMethodField()
+    acquired_by_name = serializers.SerializerMethodField()
+    referred_by_name = serializers.SerializerMethodField()
+    acquisition_coupon_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
-        fields = ['id', 'name', 'slug', 'plan', 'is_active', 'member_count', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count', 'plan']
+        fields = ['id', 'name', 'slug', 'business_type', 'business_type_display', 'plan', 'is_active',
+                  'member_count', 'acquisition_source', 'acquisition_source_display', 'acquired_by',
+                  'acquired_by_name', 'referred_by', 'referred_by_name', 'acquisition_coupon',
+                  'acquisition_coupon_code', 'acquisition_campaign', 'acquisition_notes',
+                  'acquisition_date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count', 'plan', 'business_type_display',
+                           'acquisition_source_display', 'acquired_by_name', 'referred_by_name', 'acquisition_coupon_code']
+
+    def get_business_type_display(self, obj):
+        return obj.get_business_type_display()
 
     def get_member_count(self, obj):
         return obj.memberships.filter(is_active=True).count()
@@ -31,6 +47,172 @@ class OrganizationSerializer(serializers.ModelSerializer):
             pass
         return obj.plan  # Fallback to legacy CharField
 
+    def get_acquisition_source_display(self, obj):
+        return obj.get_acquisition_source_display()
+
+    def get_acquired_by_name(self, obj):
+        if obj.acquired_by:
+            return obj.acquired_by.get_full_name() or obj.acquired_by.username
+        return None
+
+    def get_referred_by_name(self, obj):
+        if obj.referred_by:
+            return obj.referred_by.name
+        return None
+
+    def get_acquisition_coupon_code(self, obj):
+        if obj.acquisition_coupon:
+            return obj.acquisition_coupon.code
+        return None
+
+
+class OrganizationDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for organization with owner, subscription, and stats"""
+    member_count = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
+    business_type_display = serializers.SerializerMethodField()
+    owner = serializers.SerializerMethodField()
+    subscription_info = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
+    acquisition_info = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = ['id', 'name', 'slug', 'business_type', 'business_type_display', 'plan',
+                  'is_active', 'member_count', 'owner', 'subscription_info', 'stats',
+                  'acquisition_info', 'created_at', 'updated_at']
+
+    def get_business_type_display(self, obj):
+        return obj.get_business_type_display()
+
+    def get_member_count(self, obj):
+        return obj.memberships.filter(is_active=True).count()
+
+    def get_plan(self, obj):
+        try:
+            if hasattr(obj, 'subscription_detail') and obj.subscription_detail:
+                return obj.subscription_detail.plan.name
+        except Exception:
+            pass
+        return obj.plan
+
+    def get_owner(self, obj):
+        """Get organization owner details"""
+        owner_membership = obj.memberships.filter(role='owner', is_active=True).first()
+        if owner_membership:
+            user = owner_membership.user
+            return {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'full_name': user.get_full_name() or user.username,
+                'date_joined': user.date_joined,
+                'last_login': user.last_login
+            }
+        return None
+
+    def get_subscription_info(self, obj):
+        """Get subscription details"""
+        try:
+            subscription = Subscription.objects.get(organization=obj)
+            return {
+                'plan_name': subscription.plan.name if subscription.plan else None,
+                'status': subscription.status,
+                'start_date': subscription.start_date,
+                'end_date': subscription.end_date,
+                'trial_end_date': subscription.trial_end_date,
+                'auto_renew': subscription.auto_renew,
+                'amount_paid': str(subscription.amount_paid) if subscription.amount_paid else None
+            }
+        except Subscription.DoesNotExist:
+            return None
+
+    def get_stats(self, obj):
+        """Get organization statistics"""
+        from django.db.models import Sum
+        invoices = obj.invoices.all()
+        clients = obj.clients.all()
+        return {
+            'total_invoices': invoices.count(),
+            'total_clients': clients.count(),
+            'total_revenue': str(invoices.aggregate(total=Sum('total_amount'))['total'] or 0),
+            'pending_invoices': invoices.filter(status='pending').count(),
+            'paid_invoices': invoices.filter(status='paid').count()
+        }
+
+    def get_acquisition_info(self, obj):
+        """Get acquisition/source tracking details"""
+        info = {
+            'source': obj.acquisition_source,
+            'source_display': obj.get_acquisition_source_display(),
+            'campaign': obj.acquisition_campaign,
+            'notes': obj.acquisition_notes,
+            'date': obj.acquisition_date or obj.created_at.date(),
+        }
+
+        # Sales person details
+        if obj.acquired_by:
+            info['sales_person'] = {
+                'id': obj.acquired_by.id,
+                'name': obj.acquired_by.get_full_name() or obj.acquired_by.username,
+                'email': obj.acquired_by.email
+            }
+        else:
+            info['sales_person'] = None
+
+        # Referrer details
+        if obj.referred_by:
+            info['referred_by'] = {
+                'id': str(obj.referred_by.id),
+                'name': obj.referred_by.name
+            }
+        else:
+            info['referred_by'] = None
+
+        # Coupon details
+        if obj.acquisition_coupon:
+            info['coupon'] = {
+                'id': obj.acquisition_coupon.id,
+                'code': obj.acquisition_coupon.code,
+                'name': obj.acquisition_coupon.name
+            }
+        else:
+            info['coupon'] = None
+
+        return info
+
+
+class StaffProfileSerializer(serializers.ModelSerializer):
+    """Serializer for staff profiles"""
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    staff_type_display = serializers.CharField(source='get_staff_type_display', read_only=True)
+
+    class Meta:
+        model = StaffProfile
+        fields = [
+            'id', 'user', 'user_email', 'user_name', 'staff_type', 'staff_type_display',
+            'is_active', 'phone', 'department', 'employee_id',
+            'can_view_all_organizations', 'can_view_subscriptions', 'can_manage_tickets',
+            'can_view_revenue', 'can_manage_leads',
+            'created_at', 'updated_at', 'created_by'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+
+    def get_user_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+
+class StaffUserCreateSerializer(serializers.Serializer):
+    """Serializer for creating staff users"""
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    staff_type = serializers.ChoiceField(choices=[('support', 'Support Team'), ('sales', 'Sales Team')])
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    department = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    employee_id = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
 class OrganizationMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source='user.email', read_only=True)
@@ -620,8 +802,8 @@ class CouponSerializer(serializers.ModelSerializer):
             'discount_types', 'discount_percentage', 'discount_fixed', 'discount_days',  # New fields
             'applicable_plans', 'applicable_plan_names', 'valid_from', 'valid_until',
             'max_total_uses', 'max_uses_per_user', 'current_usage_count',
-            'is_active', 'is_valid_now', 'created_by', 'created_by_email',
-            'created_at', 'updated_at'
+            'is_active', 'is_valid_now', 'campaign_name', 'campaign_source',
+            'created_by', 'created_by_email', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'current_usage_count', 'created_by', 'created_at', 'updated_at']
 
@@ -887,3 +1069,335 @@ class ScheduledInvoiceListSerializer(serializers.ModelSerializer):
 
     def get_items_count(self, obj):
         return obj.items.count()
+
+
+# =============================================================================
+# GOODS TRADER SERIALIZERS - Product, Supplier, Purchase, Inventory
+# =============================================================================
+
+class UnitOfMeasurementSerializer(serializers.ModelSerializer):
+    """Serializer for units of measurement"""
+
+    class Meta:
+        model = UnitOfMeasurement
+        fields = ['id', 'name', 'symbol', 'is_predefined', 'is_active', 'created_at']
+        read_only_fields = ['id', 'is_predefined', 'created_at']
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    """Serializer for Product master"""
+    unit_display = serializers.SerializerMethodField()
+    is_low_stock = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'hsn_code', 'sku',
+            'unit', 'unit_name', 'unit_display',
+            'purchase_price', 'selling_price', 'gst_rate',
+            'track_inventory', 'current_stock', 'low_stock_threshold', 'is_low_stock',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'current_stock', 'is_low_stock', 'created_at', 'updated_at']
+
+    def get_unit_display(self, obj):
+        if obj.unit:
+            return f"{obj.unit.name} ({obj.unit.symbol})"
+        return obj.unit_name
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for product list views"""
+    is_low_stock = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'hsn_code', 'sku', 'unit_name',
+            'selling_price', 'gst_rate',
+            'track_inventory', 'current_stock', 'is_low_stock',
+            'is_active'
+        ]
+
+
+class SupplierSerializer(serializers.ModelSerializer):
+    """Serializer for Supplier master"""
+
+    class Meta:
+        model = Supplier
+        fields = [
+            'id', 'name', 'code', 'email', 'phone', 'mobile',
+            'address', 'city', 'state', 'pinCode', 'stateCode',
+            'gstin', 'pan',
+            'bank_name', 'account_number', 'ifsc_code',
+            'contact_person', 'payment_terms', 'notes',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_code(self, value):
+        """Allow empty code for auto-generation"""
+        if value and value.strip():
+            return value.strip()
+        return ''
+
+
+class SupplierListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for supplier list views"""
+
+    class Meta:
+        model = Supplier
+        fields = ['id', 'name', 'code', 'email', 'phone', 'city', 'gstin', 'is_active']
+
+
+class PurchaseItemSerializer(serializers.ModelSerializer):
+    """Serializer for purchase line items"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
+    class Meta:
+        model = PurchaseItem
+        fields = [
+            'id', 'product', 'product_name', 'description', 'hsn_code',
+            'quantity', 'unit_name', 'rate',
+            'gst_rate', 'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount',
+            'total_amount', 'quantity_received'
+        ]
+        read_only_fields = ['id', 'product_name', 'taxable_amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'total_amount']
+
+
+class PurchaseSerializer(serializers.ModelSerializer):
+    """Serializer for Purchase entry"""
+    items = PurchaseItemSerializer(many=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    balance_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Purchase
+        fields = [
+            'id', 'supplier', 'supplier_name',
+            'purchase_number', 'supplier_invoice_number', 'supplier_invoice_date',
+            'purchase_date', 'received_date',
+            'subtotal', 'tax_amount', 'cgst_amount', 'sgst_amount', 'igst_amount',
+            'is_interstate', 'discount_amount', 'other_charges', 'round_off', 'total_amount',
+            'amount_paid', 'balance_amount', 'payment_status', 'payment_status_display',
+            'status', 'status_display', 'notes',
+            'items', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'purchase_number', 'supplier_name', 'status_display', 'payment_status_display',
+            'balance_amount', 'cgst_amount', 'sgst_amount', 'igst_amount',
+            'created_at', 'updated_at'
+        ]
+
+    def create(self, validated_data):
+        from decimal import Decimal
+
+        items_data = validated_data.pop('items', [])
+        request = self.context.get('request')
+
+        # Set organization and created_by
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
+        # Determine if interstate based on supplier state
+        supplier = validated_data.get('supplier')
+        if supplier and hasattr(request, 'organization'):
+            try:
+                company_settings = request.organization.company_settings
+                if company_settings.stateCode and supplier.stateCode:
+                    validated_data['is_interstate'] = company_settings.stateCode != supplier.stateCode
+            except Exception:
+                pass
+
+        purchase = Purchase.objects.create(**validated_data)
+
+        # Create items and calculate totals
+        subtotal = Decimal('0.00')
+        tax_amount = Decimal('0.00')
+        cgst_amount = Decimal('0.00')
+        sgst_amount = Decimal('0.00')
+        igst_amount = Decimal('0.00')
+
+        for item_data in items_data:
+            item_data['purchase'] = purchase
+            item = PurchaseItem.objects.create(**item_data)
+            subtotal += item.taxable_amount
+            tax_amount += (item.cgst_amount + item.sgst_amount + item.igst_amount)
+            cgst_amount += item.cgst_amount
+            sgst_amount += item.sgst_amount
+            igst_amount += item.igst_amount
+
+        # Update purchase totals
+        purchase.subtotal = subtotal
+        purchase.tax_amount = tax_amount
+        purchase.cgst_amount = cgst_amount
+        purchase.sgst_amount = sgst_amount
+        purchase.igst_amount = igst_amount
+        purchase.total_amount = subtotal + tax_amount + purchase.other_charges - purchase.discount_amount + purchase.round_off
+        purchase.save()
+
+        return purchase
+
+    def update(self, instance, validated_data):
+        from decimal import Decimal
+
+        items_data = validated_data.pop('items', None)
+
+        # Update purchase fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        # Update items if provided
+        if items_data is not None:
+            # Delete existing items
+            instance.items.all().delete()
+
+            # Create new items and recalculate totals
+            subtotal = Decimal('0.00')
+            tax_amount = Decimal('0.00')
+            cgst_amount = Decimal('0.00')
+            sgst_amount = Decimal('0.00')
+            igst_amount = Decimal('0.00')
+
+            for item_data in items_data:
+                item_data['purchase'] = instance
+                item = PurchaseItem.objects.create(**item_data)
+                subtotal += item.taxable_amount
+                tax_amount += (item.cgst_amount + item.sgst_amount + item.igst_amount)
+                cgst_amount += item.cgst_amount
+                sgst_amount += item.sgst_amount
+                igst_amount += item.igst_amount
+
+            instance.subtotal = subtotal
+            instance.tax_amount = tax_amount
+            instance.cgst_amount = cgst_amount
+            instance.sgst_amount = sgst_amount
+            instance.igst_amount = igst_amount
+            instance.total_amount = subtotal + tax_amount + instance.other_charges - instance.discount_amount + instance.round_off
+
+        instance.save()
+        return instance
+
+
+class PurchaseListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for purchase list views"""
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    items_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Purchase
+        fields = [
+            'id', 'purchase_number', 'supplier', 'supplier_name',
+            'purchase_date', 'total_amount', 'amount_paid',
+            'status', 'status_display', 'payment_status', 'payment_status_display',
+            'items_count', 'created_at'
+        ]
+
+    def get_items_count(self, obj):
+        return obj.items.count()
+
+
+class InventoryMovementSerializer(serializers.ModelSerializer):
+    """Serializer for inventory movements"""
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    movement_type_display = serializers.CharField(source='get_movement_type_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InventoryMovement
+        fields = [
+            'id', 'product', 'product_name',
+            'movement_type', 'movement_type_display',
+            'quantity', 'stock_after',
+            'reference', 'reference_type', 'reference_id',
+            'notes', 'created_by', 'created_by_name', 'created_at'
+        ]
+        read_only_fields = ['id', 'product_name', 'movement_type_display', 'created_by_name', 'created_at']
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.email
+        return None
+
+
+class SupplierPaymentSerializer(serializers.ModelSerializer):
+    """Serializer for supplier payments"""
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    purchase_number = serializers.CharField(source='purchase.purchase_number', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+
+    class Meta:
+        model = SupplierPayment
+        fields = [
+            'id', 'supplier', 'supplier_name',
+            'purchase', 'purchase_number',
+            'amount', 'payment_date', 'payment_method', 'payment_method_display',
+            'reference_number', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'supplier_name', 'purchase_number', 'payment_method_display', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+
+        # Set organization and created_by
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
+        return super().create(validated_data)
+
+
+class StockAdjustmentSerializer(serializers.Serializer):
+    """Serializer for stock adjustment operations"""
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
+    adjustment_type = serializers.ChoiceField(choices=[('in', 'Stock In'), ('out', 'Stock Out')])
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, data):
+        product = data['product']
+        if not product.track_inventory:
+            raise serializers.ValidationError("Inventory tracking is not enabled for this product")
+
+        # For stock out, ensure sufficient stock
+        if data['adjustment_type'] == 'out':
+            if product.current_stock < data['quantity']:
+                raise serializers.ValidationError(
+                    f"Insufficient stock. Current stock: {product.current_stock}, Requested: {data['quantity']}"
+                )
+
+        return data
+
+    def create(self, validated_data):
+        product = validated_data['product']
+        quantity = validated_data['quantity']
+        adjustment_type = validated_data['adjustment_type']
+        notes = validated_data.get('notes', '')
+        request = self.context.get('request')
+        user = request.user if request else None
+
+        # Determine movement type and quantity sign
+        if adjustment_type == 'in':
+            movement_type = 'adjustment_in'
+        else:
+            movement_type = 'adjustment_out'
+            quantity = -quantity  # Negative for stock out
+
+        # Adjust stock
+        movement = product.adjust_stock(
+            quantity=quantity,
+            movement_type=movement_type,
+            reference='Manual Adjustment',
+            notes=notes,
+            user=user
+        )
+
+        return movement

@@ -58,9 +58,33 @@ class Organization(models.Model):
     Tenant/Organization model for multi-tenancy.
     Each organization has its own isolated data.
     """
+    BUSINESS_TYPE_CHOICES = [
+        ('services', 'Service Provider'),
+        ('goods', 'Goods Trader'),
+        ('both', 'Both Services & Goods'),
+    ]
+
+    ACQUISITION_SOURCE_CHOICES = [
+        ('organic', 'Direct/Organic'),
+        ('sales', 'Sales Team'),
+        ('advertisement', 'Advertisement'),
+        ('referral', 'Referral'),
+        ('partner', 'Partner'),
+        ('coupon', 'Coupon Campaign'),
+        ('other', 'Other'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
+
+    # Business type - determines features available
+    business_type = models.CharField(
+        max_length=20,
+        choices=BUSINESS_TYPE_CHOICES,
+        default='services',
+        help_text='Type of business: Service Provider, Goods Trader, or Both'
+    )
 
     # Subscription fields (for future SaaS billing)
     plan = models.CharField(max_length=50, default='free', choices=[
@@ -70,6 +94,52 @@ class Organization(models.Model):
         ('enterprise', 'Enterprise')
     ])
     is_active = models.BooleanField(default=True)
+
+    # Acquisition/Source Tracking
+    acquisition_source = models.CharField(
+        max_length=20,
+        choices=ACQUISITION_SOURCE_CHOICES,
+        default='organic',
+        help_text='How this tenant was acquired'
+    )
+    acquired_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acquired_organizations',
+        help_text='Sales person who acquired this tenant (only for sales source)'
+    )
+    referred_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='referrals',
+        help_text='Organization that referred this tenant (for referral source)'
+    )
+    acquisition_coupon = models.ForeignKey(
+        'Coupon',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acquired_organizations',
+        help_text='Coupon used during acquisition (for coupon/advertisement source)'
+    )
+    acquisition_campaign = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text='Campaign name for advertisement tracking (e.g., Google Ads Jan 2026)'
+    )
+    acquisition_notes = models.TextField(
+        blank=True,
+        help_text='Additional notes about acquisition'
+    )
+    acquisition_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Date when the tenant was acquired (defaults to created_at date)'
+    )
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -114,6 +184,44 @@ class OrganizationMembership(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.organization.name} ({self.role})"
+
+
+
+class StaffProfile(models.Model):
+    """
+    Staff profiles for Support Team and Sales Team members.
+    These users are managed by super admin only and are not visible to tenant admins.
+    """
+    STAFF_TYPE_CHOICES = [
+        ('support', 'Support Team'),
+        ('sales', 'Sales Team'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='staff_profile')
+    staff_type = models.CharField(max_length=20, choices=STAFF_TYPE_CHOICES)
+    is_active = models.BooleanField(default=True)
+    phone = models.CharField(max_length=20, blank=True)
+    department = models.CharField(max_length=100, blank=True)
+    employee_id = models.CharField(max_length=50, blank=True, unique=True, null=True)
+
+    # Permissions
+    can_view_all_organizations = models.BooleanField(default=True)
+    can_view_subscriptions = models.BooleanField(default=True)
+    can_manage_tickets = models.BooleanField(default=True)  # For support
+    can_view_revenue = models.BooleanField(default=False)  # For sales
+    can_manage_leads = models.BooleanField(default=False)  # For sales
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_staff_profiles')
+
+    class Meta:
+        verbose_name = "Staff Profile"
+        verbose_name_plural = "Staff Profiles"
+
+    def __str__(self):
+        return f"{self.user.email} - {self.get_staff_type_display()}"
 
 
 class CompanySettings(models.Model):
@@ -165,8 +273,8 @@ class InvoiceSettings(models.Model):
     # Payment Reminder Settings
     enablePaymentReminders = models.BooleanField(default=True)
     reminderFrequencyDays = models.IntegerField(default=3, help_text='Send reminders every X days for unpaid proforma invoices')
-    reminderEmailSubject = models.CharField(max_length=255, default='Payment Reminder for Invoice {invoice_number}')
-    reminderEmailBody = models.TextField(default='Dear {client_name},\n\nThis is a friendly reminder that payment for {invoice_number} dated {invoice_date} is pending.\n\nAmount Due: Rs. {total_amount}\n\nPlease make the payment at your earliest convenience.\n\nThank you!')
+    reminderEmailSubject = models.CharField(max_length=255, default='Payment Reminder for Invoice {invoice_number} - Balance: Rs. {pending_amount}')
+    reminderEmailBody = models.TextField(default='Dear {client_name},\n\nThis is a friendly reminder regarding Invoice {invoice_number} dated {invoice_date}.\n\nInvoice Total: Rs. {total_amount}\nAmount Paid: Rs. {paid_amount}\nBalance Due: Rs. {pending_amount}\n\nPlease make the payment of Rs. {pending_amount} at your earliest convenience.\n\nThank you for your business!\n\nNote: This is reminder #{reminder_count}.')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -761,6 +869,12 @@ class Coupon(models.Model):
 
     # Status
     is_active = models.BooleanField(default=True, help_text="Coupon is active and can be redeemed")
+
+    # Campaign Tracking (for advertising attribution)
+    campaign_name = models.CharField(max_length=255, blank=True,
+                                    help_text="Campaign name for attribution (e.g., 'Google Ads Jan 2026')")
+    campaign_source = models.CharField(max_length=100, blank=True,
+                                      help_text="Campaign source (e.g., 'google', 'facebook', 'instagram')")
 
     # Audit
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
@@ -2198,6 +2312,457 @@ class ScheduledInvoiceLog(models.Model):
 
     def __str__(self):
         return f"{self.scheduled_invoice.name} - {self.generation_date} ({self.status})"
+
+
+# =============================================================================
+# GOODS TRADER MODELS - PRODUCT, SUPPLIER, PURCHASE, INVENTORY
+# =============================================================================
+
+class UnitOfMeasurement(models.Model):
+    """
+    Predefined and custom units of measurement for products.
+    Some units are system-wide (predefined), others are organization-specific.
+    """
+    name = models.CharField(max_length=50, help_text="Unit name (e.g., Pieces, Kilograms)")
+    symbol = models.CharField(max_length=20, help_text="Short symbol (e.g., pcs, kg, ltr)")
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE,
+        related_name='custom_units',
+        null=True, blank=True,
+        help_text="Null for predefined system units"
+    )
+    is_predefined = models.BooleanField(default=False, help_text="True for system-wide predefined units")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_predefined', 'name']
+        verbose_name = "Unit of Measurement"
+        verbose_name_plural = "Units of Measurement"
+
+    def __str__(self):
+        return f"{self.name} ({self.symbol})"
+
+    @classmethod
+    def get_predefined_units(cls):
+        """Return all predefined system units"""
+        return cls.objects.filter(is_predefined=True, is_active=True)
+
+    @classmethod
+    def get_units_for_organization(cls, organization):
+        """Return predefined units + organization's custom units"""
+        from django.db.models import Q
+        return cls.objects.filter(
+            Q(is_predefined=True) | Q(organization=organization),
+            is_active=True
+        )
+
+
+class Product(models.Model):
+    """
+    Product master for goods traders.
+    Similar to ServiceItem but with inventory and pricing features.
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='products')
+    name = models.CharField(max_length=255, help_text="Product name")
+    description = models.TextField(blank=True, help_text="Detailed description")
+    hsn_code = models.CharField(max_length=20, blank=True, help_text="HSN (Harmonized System of Nomenclature) Code")
+    sku = models.CharField(max_length=50, blank=True, help_text="Stock Keeping Unit / Product Code")
+
+    # Unit of measurement
+    unit = models.ForeignKey(
+        UnitOfMeasurement, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='products'
+    )
+    unit_name = models.CharField(max_length=20, default='pcs', help_text="Unit name for display (pcs, kg, etc.)")
+
+    # Pricing
+    purchase_price = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Cost price / Purchase price"
+    )
+    selling_price = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Selling price / MRP"
+    )
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00, help_text="GST Rate %")
+
+    # Inventory tracking (optional)
+    track_inventory = models.BooleanField(default=False, help_text="Enable inventory/stock tracking")
+    current_stock = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Current stock quantity"
+    )
+    low_stock_threshold = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Alert when stock falls below this level"
+    )
+
+    # Status
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = ['organization', 'name']
+        verbose_name = "Product"
+        verbose_name_plural = "Products"
+
+    def __str__(self):
+        return f"{self.name} ({self.sku or self.hsn_code or 'No Code'})"
+
+    @property
+    def is_low_stock(self):
+        """Check if product is below low stock threshold"""
+        if not self.track_inventory or not self.low_stock_threshold:
+            return False
+        return self.current_stock <= self.low_stock_threshold
+
+    def adjust_stock(self, quantity, movement_type, reference='', notes='', user=None):
+        """
+        Adjust stock and create inventory movement record.
+        quantity: positive for increase, negative for decrease
+        movement_type: 'purchase', 'sale', 'adjustment', 'return'
+        """
+        if not self.track_inventory:
+            return None
+
+        self.current_stock += quantity
+        self.save(update_fields=['current_stock', 'updated_at'])
+
+        # Create inventory movement record
+        movement = InventoryMovement.objects.create(
+            product=self,
+            organization=self.organization,
+            movement_type=movement_type,
+            quantity=quantity,
+            stock_after=self.current_stock,
+            reference=reference,
+            notes=notes,
+            created_by=user
+        )
+        return movement
+
+
+class Supplier(models.Model):
+    """
+    Supplier/Vendor master for goods traders.
+    Similar structure to Client model.
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='suppliers')
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50, blank=True, help_text="Supplier code")
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    mobile = models.CharField(max_length=20, blank=True)
+    address = models.TextField(blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pinCode = models.CharField(max_length=20, blank=True)
+    stateCode = models.CharField(max_length=10, blank=True)
+    gstin = models.CharField(max_length=50, blank=True)
+    pan = models.CharField(max_length=20, blank=True)
+
+    # Banking details for payments
+    bank_name = models.CharField(max_length=100, blank=True)
+    account_number = models.CharField(max_length=50, blank=True)
+    ifsc_code = models.CharField(max_length=20, blank=True)
+
+    # Additional info
+    contact_person = models.CharField(max_length=100, blank=True)
+    payment_terms = models.CharField(max_length=100, blank=True, help_text="e.g., Net 30, Advance")
+    notes = models.TextField(blank=True)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Supplier"
+        verbose_name_plural = "Suppliers"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        # Auto-generate supplier code if not provided
+        if not self.code:
+            self.code = self.generate_supplier_code()
+        super().save(*args, **kwargs)
+
+    def generate_supplier_code(self):
+        """Auto-generate supplier code from name"""
+        # Get first 3 letters of name (uppercase)
+        prefix = ''.join(filter(str.isalpha, self.name))[:3].upper() or 'SUP'
+
+        # Get count of existing suppliers for this org
+        count = Supplier.objects.filter(organization=self.organization).count() + 1
+
+        return f"{prefix}{count:04d}"
+
+
+class Purchase(models.Model):
+    """
+    Purchase entry for recording purchases from suppliers.
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('received', 'Received'),
+        ('partial', 'Partially Received'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='purchases')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_purchases')
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='purchases')
+
+    # Purchase identification
+    purchase_number = models.CharField(max_length=50, help_text="Internal purchase order number")
+    supplier_invoice_number = models.CharField(max_length=100, blank=True, help_text="Supplier's invoice/bill number")
+    supplier_invoice_date = models.DateField(null=True, blank=True, help_text="Date on supplier's invoice")
+
+    # Dates
+    purchase_date = models.DateField(help_text="Date of purchase order")
+    received_date = models.DateField(null=True, blank=True, help_text="Date goods were received")
+
+    # Amounts
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    is_interstate = models.BooleanField(default=False)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    other_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Freight, handling, etc.")
+    round_off = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # Payment tracking
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    payment_status = models.CharField(max_length=20, choices=[
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partially Paid'),
+        ('paid', 'Paid'),
+    ], default='unpaid')
+
+    # Status and notes
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    notes = models.TextField(blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-purchase_date', '-created_at']
+        verbose_name = "Purchase"
+        verbose_name_plural = "Purchases"
+
+    def __str__(self):
+        return f"{self.purchase_number} - {self.supplier.name}"
+
+    def save(self, *args, **kwargs):
+        # Auto-generate purchase number if not provided
+        if not self.purchase_number:
+            self.purchase_number = self.generate_purchase_number()
+
+        # Calculate payment status
+        if self.amount_paid >= self.total_amount and self.total_amount > 0:
+            self.payment_status = 'paid'
+        elif self.amount_paid > 0:
+            self.payment_status = 'partial'
+        else:
+            self.payment_status = 'unpaid'
+
+        super().save(*args, **kwargs)
+
+    def generate_purchase_number(self):
+        """Generate unique purchase number"""
+        from django.utils import timezone
+
+        today = timezone.now().date()
+        prefix = f"PO-{today.strftime('%Y%m')}-"
+
+        # Get the last purchase number for this month
+        last_purchase = Purchase.objects.filter(
+            organization=self.organization,
+            purchase_number__startswith=prefix
+        ).order_by('-purchase_number').first()
+
+        if last_purchase:
+            try:
+                last_num = int(last_purchase.purchase_number.split('-')[-1])
+                new_num = last_num + 1
+            except (ValueError, IndexError):
+                new_num = 1
+        else:
+            new_num = 1
+
+        return f"{prefix}{new_num:04d}"
+
+    @property
+    def balance_amount(self):
+        """Amount remaining to be paid"""
+        return self.total_amount - self.amount_paid
+
+
+class PurchaseItem(models.Model):
+    """
+    Line items for a purchase entry.
+    """
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='purchase_items', null=True, blank=True)
+
+    # Item details (can be entered manually even without product)
+    description = models.CharField(max_length=500)
+    hsn_code = models.CharField(max_length=20, blank=True)
+
+    # Quantity and pricing
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    unit_name = models.CharField(max_length=20, default='pcs')
+    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Rate per unit")
+
+    # Tax
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    # For partial receipt tracking
+    quantity_received = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Purchase Item"
+        verbose_name_plural = "Purchase Items"
+
+    def __str__(self):
+        return f"{self.description} x {self.quantity} - {self.purchase.purchase_number}"
+
+    def save(self, *args, **kwargs):
+        # Auto-fill from product if selected
+        if self.product and not self.description:
+            self.description = self.product.name
+            self.hsn_code = self.product.hsn_code
+            self.gst_rate = self.product.gst_rate
+            self.unit_name = self.product.unit_name
+            if not self.rate:
+                self.rate = self.product.purchase_price
+
+        # Calculate amounts
+        self.taxable_amount = self.quantity * self.rate
+        gst_amount = (self.taxable_amount * self.gst_rate) / 100
+
+        # Check if interstate (from parent purchase)
+        if self.purchase and self.purchase.is_interstate:
+            self.igst_amount = gst_amount
+            self.cgst_amount = 0
+            self.sgst_amount = 0
+        else:
+            self.cgst_amount = gst_amount / 2
+            self.sgst_amount = gst_amount / 2
+            self.igst_amount = 0
+
+        self.total_amount = self.taxable_amount + gst_amount
+
+        super().save(*args, **kwargs)
+
+
+class InventoryMovement(models.Model):
+    """
+    Tracks all inventory movements for audit trail.
+    """
+    MOVEMENT_TYPES = [
+        ('purchase', 'Purchase'),
+        ('sale', 'Sale'),
+        ('adjustment_in', 'Adjustment (In)'),
+        ('adjustment_out', 'Adjustment (Out)'),
+        ('return_in', 'Sales Return'),
+        ('return_out', 'Purchase Return'),
+        ('opening', 'Opening Stock'),
+    ]
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='inventory_movements')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='inventory_movements')
+
+    movement_type = models.CharField(max_length=20, choices=MOVEMENT_TYPES)
+    quantity = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Positive for stock in, negative for stock out"
+    )
+    stock_after = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Stock level after this movement"
+    )
+
+    # Reference to source document
+    reference = models.CharField(max_length=100, blank=True, help_text="Invoice/Purchase number")
+    reference_type = models.CharField(max_length=20, blank=True, help_text="invoice, purchase, adjustment")
+    reference_id = models.IntegerField(null=True, blank=True, help_text="ID of the related document")
+
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Inventory Movement"
+        verbose_name_plural = "Inventory Movements"
+
+    def __str__(self):
+        return f"{self.product.name} - {self.movement_type} - {self.quantity}"
+
+
+class SupplierPayment(models.Model):
+    """
+    Payment made to suppliers for purchases.
+    """
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
+        ('upi', 'UPI'),
+        ('card', 'Card'),
+        ('other', 'Other'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='supplier_payments')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_supplier_payments')
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='payments')
+    purchase = models.ForeignKey(Purchase, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_date = models.DateField()
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='bank_transfer')
+    reference_number = models.CharField(max_length=100, blank=True, help_text="Cheque no, UTR, etc.")
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+        verbose_name = "Supplier Payment"
+        verbose_name_plural = "Supplier Payments"
+
+    def __str__(self):
+        return f"Payment to {self.supplier.name} - {self.amount}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        # Update purchase payment status if linked to a purchase
+        if self.purchase:
+            total_paid = SupplierPayment.objects.filter(purchase=self.purchase).aggregate(
+                total=models.Sum('amount')
+            )['total'] or 0
+            self.purchase.amount_paid = total_paid
+            self.purchase.save(update_fields=['amount_paid', 'payment_status', 'updated_at'])
 
 
 # =============================================================================

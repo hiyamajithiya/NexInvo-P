@@ -13,6 +13,7 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
   const [lastName, setLastName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
+  const [businessType, setBusinessType] = useState('services');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -158,7 +159,8 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
           first_name: firstName,
           last_name: lastName,
           company_name: companyName || `${firstName}'s Company`,
-          mobile_number: mobileNumber
+          mobile_number: mobileNumber,
+          business_type: businessType
         };
 
         await authAPI.register(registerData);
@@ -826,6 +828,42 @@ const Login = ({ onLogin, initialMode = 'login', onBackToLanding }) => {
                     onChange={(e) => setCompanyName(e.target.value)}
                     placeholder="Your Company Ltd."
                   />
+                </div>
+
+                <div className="form-group">
+                  <label>Business Type *</label>
+                  <div className="business-type-selector">
+                    <div
+                      className={`business-type-option ${businessType === 'services' ? 'selected' : ''}`}
+                      onClick={() => setBusinessType('services')}
+                    >
+                      <div className="business-type-icon">🛠️</div>
+                      <div className="business-type-content">
+                        <span className="business-type-title">Service Provider</span>
+                        <span className="business-type-desc">Professional services, consulting, etc.</span>
+                      </div>
+                    </div>
+                    <div
+                      className={`business-type-option ${businessType === 'goods' ? 'selected' : ''}`}
+                      onClick={() => setBusinessType('goods')}
+                    >
+                      <div className="business-type-icon">📦</div>
+                      <div className="business-type-content">
+                        <span className="business-type-title">Goods Trader</span>
+                        <span className="business-type-desc">Products, inventory, trading</span>
+                      </div>
+                    </div>
+                    <div
+                      className={`business-type-option ${businessType === 'both' ? 'selected' : ''}`}
+                      onClick={() => setBusinessType('both')}
+                    >
+                      <div className="business-type-icon">🏢</div>
+                      <div className="business-type-content">
+                        <span className="business-type-title">Both</span>
+                        <span className="business-type-desc">Services & goods trading</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="form-group">

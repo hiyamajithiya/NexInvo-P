@@ -6,7 +6,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.http import HttpResponse
-from django.db.models import Sum, Q, Count
+from django.db.models import Sum, Q, Count, F
+from django.db import models
 from django.db import transaction
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
@@ -17,15 +18,25 @@ from datetime import date, timedelta, datetime
 from decimal import Decimal
 import os
 import tempfile
-from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification, BulkEmailTemplate, BulkEmailCampaign, BulkEmailRecipient, EmailOTP, ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog)
+from .models import (Organization, OrganizationMembership, CompanySettings, InvoiceSettings, Client, Invoice, InvoiceItem, Payment, Receipt, EmailSettings, SystemEmailSettings, InvoiceFormatSettings, ServiceItem, PaymentTerm, SubscriptionPlan, Coupon, CouponUsage, Subscription, SubscriptionUpgradeRequest, SuperAdminNotification, BulkEmailTemplate, BulkEmailCampaign, BulkEmailRecipient, EmailOTP, ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog,
+    # Goods Trader models
+    UnitOfMeasurement, Product, Supplier, Purchase, PurchaseItem, InventoryMovement, SupplierPayment,
+    # Staff models
+    StaffProfile
+)
 from .serializers import (
+    StaffProfileSerializer, StaffUserCreateSerializer,
     OrganizationSerializer, OrganizationMembershipSerializer,
     CompanySettingsSerializer, InvoiceSettingsSerializer, ClientSerializer,
     InvoiceSerializer, PaymentSerializer, ReceiptSerializer, EmailSettingsSerializer,
     SystemEmailSettingsSerializer, InvoiceFormatSettingsSerializer, ServiceItemSerializer,
     PaymentTermSerializer, UserSerializer, SubscriptionPlanSerializer, CouponSerializer,
     CouponUsageSerializer, SubscriptionSerializer, SubscriptionUpgradeRequestSerializer,
-    ScheduledInvoiceSerializer, ScheduledInvoiceListSerializer, ScheduledInvoiceLogSerializer
+    ScheduledInvoiceSerializer, ScheduledInvoiceListSerializer, ScheduledInvoiceLogSerializer,
+    # Goods Trader serializers
+    UnitOfMeasurementSerializer, ProductSerializer, ProductListSerializer,
+    SupplierSerializer, SupplierListSerializer, PurchaseSerializer, PurchaseListSerializer,
+    InventoryMovementSerializer, SupplierPaymentSerializer, StockAdjustmentSerializer
 )
 from .pdf_generator import generate_invoice_pdf
 from .email_service import send_invoice_email, send_receipt_email, send_bulk_invoice_emails
@@ -162,7 +173,7 @@ class EmailTokenObtainPairView(TokenObtainPairView):
                     subscription.update_status_if_needed()
 
                     # Check if subscription is fully expired (grace period also ended)
-                    if subscription.is_fully_expired():
+                    if subscription.is_fully_expired() and not user.is_superuser:
                         return Response({
                             'error': 'subscription_expired',
                             'detail': 'Your subscription has expired and the grace period has ended. Please contact your administrator to renew the subscription.',
@@ -611,6 +622,12 @@ def register_view(request):
     last_name = request.data.get('last_name', '')
     company_name = request.data.get('company_name', '')
     mobile_number = request.data.get('mobile_number', '').strip()
+    business_type = request.data.get('business_type', 'services')  # Default to services
+
+    # Validate business_type
+    valid_business_types = ['services', 'goods', 'both']
+    if business_type not in valid_business_types:
+        business_type = 'services'  # Default to services if invalid
 
     # Validation
     if not email or not password:
@@ -689,6 +706,7 @@ def register_view(request):
             id=uuid.uuid4(),
             name=org_name,
             slug=slug,
+            business_type=business_type,  # Store business type
             plan='free_trial',  # Changed from 'free' to 'free_trial'
             is_active=True
         )
@@ -1283,6 +1301,20 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+    @action(detail=True, methods=['get'])
+    def details(self, request, pk=None):
+        """Get detailed organization information including owner and subscription"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can view full organization details'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        organization = self.get_object()
+        from .serializers import OrganizationDetailSerializer
+        serializer = OrganizationDetailSerializer(organization)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def limits(self, request):
         """Get the user's organization creation limits based on their subscription plan"""
@@ -1569,6 +1601,47 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 # Log error but don't fail the organization update
                 print(f"Error syncing subscription: {e}")
 
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an organization.
+        Only superadmins can delete organizations.
+        Requires confirmation parameter to prevent accidental deletion.
+        """
+        organization = self.get_object()
+
+        # Only superadmin can delete organizations
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can delete organizations'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Require confirmation parameter
+        confirm = request.query_params.get('confirm', '').lower()
+        if confirm != 'true':
+            return Response(
+                {
+                    'error': 'Deletion requires confirmation',
+                    'message': f'Are you sure you want to delete organization "{organization.name}"? This will permanently delete all associated data including invoices, clients, and user memberships.',
+                    'confirm_url': f'/api/organizations/{organization.id}/?confirm=true',
+                    'organization': {
+                        'id': organization.id,
+                        'name': organization.name
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        org_name = organization.name
+
+        # Delete the organization (cascade will handle related data)
+        organization.delete()
+
+        return Response(
+            {'message': f'Organization "{org_name}" has been permanently deleted'},
+            status=status.HTTP_200_OK
+        )
 
 class ClientViewSet(viewsets.ModelViewSet):
     serializer_class = ClientSerializer
@@ -2817,11 +2890,40 @@ def user_profile_view(request):
     user = request.user
 
     if request.method == 'GET':
+        # Get organization info including business_type
+        organization = getattr(request, 'organization', None)
+        org_info = {}
+        if organization:
+            org_info = {
+                'organization_id': str(organization.id),
+                'organization_name': organization.name,
+                'business_type': organization.business_type,
+                'business_type_display': organization.get_business_type_display(),
+                'plan': organization.plan
+            }
+
+        # Check if user is a staff member
+        staff_info = {}
+        try:
+            staff_profile = StaffProfile.objects.get(user=user)
+            staff_info = {
+                'staff_type': staff_profile.staff_type,
+                'staff_type_display': staff_profile.get_staff_type_display(),
+                'is_staff_member': True
+            }
+        except StaffProfile.DoesNotExist:
+            staff_info = {
+                'is_staff_member': False
+            }
+
         return Response({
             'username': user.username,
             'email': user.email,
             'firstName': user.first_name,
-            'lastName': user.last_name
+            'lastName': user.last_name,
+            'is_superuser': user.is_superuser,
+            **org_info,
+            **staff_info
         })
 
     elif request.method == 'PUT':
@@ -3483,6 +3585,232 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
         plans = SubscriptionPlan.objects.filter(is_active=True, is_visible=True).order_by('sort_order', 'price')
         serializer = self.get_serializer(plans, many=True)
         return Response(serializer.data)
+
+
+
+
+class StaffProfileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing staff profiles (Support Team and Sales Team).
+    Only accessible by superadmins.
+    """
+    serializer_class = StaffProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if not self.request.user.is_superuser:
+            return StaffProfile.objects.none()
+
+        queryset = StaffProfile.objects.all().select_related('user', 'created_by')
+
+        # Filter by staff_type if provided
+        staff_type = self.request.query_params.get('staff_type')
+        if staff_type:
+            queryset = queryset.filter(staff_type=staff_type)
+
+        return queryset.order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can create staff users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = StaffUserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Check if user with email already exists
+        if User.objects.filter(email=data['email']).exists():
+            return Response(
+                {'error': 'A user with this email already exists'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create user
+        user = User.objects.create_user(
+            username=data['email'],
+            email=data['email'],
+            password=data['password'],
+            first_name=data['first_name'],
+            last_name=data.get('last_name', ''),
+            is_staff=True  # Staff users get is_staff=True but not is_superuser
+        )
+
+        # Create staff profile
+        staff_profile = StaffProfile.objects.create(
+            user=user,
+            staff_type=data['staff_type'],
+            phone=data.get('phone', ''),
+            department=data.get('department', ''),
+            employee_id=data.get('employee_id', ''),
+            created_by=request.user,
+            # Set default permissions based on staff type
+            can_view_all_organizations=True,
+            can_view_subscriptions=True,
+            can_manage_tickets=(data['staff_type'] == 'support'),
+            can_view_revenue=(data['staff_type'] == 'sales'),
+            can_manage_leads=(data['staff_type'] == 'sales'),
+        )
+
+        return Response(
+            StaffProfileSerializer(staff_profile).data,
+            status=status.HTTP_201_CREATED
+        )
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can update staff users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can delete staff users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        staff_profile = self.get_object()
+        user = staff_profile.user
+
+        # Delete the staff profile and user
+        staff_profile.delete()
+        user.delete()
+
+        return Response(
+            {'message': 'Staff user deleted successfully'},
+            status=status.HTTP_200_OK
+        )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Get staff statistics"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superadmins can view staff stats'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return Response({
+            'total_support': StaffProfile.objects.filter(staff_type='support', is_active=True).count(),
+            'total_sales': StaffProfile.objects.filter(staff_type='sales', is_active=True).count(),
+            'total_staff': StaffProfile.objects.filter(is_active=True).count(),
+        })
+
+    @action(detail=False, methods=['get'])
+    def sales_performance(self, request):
+        """Get sales team performance metrics"""
+        if not request.user.is_superuser:
+            # If not superadmin, check if user is a sales staff and return only their data
+            try:
+                staff_profile = StaffProfile.objects.get(user=request.user, staff_type='sales')
+                sales_users = [request.user]
+            except StaffProfile.DoesNotExist:
+                return Response(
+                    {'error': 'Access denied'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
+            # Superadmin can see all sales performance
+            sales_staff = StaffProfile.objects.filter(staff_type='sales', is_active=True)
+            sales_users = [sp.user for sp in sales_staff]
+
+        from django.db.models import Sum, Count
+        from django.db.models.functions import TruncMonth
+
+        performance_data = []
+        for user in sales_users:
+            acquired_orgs = Organization.objects.filter(acquired_by=user)
+
+            # Get subscription revenue from acquired organizations
+            total_revenue = Subscription.objects.filter(
+                organization__in=acquired_orgs,
+                status='active'
+            ).aggregate(total=Sum('amount_paid'))['total'] or 0
+
+            # Monthly breakdown
+            monthly_data = acquired_orgs.annotate(
+                month=TruncMonth('created_at')
+            ).values('month').annotate(
+                count=Count('id')
+            ).order_by('-month')[:6]
+
+            performance_data.append({
+                'user_id': user.id,
+                'name': user.get_full_name() or user.username,
+                'email': user.email,
+                'total_acquisitions': acquired_orgs.count(),
+                'active_acquisitions': acquired_orgs.filter(is_active=True).count(),
+                'total_revenue': float(total_revenue),
+                'monthly_breakdown': list(monthly_data),
+                'acquisition_by_source': {
+                    'sales': acquired_orgs.filter(acquisition_source='sales').count(),
+                    'referral': acquired_orgs.filter(acquisition_source='referral').count(),
+                }
+            })
+
+        # Get overall stats
+        overall_stats = {
+            'total_sales_staff': len(sales_users),
+            'total_acquisitions': Organization.objects.filter(acquisition_source='sales').count(),
+            'acquisitions_by_source': {
+                'organic': Organization.objects.filter(acquisition_source='organic').count(),
+                'sales': Organization.objects.filter(acquisition_source='sales').count(),
+                'advertisement': Organization.objects.filter(acquisition_source='advertisement').count(),
+                'referral': Organization.objects.filter(acquisition_source='referral').count(),
+                'partner': Organization.objects.filter(acquisition_source='partner').count(),
+                'coupon': Organization.objects.filter(acquisition_source='coupon').count(),
+                'other': Organization.objects.filter(acquisition_source='other').count(),
+            }
+        }
+
+        return Response({
+            'performance': performance_data,
+            'overall_stats': overall_stats
+        })
+
+    @action(detail=False, methods=['get'])
+    def my_performance(self, request):
+        """Get current sales user's own performance (for sales dashboard)"""
+        try:
+            staff_profile = StaffProfile.objects.get(user=request.user, staff_type='sales')
+        except StaffProfile.DoesNotExist:
+            return Response(
+                {'error': 'Only sales team members can access this endpoint'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from django.db.models import Sum
+        user = request.user
+        acquired_orgs = Organization.objects.filter(acquired_by=user)
+
+        # Get subscription revenue
+        total_revenue = Subscription.objects.filter(
+            organization__in=acquired_orgs,
+            status='active'
+        ).aggregate(total=Sum('amount_paid'))['total'] or 0
+
+        # Recent acquisitions
+        recent_orgs = acquired_orgs.order_by('-created_at')[:10]
+
+        return Response({
+            'total_acquisitions': acquired_orgs.count(),
+            'active_acquisitions': acquired_orgs.filter(is_active=True).count(),
+            'total_revenue': float(total_revenue),
+            'recent_acquisitions': [
+                {
+                    'id': str(org.id),
+                    'name': org.name,
+                    'plan': org.plan,
+                    'created_at': org.created_at,
+                    'is_active': org.is_active
+                } for org in recent_orgs
+            ]
+        })
 
 
 class CouponViewSet(viewsets.ModelViewSet):
@@ -6701,4 +7029,346 @@ def superadmin_toggle_featured_review(request, review_id):
         })
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =============================================================================
+# GOODS TRADER VIEWSETS - Product, Supplier, Purchase, Inventory
+# =============================================================================
+
+class UnitOfMeasurementViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing units of measurement.
+    Includes predefined system units and organization-specific custom units.
+    """
+    serializer_class = UnitOfMeasurementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return predefined units + organization's custom units
+        return UnitOfMeasurement.get_units_for_organization(self.request.organization)
+
+    def perform_create(self, serializer):
+        # Custom units are tied to the organization
+        serializer.save(organization=self.request.organization, is_predefined=False)
+
+    def perform_destroy(self, instance):
+        # Don't allow deletion of predefined units
+        if instance.is_predefined:
+            raise serializers.ValidationError("Cannot delete predefined units")
+        instance.delete()
+
+
+class ProductViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing products (goods trader).
+    Supports inventory tracking, low stock alerts, and stock adjustments.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ProductListSerializer
+        return ProductSerializer
+
+    def get_queryset(self):
+        queryset = Product.objects.filter(organization=self.request.organization)
+
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active', None)
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        # Filter by low stock
+        low_stock = self.request.query_params.get('low_stock', None)
+        if low_stock == 'true':
+            queryset = queryset.filter(
+                track_inventory=True,
+                current_stock__lte=F('low_stock_threshold')
+            )
+
+        # Search
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(sku__icontains=search) |
+                Q(hsn_code__icontains=search)
+            )
+
+        return queryset.order_by('name')
+
+    def perform_create(self, serializer):
+        serializer.save(organization=self.request.organization)
+
+    @action(detail=True, methods=['post'])
+    def adjust_stock(self, request, pk=None):
+        """Manually adjust stock for a product"""
+        product = self.get_object()
+
+        if not product.track_inventory:
+            return Response(
+                {'error': 'Inventory tracking is not enabled for this product'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = StockAdjustmentSerializer(data={
+            'product': product.id,
+            **request.data
+        }, context={'request': request})
+
+        if serializer.is_valid():
+            movement = serializer.save()
+            return Response({
+                'message': 'Stock adjusted successfully',
+                'new_stock': product.current_stock,
+                'movement': InventoryMovementSerializer(movement).data
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def low_stock_alerts(self, request):
+        """Get all products with low stock"""
+        products = Product.objects.filter(
+            organization=request.organization,
+            track_inventory=True,
+            is_active=True
+        ).exclude(
+            low_stock_threshold__isnull=True
+        ).filter(
+            current_stock__lte=F('low_stock_threshold')
+        )
+
+        serializer = ProductListSerializer(products, many=True)
+        return Response({
+            'count': products.count(),
+            'products': serializer.data
+        })
+
+
+class SupplierViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing suppliers (goods trader).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SupplierListSerializer
+        return SupplierSerializer
+
+    def get_queryset(self):
+        queryset = Supplier.objects.filter(organization=self.request.organization)
+
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active', None)
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        # Search
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(code__icontains=search) |
+                Q(email__icontains=search) |
+                Q(gstin__icontains=search)
+            )
+
+        return queryset.order_by('name')
+
+    def perform_create(self, serializer):
+        serializer.save(organization=self.request.organization)
+
+
+class PurchaseViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing purchase entries (goods trader).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PurchaseListSerializer
+        return PurchaseSerializer
+
+    def get_queryset(self):
+        queryset = Purchase.objects.filter(
+            organization=self.request.organization
+        ).select_related('supplier', 'created_by').prefetch_related('items', 'payments')
+
+        # Filter by status
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        # Filter by payment status
+        payment_status = self.request.query_params.get('payment_status', None)
+        if payment_status:
+            queryset = queryset.filter(payment_status=payment_status)
+
+        # Filter by supplier
+        supplier_id = self.request.query_params.get('supplier', None)
+        if supplier_id:
+            queryset = queryset.filter(supplier_id=supplier_id)
+
+        # Search
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(purchase_number__icontains=search) |
+                Q(supplier_invoice_number__icontains=search) |
+                Q(supplier__name__icontains=search)
+            )
+
+        # Date range filter
+        from_date = self.request.query_params.get('from_date', None)
+        to_date = self.request.query_params.get('to_date', None)
+        if from_date:
+            queryset = queryset.filter(purchase_date__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(purchase_date__lte=to_date)
+
+        return queryset.order_by('-purchase_date', '-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=True, methods=['post'])
+    def mark_received(self, request, pk=None):
+        """Mark a purchase as received and update inventory"""
+        purchase = self.get_object()
+
+        if purchase.status == 'received':
+            return Response(
+                {'error': 'Purchase is already marked as received'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            # Update purchase status
+            purchase.status = 'received'
+            purchase.received_date = timezone.now().date()
+            purchase.save()
+
+            # Update inventory for items with products that track inventory
+            for item in purchase.items.all():
+                if item.product and item.product.track_inventory:
+                    item.product.adjust_stock(
+                        quantity=item.quantity,
+                        movement_type='purchase',
+                        reference=purchase.purchase_number,
+                        notes=f'Purchase from {purchase.supplier.name}',
+                        user=request.user
+                    )
+                    item.quantity_received = item.quantity
+                    item.save()
+
+        return Response({
+            'message': 'Purchase marked as received and inventory updated',
+            'status': purchase.status
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancel a purchase"""
+        purchase = self.get_object()
+
+        if purchase.status == 'cancelled':
+            return Response(
+                {'error': 'Purchase is already cancelled'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if purchase.status == 'received':
+            return Response(
+                {'error': 'Cannot cancel a received purchase. Create a return instead.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        purchase.status = 'cancelled'
+        purchase.save()
+
+        return Response({
+            'message': 'Purchase cancelled successfully',
+            'status': purchase.status
+        })
+
+
+class InventoryMovementViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing inventory movements (read-only).
+    Movements are created automatically via stock adjustments, purchases, and sales.
+    """
+    serializer_class = InventoryMovementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = InventoryMovement.objects.filter(
+            organization=self.request.organization
+        ).select_related('product', 'created_by')
+
+        # Filter by product
+        product_id = self.request.query_params.get('product', None)
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+
+        # Filter by movement type
+        movement_type = self.request.query_params.get('movement_type', None)
+        if movement_type:
+            queryset = queryset.filter(movement_type=movement_type)
+
+        # Date range filter
+        from_date = self.request.query_params.get('from_date', None)
+        to_date = self.request.query_params.get('to_date', None)
+        if from_date:
+            queryset = queryset.filter(created_at__date__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(created_at__date__lte=to_date)
+
+        return queryset.order_by('-created_at')
+
+
+class SupplierPaymentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing supplier payments.
+    """
+    serializer_class = SupplierPaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = SupplierPayment.objects.filter(
+            organization=self.request.organization
+        ).select_related('supplier', 'purchase', 'created_by')
+
+        # Filter by supplier
+        supplier_id = self.request.query_params.get('supplier', None)
+        if supplier_id:
+            queryset = queryset.filter(supplier_id=supplier_id)
+
+        # Filter by purchase
+        purchase_id = self.request.query_params.get('purchase', None)
+        if purchase_id:
+            queryset = queryset.filter(purchase_id=purchase_id)
+
+        # Date range filter
+        from_date = self.request.query_params.get('from_date', None)
+        to_date = self.request.query_params.get('to_date', None)
+        if from_date:
+            queryset = queryset.filter(payment_date__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(payment_date__lte=to_date)
+
+        return queryset.order_by('-payment_date', '-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def predefined_units_view(request):
+    """Get list of predefined units of measurement"""
+    units = UnitOfMeasurement.objects.filter(is_predefined=True, is_active=True)
+    serializer = UnitOfMeasurementSerializer(units, many=True)
+    return Response(serializer.data)
 

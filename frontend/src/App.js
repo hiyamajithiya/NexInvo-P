@@ -5,7 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ToastProvider } from './components/Toast';
-import { authAPI } from './services/api';
+import { authAPI, staffAPI } from './services/api';
 import versionCheckService from './services/versionCheck';
 import './theme.css';
 import './App.css';
@@ -15,6 +15,8 @@ const LandingPage = lazy(() => import('./components/LandingPage'));
 const Login = lazy(() => import('./components/Login'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const SuperAdminDashboard = lazy(() => import('./components/SuperAdminDashboard'));
+const SupportDashboard = lazy(() => import('./components/SupportDashboard'));
+const SalesDashboard = lazy(() => import('./components/SalesDashboard'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -38,6 +40,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [staffType, setStaffType] = useState(null); // 'support' or 'sales'
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showSignup, setShowSignup] = useState(false);
@@ -68,11 +71,29 @@ function App() {
 
       // If the request succeeds, user is superadmin
       setIsSuperAdmin(true);
+      setStaffType(null);
       setIsAuthenticated(true);
     } catch (error) {
       // If forbidden, user is regular user (not a superadmin)
       if (error.response?.status === 403) {
         setIsSuperAdmin(false);
+
+        // Check if user is a staff member (support/sales)
+        try {
+          const profileResponse = await axios.get(`${API_BASE_URL}/profile/`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          // Check if user has staff profile
+          if (profileResponse.data?.staff_type) {
+            setStaffType(profileResponse.data.staff_type);
+          } else {
+            setStaffType(null);
+          }
+        } catch (profileError) {
+          console.warn('Error checking staff status:', profileError);
+          setStaffType(null);
+        }
+
         setIsAuthenticated(true);
       } else if (error.response?.status === 401) {
         // Only logout on 401 (Unauthorized - invalid/expired token)
@@ -84,6 +105,7 @@ function App() {
         // Don't logout - the token might still be valid
         console.warn('Error checking superadmin status:', error);
         setIsSuperAdmin(false);
+        setStaffType(null);
         setIsAuthenticated(true);
       }
     } finally {
@@ -125,6 +147,7 @@ function App() {
     // Clear local state and storage
     setIsAuthenticated(false);
     setIsSuperAdmin(false);
+    setStaffType(null);
     setUser(null);
     setShowLanding(true); // Show landing page after logout
     sessionStorage.removeItem('access_token');
@@ -182,6 +205,10 @@ function App() {
               />
             ) : isSuperAdmin ? (
               <SuperAdminDashboard onLogout={handleLogout} />
+            ) : staffType === 'support' ? (
+              <SupportDashboard onLogout={handleLogout} />
+            ) : staffType === 'sales' ? (
+              <SalesDashboard onLogout={handleLogout} />
             ) : (
               <OrganizationProvider>
                 <Dashboard user={user} onLogout={handleLogout} />

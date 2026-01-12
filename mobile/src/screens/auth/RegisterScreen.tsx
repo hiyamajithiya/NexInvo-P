@@ -41,6 +41,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [lastName, setLastName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
+  const [businessType, setBusinessType] = useState<'services' | 'goods' | 'both'>('services');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -125,6 +126,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         last_name: lastName.trim(),
         company_name: companyName.trim(),
         mobile_number: mobileNumber.trim(),
+        business_type: businessType,
       });
 
       // Show success and navigate to login
@@ -262,6 +264,66 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
               left={<TextInput.Icon icon="phone" />}
               placeholder="10-digit mobile number"
             />
+
+            {/* Business Type Selector */}
+            <Text variant="bodyMedium" style={styles.businessTypeLabel}>
+              Business Type *
+            </Text>
+            <View style={styles.businessTypeContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.businessTypeOption,
+                  businessType === 'services' && styles.businessTypeSelected,
+                ]}
+                onPress={() => setBusinessType('services')}
+              >
+                <Text style={styles.businessTypeIcon}>🛠️</Text>
+                <Text
+                  style={[
+                    styles.businessTypeText,
+                    businessType === 'services' && styles.businessTypeTextSelected,
+                  ]}
+                >
+                  Service Provider
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.businessTypeOption,
+                  businessType === 'goods' && styles.businessTypeSelected,
+                ]}
+                onPress={() => setBusinessType('goods')}
+              >
+                <Text style={styles.businessTypeIcon}>📦</Text>
+                <Text
+                  style={[
+                    styles.businessTypeText,
+                    businessType === 'goods' && styles.businessTypeTextSelected,
+                  ]}
+                >
+                  Goods Trader
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.businessTypeOption,
+                  businessType === 'both' && styles.businessTypeSelected,
+                ]}
+                onPress={() => setBusinessType('both')}
+              >
+                <Text style={styles.businessTypeIcon}>🏢</Text>
+                <Text
+                  style={[
+                    styles.businessTypeText,
+                    businessType === 'both' && styles.businessTypeTextSelected,
+                  ]}
+                >
+                  Both
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <TextInput
               label="Password *"
@@ -484,5 +546,41 @@ const styles = StyleSheet.create({
   termsLink: {
     color: colors.primary[500],
     textDecorationLine: 'underline',
+  },
+  businessTypeLabel: {
+    color: colors.text.secondary,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  businessTypeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  businessTypeOption: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.gray[200],
+    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
+  businessTypeSelected: {
+    borderColor: colors.primary[500],
+    backgroundColor: colors.primary[50],
+  },
+  businessTypeIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  businessTypeText: {
+    fontSize: 11,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  businessTypeTextSelected: {
+    color: colors.primary[600],
+    fontWeight: '600',
   },
 });

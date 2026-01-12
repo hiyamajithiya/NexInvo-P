@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { invoiceAPI, clientAPI, settingsAPI, serviceItemAPI, paymentTermAPI } from '../services/api';
+import { invoiceAPI, clientAPI, settingsAPI, serviceItemAPI, paymentTermAPI, productAPI } from '../services/api';
 import { useToast } from './Toast';
+import { useOrganization } from '../contexts/OrganizationContext';
 import './Pages.css';
 
 // Indian States with GST State Codes
@@ -45,6 +46,13 @@ const INDIAN_STATES = [
 
 function InvoiceForm({ onBack, invoice }) {
   const { showSuccess } = useToast();
+  const { currentOrganization } = useOrganization();
+
+  // Determine business type
+  const businessType = currentOrganization?.business_type || 'services';
+  const isGoodsTrader = businessType === 'goods' || businessType === 'both';
+  const isServiceProvider = businessType === 'services' || businessType === 'both';
+
   const [invoiceSettings, setInvoiceSettings] = useState({
     defaultGstRate: 18,
     paymentDueDays: 30,
@@ -79,6 +87,7 @@ function InvoiceForm({ onBack, invoice }) {
 
   const [clients, setClients] = useState([]);
   const [services, setServices] = useState([]);
+  const [products, setProducts] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -112,14 +121,33 @@ function InvoiceForm({ onBack, invoice }) {
     gst_rate: 18.00
   });
 
-  // Load clients, services, payment terms and settings on component mount
+  // Create Product Modal State
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [productLoading, setProductLoading] = useState(false);
+  const [productError, setProductError] = useState('');
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    description: '',
+    hsn_code: '',
+    unit_name: 'Nos',
+    gst_rate: 18.00,
+    purchase_price: '',
+    selling_price: ''
+  });
+
+  // Load clients, services, products, payment terms and settings on component mount
   useEffect(() => {
     loadClients();
-    loadServices();
+    if (isServiceProvider) {
+      loadServices();
+    }
+    if (isGoodsTrader) {
+      loadProducts();
+    }
     loadPaymentTerms();
     loadInvoiceSettings();
     loadFormatSettings();
-  }, []);
+  }, [isServiceProvider, isGoodsTrader]);
 
   // Load invoice data if editing - wait for services to be loaded first
   useEffect(() => {
@@ -168,6 +196,15 @@ function InvoiceForm({ onBack, invoice }) {
       setServices(response.data.results || response.data || []);
     } catch (err) {
       console.error('Error loading services:', err);
+    }
+  };
+
+  const loadProducts = async () => {
+    try {
+      const response = await productAPI.getAll();
+      setProducts(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error loading products:', err);
     }
   };
 
@@ -254,6 +291,23 @@ function InvoiceForm({ onBack, invoice }) {
         newItems[index].description = selectedService.name;
         newItems[index].hsnSac = selectedService.sac_code;
         newItems[index].gstRate = selectedService.gst_rate;
+        newItems[index].serviceId = value;
+        newItems[index].productId = ''; // Clear product selection
+      }
+    }
+    // If product is selected, populate its details
+    else if (field === 'productId') {
+      const selectedProduct = products.find(p => p.id === parseInt(value));
+      if (selectedProduct) {
+        newItems[index].description = selectedProduct.name;
+        newItems[index].hsnSac = selectedProduct.hsn_code;
+        newItems[index].gstRate = selectedProduct.gst_rate;
+        newItems[index].rate = selectedProduct.selling_price;
+        newItems[index].quantity = newItems[index].quantity || 1;
+        newItems[index].productId = value;
+        newItems[index].serviceId = ''; // Clear service selection
+        // Calculate taxable amount
+        newItems[index].taxableAmount = newItems[index].quantity * selectedProduct.selling_price;
       }
     } else {
       newItems[index][field] = value;
@@ -268,7 +322,7 @@ function InvoiceForm({ onBack, invoice }) {
     }
 
     // Calculate total amount if taxableAmount or gstRate changes
-    if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId' || field === 'quantity' || field === 'rate') {
+    if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId' || field === 'productId' || field === 'quantity' || field === 'rate') {
       const item = newItems[index];
       item.totalAmount = item.taxableAmount + (item.taxableAmount * item.gstRate / 100);
     }
@@ -434,6 +488,61 @@ function InvoiceForm({ onBack, invoice }) {
       setServiceError(err.response?.data?.message || 'Failed to create service');
     } finally {
       setServiceLoading(false);
+    }
+  };
+
+  // Product Modal Handlers
+  const handleOpenProductModal = () => {
+    setNewProduct({
+      name: '',
+      description: '',
+      hsn_code: '',
+      unit_name: 'Nos',
+      gst_rate: 18.00,
+      purchase_price: '',
+      selling_price: ''
+    });
+    setProductError('');
+    setShowProductModal(true);
+  };
+
+  const handleProductChange = (field, value) => {
+    setNewProduct({ ...newProduct, [field]: value });
+  };
+
+  const handleSaveProduct = async () => {
+    setProductLoading(true);
+    setProductError('');
+
+    if (!newProduct.name) {
+      setProductError('Product name is required');
+      setProductLoading(false);
+      return;
+    }
+
+    if (!newProduct.selling_price) {
+      setProductError('Selling price is required');
+      setProductLoading(false);
+      return;
+    }
+
+    try {
+      const response = await productAPI.create({
+        ...newProduct,
+        purchase_price: newProduct.purchase_price || 0,
+        selling_price: parseFloat(newProduct.selling_price)
+      });
+      const createdProduct = response.data;
+
+      // Add new product to the list
+      setProducts([...products, createdProduct]);
+
+      showSuccess('Product created successfully!');
+      setShowProductModal(false);
+    } catch (err) {
+      setProductError(err.response?.data?.message || 'Failed to create product');
+    } finally {
+      setProductLoading(false);
     }
   };
 
@@ -650,28 +759,51 @@ function InvoiceForm({ onBack, invoice }) {
             <div className="form-section-header">
               <h3 className="form-section-title">Line Items</h3>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={handleOpenServiceModal}
-                  style={{
-                    padding: '8px 14px',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  + New Service
-                </button>
+                {isGoodsTrader && (
+                  <button
+                    type="button"
+                    onClick={handleOpenProductModal}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    + New Product
+                  </button>
+                )}
+                {isServiceProvider && (
+                  <button
+                    type="button"
+                    onClick={handleOpenServiceModal}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    + New Service
+                  </button>
+                )}
                 <button className="btn-add-item" onClick={addItem}>
                   <span className="btn-icon">➕</span>
-                  Add Item
+                  Add Row
                 </button>
               </div>
             </div>
@@ -681,12 +813,14 @@ function InvoiceForm({ onBack, invoice }) {
                 <thead>
                   <tr>
                     <th style={{width: '50px'}}>Sl No</th>
-                    <th style={{width: formatSettings.show_quantity_column || formatSettings.show_rate_column ? '25%' : '35%'}}>Service</th>
-                    <th style={{width: '100px'}}>SAC Code</th>
-                    {formatSettings.show_quantity_column && (
+                    <th style={{width: isGoodsTrader ? '20%' : (formatSettings.show_quantity_column || formatSettings.show_rate_column ? '25%' : '35%')}}>
+                      {isGoodsTrader ? 'Product / Service' : 'Service'}
+                    </th>
+                    <th style={{width: '100px'}}>{isGoodsTrader ? 'HSN/SAC' : 'SAC Code'}</th>
+                    {(formatSettings.show_quantity_column || isGoodsTrader) && (
                       <th style={{width: '80px'}}>Qty</th>
                     )}
-                    {formatSettings.show_rate_column && (
+                    {(formatSettings.show_rate_column || isGoodsTrader) && (
                       <th style={{width: '100px'}}>Rate (₹)</th>
                     )}
                     <th style={{width: '80px'}}>GST %</th>
@@ -700,19 +834,38 @@ function InvoiceForm({ onBack, invoice }) {
                     <tr key={index}>
                       <td className="text-center">{item.slNo}</td>
                       <td>
-                        <select
-                          className="table-input"
-                          value={item.serviceId || ''}
-                          onChange={(e) => updateItem(index, 'serviceId', e.target.value)}
-                        >
-                          <option value="">-- Select Service --</option>
-                          {services.map(service => (
-                            <option key={service.id} value={service.id}>
-                              {service.name}
-                            </option>
-                          ))}
-                        </select>
-                        {item.description && !item.serviceId && (
+                        {/* Product Selector for Goods Traders */}
+                        {isGoodsTrader && (
+                          <select
+                            className="table-input"
+                            value={item.productId || ''}
+                            onChange={(e) => updateItem(index, 'productId', e.target.value)}
+                            style={{ marginBottom: isServiceProvider ? '4px' : '0' }}
+                          >
+                            <option value="">-- Select Product --</option>
+                            {products.map(product => (
+                              <option key={product.id} value={product.id}>
+                                {product.name} ({product.unit_name})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {/* Service Selector for Service Providers */}
+                        {isServiceProvider && (
+                          <select
+                            className="table-input"
+                            value={item.serviceId || ''}
+                            onChange={(e) => updateItem(index, 'serviceId', e.target.value)}
+                          >
+                            <option value="">-- Select Service --</option>
+                            {services.map(service => (
+                              <option key={service.id} value={service.id}>
+                                {service.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {item.description && !item.serviceId && !item.productId && (
                           <small style={{display: 'block', marginTop: '4px', color: '#666'}}>
                             Current: {item.description}
                           </small>
@@ -721,7 +874,7 @@ function InvoiceForm({ onBack, invoice }) {
                       <td className="text-center">
                         {item.hsnSac || '-'}
                       </td>
-                      {formatSettings.show_quantity_column && (
+                      {(formatSettings.show_quantity_column || isGoodsTrader) && (
                         <td>
                           <input
                             type="number"
@@ -735,7 +888,7 @@ function InvoiceForm({ onBack, invoice }) {
                           />
                         </td>
                       )}
-                      {formatSettings.show_rate_column && (
+                      {(formatSettings.show_rate_column || isGoodsTrader) && (
                         <td>
                           <input
                             type="number"
@@ -1034,8 +1187,8 @@ function InvoiceForm({ onBack, invoice }) {
         </div>
       )}
 
-      {/* Create Service Modal */}
-      {showServiceModal && (
+      {/* Create Service Modal - Only for Service Providers */}
+      {showServiceModal && isServiceProvider && (
         <div className="modal-overlay" onClick={() => !serviceLoading && setShowServiceModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
@@ -1108,6 +1261,129 @@ function InvoiceForm({ onBack, invoice }) {
               </button>
               <button className="btn-create" onClick={handleSaveService} disabled={serviceLoading}>
                 {serviceLoading ? 'Creating...' : 'Create Service'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Product Modal - Only for Goods Traders */}
+      {showProductModal && isGoodsTrader && (
+        <div className="modal-overlay" onClick={() => !productLoading && setShowProductModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+            <div className="modal-header">
+              <h2>Create New Product</h2>
+              <button className="modal-close" onClick={() => !productLoading && setShowProductModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {productError && (
+                <div style={{
+                  padding: '12px',
+                  background: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '8px',
+                  color: '#dc2626',
+                  marginBottom: '16px'
+                }}>
+                  {productError}
+                </div>
+              )}
+              <div className="form-grid">
+                <div className="form-field full-width">
+                  <label>Product Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={newProduct.name}
+                    onChange={(e) => handleProductChange('name', e.target.value)}
+                    placeholder="e.g., Laptop, Mobile Phone, Office Chair"
+                  />
+                </div>
+                <div className="form-field full-width">
+                  <label>Description</label>
+                  <textarea
+                    className="form-input"
+                    rows="2"
+                    value={newProduct.description}
+                    onChange={(e) => handleProductChange('description', e.target.value)}
+                    placeholder="Product description (optional)"
+                  ></textarea>
+                </div>
+                <div className="form-field">
+                  <label>HSN Code</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={newProduct.hsn_code}
+                    onChange={(e) => handleProductChange('hsn_code', e.target.value)}
+                    placeholder="e.g., 84713010"
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Unit</label>
+                  <select
+                    className="form-input"
+                    value={newProduct.unit_name}
+                    onChange={(e) => handleProductChange('unit_name', e.target.value)}
+                  >
+                    <option value="Nos">Nos (Numbers)</option>
+                    <option value="Pcs">Pcs (Pieces)</option>
+                    <option value="Kg">Kg (Kilograms)</option>
+                    <option value="Gm">Gm (Grams)</option>
+                    <option value="Ltr">Ltr (Liters)</option>
+                    <option value="Mtr">Mtr (Meters)</option>
+                    <option value="Box">Box</option>
+                    <option value="Set">Set</option>
+                    <option value="Pair">Pair</option>
+                    <option value="Dozen">Dozen</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>GST Rate (%)</label>
+                  <select
+                    className="form-input"
+                    value={newProduct.gst_rate}
+                    onChange={(e) => handleProductChange('gst_rate', parseFloat(e.target.value))}
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>Purchase Price (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newProduct.purchase_price}
+                    onChange={(e) => handleProductChange('purchase_price', e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-field">
+                  <label>Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newProduct.selling_price}
+                    onChange={(e) => handleProductChange('selling_price', e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowProductModal(false)} disabled={productLoading}>
+                Cancel
+              </button>
+              <button className="btn-create" onClick={handleSaveProduct} disabled={productLoading}>
+                {productLoading ? 'Creating...' : 'Create Product'}
               </button>
             </div>
           </div>

@@ -25,6 +25,7 @@ export interface User {
 export interface Organization {
   id: number;
   name: string;
+  business_type?: 'services' | 'goods' | 'both';
 }
 
 export interface SendOtpRequest {
@@ -45,6 +46,7 @@ export interface RegisterRequest {
   last_name: string;
   company_name: string;
   mobile_number: string;
+  business_type?: 'services' | 'goods' | 'both';
 }
 
 // Dashboard Types - matches backend API response

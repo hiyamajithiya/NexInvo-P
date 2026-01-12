@@ -188,26 +188,19 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
       const isFirstTime = !hasSeenWizard;
       setIsFirstTimeUser(isFirstTime);
 
+      // Always start from step 0 (Welcome) when wizard opens
+      // Users can navigate through steps themselves
+      setCurrentStep(0);
+
       if (isFirstTime) {
-        // First time user - always start from step 0 (Welcome)
-        setCurrentStep(0);
         // Mark that user has seen the wizard
         localStorage.setItem('onboarding_wizard_seen', 'true');
-      } else {
-        // Returning user - find first incomplete required step
-        const firstIncompleteIndex = ONBOARDING_STEPS.findIndex(
-          step => step.isRequired && !completionStatus[step.checkKey]
-        );
-
-        if (firstIncompleteIndex !== -1) {
-          setCurrentStep(firstIncompleteIndex);
-        } else if (allRequiredComplete) {
-          // All required steps complete - mark onboarding as done
-          localStorage.setItem('onboarding_completed', 'true');
-          localStorage.setItem('onboarding_completed_date', new Date().toISOString());
-          setIsVisible(false);
-          if (onComplete) onComplete();
-        }
+      } else if (allRequiredComplete) {
+        // All required steps complete - mark onboarding as done
+        localStorage.setItem('onboarding_completed', 'true');
+        localStorage.setItem('onboarding_completed_date', new Date().toISOString());
+        setIsVisible(false);
+        if (onComplete) onComplete();
       }
 
     } catch (error) {
@@ -230,25 +223,65 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
     }
   }, [checkStepsCompletion]);
 
-  // Re-check completion when wizard becomes visible (e.g., after navigating back)
-  useEffect(() => {
-    if (isVisible && !isMinimized) {
-      checkStepsCompletion();
+  // Re-check completion status when wizard is restored from minimized state
+  // This updates the completion badges without resetting the current step
+  const refreshCompletionStatus = useCallback(async () => {
+    try {
+      const completionStatus = { ...stepsCompleted };
+
+      // Check company settings
+      try {
+        const companyRes = await settingsAPI.getCompanySettings();
+        if (companyRes.data && companyRes.data.companyName) {
+          completionStatus.company = true;
+        }
+      } catch (e) { /* Not configured yet */ }
+
+      // Check invoice settings
+      try {
+        const invoiceRes = await settingsAPI.getInvoiceSettings();
+        if (invoiceRes.data && invoiceRes.data.invoicePrefix) {
+          completionStatus.invoice = true;
+        }
+      } catch (e) { /* Not configured yet */ }
+
+      // Check email settings (optional)
+      try {
+        const emailRes = await settingsAPI.getEmailSettings();
+        if (emailRes.data && emailRes.data.smtp_host) {
+          completionStatus.email = true;
+        }
+      } catch (e) { /* Not configured yet */ }
+
+      // Check if at least one client exists
+      try {
+        const clientRes = await clientAPI.getAll();
+        const clients = clientRes.data.results || clientRes.data || [];
+        completionStatus.client = clients.length > 0;
+      } catch (e) { /* No clients yet */ }
+
+      // Check if at least one service exists
+      try {
+        const serviceRes = await serviceItemAPI.getAll();
+        const services = serviceRes.data.results || serviceRes.data || [];
+        completionStatus.services = services.length > 0;
+      } catch (e) { /* No services yet */ }
+
+      // Ready is complete if all required steps are done
+      const requiredSteps = ONBOARDING_STEPS.filter(s => s.isRequired);
+      const allRequiredComplete = requiredSteps.every(s => completionStatus[s.checkKey]);
+      completionStatus.ready = allRequiredComplete;
+
+      setStepsCompleted(completionStatus);
+    } catch (error) {
+      console.error('Error refreshing completion status:', error);
     }
-  }, [isVisible, isMinimized, checkStepsCompletion]);
+  }, [stepsCompleted]);
 
   const handleNext = () => {
     if (currentStep < ONBOARDING_STEPS.length - 1) {
-      // Find next incomplete step
-      let nextStep = currentStep + 1;
-      while (nextStep < ONBOARDING_STEPS.length - 1) {
-        const step = ONBOARDING_STEPS[nextStep];
-        if (step.isRequired && !stepsCompleted[step.checkKey]) {
-          break;
-        }
-        nextStep++;
-      }
-      setCurrentStep(nextStep);
+      // Simply go to next step - don't skip any steps
+      setCurrentStep(currentStep + 1);
     } else {
       handleComplete();
     }
@@ -289,7 +322,7 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
 
   const handleRestore = () => {
     setIsMinimized(false);
-    checkStepsCompletion(); // Re-check when restoring
+    refreshCompletionStatus(); // Refresh completion badges when restoring
   };
 
   const handleGoToSection = (action) => {

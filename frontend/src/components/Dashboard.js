@@ -4,6 +4,7 @@ import api from '../services/api';
 import { formatDate } from '../utils/dateFormat';
 import './Dashboard.css';
 import OrganizationSwitcher from './OrganizationSwitcher';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 // Lazy load components for code splitting - reduces initial bundle size
 const Invoices = lazy(() => import('./Invoices'));
@@ -20,6 +21,12 @@ const HelpCenter = lazy(() => import('./HelpCenter'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const TallySyncCorner = lazy(() => import('./TallySyncCorner'));
 const ReviewSubmitPage = lazy(() => import('./ReviewSubmitPage'));
+
+// Goods Trader Components
+const ProductMaster = lazy(() => import('./ProductMaster'));
+const Suppliers = lazy(() => import('./Suppliers'));
+const Purchases = lazy(() => import('./Purchases'));
+const Inventory = lazy(() => import('./Inventory'));
 
 // Component loading spinner
 const ComponentLoader = () => (
@@ -38,9 +45,15 @@ const ComponentLoader = () => (
 );
 
 function Dashboard({ user, onLogout }) {
+  const { currentOrganization } = useOrganization();
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [invoiceFilter, setInvoiceFilter] = useState(null); // Filter to pass to Invoices component
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Determine business type from organization
+  const businessType = currentOrganization?.business_type || 'services';
+  const isGoodsTrader = businessType === 'goods' || businessType === 'both';
+  const isServiceProvider = businessType === 'services' || businessType === 'both';
   const [stats, setStats] = useState({
     totalInvoices: 0,
     revenue: 0,
@@ -233,6 +246,14 @@ function Dashboard({ user, onLogout }) {
         return <Clients />;
       case 'services':
         return <ServiceMaster />;
+      case 'products':
+        return <ProductMaster />;
+      case 'suppliers':
+        return <Suppliers />;
+      case 'purchases':
+        return <Purchases />;
+      case 'inventory':
+        return <Inventory />;
       case 'receipts':
         return <Receipts />;
       case 'reports':
@@ -539,6 +560,10 @@ function Dashboard({ user, onLogout }) {
       case 'invoices': return 'Invoices Management';
       case 'clients': return 'Client Management';
       case 'services': return 'Service Master';
+      case 'products': return 'Product Master';
+      case 'suppliers': return 'Supplier Management';
+      case 'purchases': return 'Purchase Entry';
+      case 'inventory': return 'Inventory Management';
       case 'receipts': return 'Receipt Records';
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
@@ -561,6 +586,7 @@ function Dashboard({ user, onLogout }) {
           <OnboardingWizard
             onComplete={() => setShowOnboarding(false)}
             onNavigate={setActiveMenu}
+            onMinimize={() => {}}
           />
         </Suspense>
       )}
@@ -735,14 +761,57 @@ function Dashboard({ user, onLogout }) {
             <span className="nav-icon">👥</span>
             <span className="nav-text">Clients</span>
           </a>
-          <a
-            href="#services"
-            className={`nav-item ${activeMenu === 'services' ? 'active' : ''}`}
-            onClick={(e) => { e.preventDefault(); handleMenuClick('services'); }}
-          >
-            <span className="nav-icon">📋</span>
-            <span className="nav-text">Service Master</span>
-          </a>
+
+          {/* Service Provider Menu Items */}
+          {isServiceProvider && (
+            <a
+              href="#services"
+              className={`nav-item ${activeMenu === 'services' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); handleMenuClick('services'); }}
+            >
+              <span className="nav-icon">📋</span>
+              <span className="nav-text">Service Master</span>
+            </a>
+          )}
+
+          {/* Goods Trader Menu Items */}
+          {isGoodsTrader && (
+            <>
+              <a
+                href="#products"
+                className={`nav-item ${activeMenu === 'products' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('products'); }}
+              >
+                <span className="nav-icon">📦</span>
+                <span className="nav-text">Product Master</span>
+              </a>
+              <a
+                href="#suppliers"
+                className={`nav-item ${activeMenu === 'suppliers' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('suppliers'); }}
+              >
+                <span className="nav-icon">🏭</span>
+                <span className="nav-text">Suppliers</span>
+              </a>
+              <a
+                href="#purchases"
+                className={`nav-item ${activeMenu === 'purchases' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('purchases'); }}
+              >
+                <span className="nav-icon">🛒</span>
+                <span className="nav-text">Purchases</span>
+              </a>
+              <a
+                href="#inventory"
+                className={`nav-item ${activeMenu === 'inventory' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('inventory'); }}
+              >
+                <span className="nav-icon">📊</span>
+                <span className="nav-text">Inventory</span>
+              </a>
+            </>
+          )}
+
           <a
             href="#receipts"
             className={`nav-item ${activeMenu === 'receipts' ? 'active' : ''}`}

@@ -2,8 +2,9 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db.models import Sum
 from datetime import timedelta
-from api.models import Invoice, InvoiceSettings, EmailSettings, CompanySettings
+from api.models import Invoice, InvoiceSettings, EmailSettings, CompanySettings, Payment
 from api.pdf_generator import generate_invoice_pdf
 import io
 
@@ -107,12 +108,21 @@ class Command(BaseCommand):
         except CompanySettings.DoesNotExist:
             company_settings = None
 
+        # Calculate payment amounts for placeholders
+        total_paid = Payment.objects.filter(invoice=invoice).aggregate(
+            total=Sum('amount')
+        )['total'] or 0
+        balance_amount = float(invoice.total_amount) - float(total_paid)
+
         # Prepare email subject with placeholders
         subject = invoice_settings.reminderEmailSubject.format(
             invoice_number=invoice.invoice_number,
             client_name=invoice.client.name,
             invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
-            total_amount=f"{invoice.total_amount:,.2f}"
+            total_amount=f"{invoice.total_amount:,.2f}",
+            paid_amount=f"{total_paid:,.2f}",
+            pending_amount=f"{balance_amount:,.2f}",
+            balance_amount=f"{balance_amount:,.2f}"
         )
 
         # Prepare email body with placeholders
@@ -121,6 +131,9 @@ class Command(BaseCommand):
             client_name=invoice.client.name,
             invoice_date=invoice.invoice_date.strftime('%d/%m/%Y'),
             total_amount=f"{invoice.total_amount:,.2f}",
+            paid_amount=f"{total_paid:,.2f}",
+            pending_amount=f"{balance_amount:,.2f}",
+            balance_amount=f"{balance_amount:,.2f}",
             reminder_count=invoice.reminder_count + 1
         )
 
