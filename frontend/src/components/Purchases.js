@@ -61,7 +61,7 @@ function Purchases() {
       const response = await purchaseAPI.getAll();
       setPurchases(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading purchases:', err);
+      // Error handled silently
     }
   };
 
@@ -70,7 +70,7 @@ function Purchases() {
       const response = await supplierAPI.getAll();
       setSuppliers(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading suppliers:', err);
+      // Error handled silently
     }
   };
 
@@ -79,7 +79,7 @@ function Purchases() {
       const response = await productAPI.getAll();
       setProducts(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading products:', err);
+      // Error handled silently
     }
   };
 

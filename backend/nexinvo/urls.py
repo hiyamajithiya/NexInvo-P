@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.http import JsonResponse
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from api.views import (
     EmailTokenObtainPairView, register_view, send_otp_view, verify_otp_view, resend_otp_view, logout_view,
     forgot_password_send_otp_view, forgot_password_verify_otp_view, forgot_password_reset_view
@@ -51,5 +52,10 @@ urlpatterns = [
     path("api/forgot-password/send-otp/", forgot_password_send_otp_view, name='forgot_password_send_otp'),
     path("api/forgot-password/verify-otp/", forgot_password_verify_otp_view, name='forgot_password_verify_otp'),
     path("api/forgot-password/reset/", forgot_password_reset_view, name='forgot_password_reset'),
-    path("api/", include('api.urls')),
+    path("api/v1/", include('api.urls')),
+    path("api/", include('api.urls')),  # Keep backward compatibility
+    # API Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

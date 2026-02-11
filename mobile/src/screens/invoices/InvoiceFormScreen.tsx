@@ -19,7 +19,6 @@ import {
   Divider,
   Searchbar,
   Portal,
-  RadioButton,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -27,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { Client, RootStackParamList, ServiceItem, PaymentTerm } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency } from '../../utils/formatters';
 
 type InvoiceFormScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'InvoiceForm'>;
@@ -135,7 +135,6 @@ export default function InvoiceFormScreen({
         }
       }
     } catch (error) {
-      console.error('Error loading data:', error);
       if (isEditing) {
         Alert.alert('Error', 'Failed to load invoice');
         navigation.goBack();
@@ -273,14 +272,6 @@ export default function InvoiceFormScreen({
     } finally {
       setSaving(false);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(amount);
   };
 
   const filteredClients = clients.filter(client =>

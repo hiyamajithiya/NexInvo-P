@@ -8,6 +8,7 @@ from reportlab.pdfgen import canvas
 from io import BytesIO
 import base64
 from django.db.models import Sum
+from .utils import get_state_code
 
 
 def number_to_words(number):
@@ -52,7 +53,7 @@ def number_to_words(number):
             words += ' and ' + convert_to_words(paise) + ' Paise'
         words += ' Only'
         return words
-    except:
+    except Exception:
         return ''
 
 
@@ -322,20 +323,6 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
                         # Fall back to state code comparison using GSTIN extraction
                         is_interstate = True
                         try:
-                            # Helper function to get state code - prefer GSTIN extraction
-                            def get_state_code(gstin, state_code_field):
-                                # First try to extract from GSTIN (first 2 digits)
-                                if gstin and len(str(gstin).strip()) >= 2:
-                                    extracted = str(gstin).strip()[:2]
-                                    if extracted.isdigit():
-                                        return extracted
-                                # Fall back to stateCode field if it's a valid 2-digit code
-                                if state_code_field:
-                                    state_code = str(state_code_field).strip()
-                                    if state_code.isdigit() and len(state_code) <= 2:
-                                        return state_code.zfill(2)
-                                return ''
-
                             company_state_code = get_state_code(
                                 company_settings.gstin if company_settings else None,
                                 company_settings.stateCode if company_settings else None
@@ -346,7 +333,7 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
                             )
                             if company_state_code and client_state_code:
                                 is_interstate = company_state_code != client_state_code
-                        except:
+                        except Exception:
                             pass
 
                     if is_interstate:
@@ -578,10 +565,10 @@ def generate_invoice_pdf(invoice, company_settings, format_settings=None):
     # Get default terms and notes from InvoiceSettings
     try:
         from .models import InvoiceSettings
-        invoice_settings = InvoiceSettings.objects.get(user=invoice.user)
+        invoice_settings = InvoiceSettings.objects.get(organization=invoice.organization)
         default_terms = invoice_settings.termsAndConditions
         default_notes = invoice_settings.notes
-    except:
+    except Exception:
         default_terms = ""
         default_notes = ""
 

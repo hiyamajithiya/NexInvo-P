@@ -65,7 +65,6 @@ const PaymentRequestsAdmin = () => {
       setRequests(response.data.requests);
       setCounts(response.data.counts);
     } catch (error) {
-      console.error('Error loading payment requests:', error);
       showSnackbar('Failed to load payment requests', 'error');
     } finally {
       setLoading(false);
@@ -86,7 +85,6 @@ const PaymentRequestsAdmin = () => {
       setAdminNotes('');
       loadRequests();
     } catch (error) {
-      console.error('Error approving request:', error);
       showSnackbar(error.response?.data?.error || 'Failed to approve request', 'error');
     } finally {
       setProcessing(false);
@@ -109,7 +107,6 @@ const PaymentRequestsAdmin = () => {
       setAdminNotes('');
       loadRequests();
     } catch (error) {
-      console.error('Error rejecting request:', error);
       showSnackbar(error.response?.data?.error || 'Failed to reject request', 'error');
     } finally {
       setProcessing(false);

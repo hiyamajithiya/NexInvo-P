@@ -1,3 +1,4 @@
+import logging
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -9,8 +10,15 @@ from .models import (
     ScheduledInvoice, ScheduledInvoiceItem, ScheduledInvoiceLog,
     # Goods Trader models
     UnitOfMeasurement, Product, Supplier, Purchase, PurchaseItem,
-    InventoryMovement, SupplierPayment
+    InventoryMovement, SupplierPayment, ExpensePayment,
+    # Accounting Module models
+    FinancialYear, AccountGroup, LedgerAccount, Voucher, VoucherEntry,
+    VoucherNumberSeries, BankReconciliation, BankReconciliationItem
 )
+
+from .utils import get_state_code
+
+logger = logging.getLogger(__name__)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -252,12 +260,16 @@ class InvoiceSettingsSerializer(serializers.ModelSerializer):
 
 
 class ClientSerializer(serializers.ModelSerializer):
+    ledger_balance = serializers.SerializerMethodField()
+    ledger_balance_type = serializers.SerializerMethodField()
+
     class Meta:
         model = Client
         fields = ['id', 'name', 'code', 'email', 'phone', 'mobile', 'address', 'city', 'state',
                   'pinCode', 'stateCode', 'gstin', 'pan', 'date_of_birth', 'date_of_incorporation',
+                  'ledger_balance', 'ledger_balance_type',
                   'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'ledger_balance', 'ledger_balance_type']
 
     def validate_code(self, value):
         """Allow empty code for auto-generation"""
@@ -266,6 +278,36 @@ class ClientSerializer(serializers.ModelSerializer):
         if value and value.strip():
             return value.strip()
         return ''
+
+    def get_ledger_balance(self, obj):
+        """Get the current balance from the linked debtor ledger account"""
+        try:
+            from .models import LedgerAccount
+            ledger = LedgerAccount.objects.filter(
+                organization=obj.organization,
+                linked_client=obj,
+                is_active=True
+            ).first()
+            if ledger:
+                return float(ledger.current_balance)
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def get_ledger_balance_type(self, obj):
+        """Get the balance type (Dr/Cr) from the linked debtor ledger account"""
+        try:
+            from .models import LedgerAccount
+            ledger = LedgerAccount.objects.filter(
+                organization=obj.organization,
+                linked_client=obj,
+                is_active=True
+            ).first()
+            if ledger:
+                return ledger.current_balance_type
+            return 'Dr'
+        except Exception:
+            return 'Dr'
 
 
 class ServiceItemSerializer(serializers.ModelSerializer):
@@ -327,21 +369,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
         try:
             company_settings = CompanySettings.objects.get(organization=invoice.organization)
 
-            # Helper function to get state code - prefer GSTIN extraction as it's more reliable
-            def get_state_code(gstin, state_code_field):
-                # First try to extract from GSTIN (first 2 digits)
-                if gstin and len(str(gstin).strip()) >= 2:
-                    extracted = str(gstin).strip()[:2]
-                    if extracted.isdigit():
-                        return extracted
-                # Fall back to stateCode field if it's a valid 2-digit code
-                if state_code_field:
-                    state_code = str(state_code_field).strip()
-                    # Ensure it's a valid state code (2 digits, 01-38)
-                    if state_code.isdigit() and len(state_code) <= 2:
-                        return state_code.zfill(2)  # Pad to 2 digits
-                return ''
-
             # Get company state code
             company_state_code = get_state_code(
                 company_settings.gstin,
@@ -356,17 +383,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     invoice.client.stateCode
                 )
 
-            print(f"[GST Debug] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
-            print(f"[GST Debug] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{invoice.client.gstin if invoice.client else 'N/A'}'")
-            print(f"[GST Debug] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{invoice.client.stateCode if invoice.client else 'N/A'}'")
+            logger.debug(f"[GST] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
+            logger.debug(f"[GST] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{invoice.client.gstin if invoice.client else 'N/A'}'")
+            logger.debug(f"[GST] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{invoice.client.stateCode if invoice.client else 'N/A'}'")
 
             if company_state_code and client_state_code:
                 is_interstate = company_state_code != client_state_code
-                print(f"[GST Debug] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
+                logger.debug(f"[GST] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
             else:
-                print(f"[GST Debug] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
+                logger.debug(f"[GST] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
         except CompanySettings.DoesNotExist:
-            print("[GST Debug] CompanySettings not found - defaulting to IGST")
+            logger.debug("[GST] CompanySettings not found - defaulting to IGST")
 
         invoice.is_interstate = is_interstate
 
@@ -439,21 +466,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
             try:
                 company_settings = CompanySettings.objects.get(organization=instance.organization)
 
-                # Helper function to get state code - prefer GSTIN extraction as it's more reliable
-                def get_state_code(gstin, state_code_field):
-                    # First try to extract from GSTIN (first 2 digits)
-                    if gstin and len(str(gstin).strip()) >= 2:
-                        extracted = str(gstin).strip()[:2]
-                        if extracted.isdigit():
-                            return extracted
-                    # Fall back to stateCode field if it's a valid 2-digit code
-                    if state_code_field:
-                        state_code = str(state_code_field).strip()
-                        # Ensure it's a valid state code (2 digits, 01-38)
-                        if state_code.isdigit() and len(state_code) <= 2:
-                            return state_code.zfill(2)  # Pad to 2 digits
-                    return ''
-
                 # Get company state code
                 company_state_code = get_state_code(
                     company_settings.gstin,
@@ -468,17 +480,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
                         instance.client.stateCode
                     )
 
-                print(f"[GST Debug Update] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
-                print(f"[GST Debug Update] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{instance.client.gstin if instance.client else 'N/A'}'")
-                print(f"[GST Debug Update] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{instance.client.stateCode if instance.client else 'N/A'}'")
+                logger.debug(f"[GST Update] Company stateCode: '{company_state_code}', Client stateCode: '{client_state_code}'")
+                logger.debug(f"[GST Update] Company GSTIN: '{company_settings.gstin}', Client GSTIN: '{instance.client.gstin if instance.client else 'N/A'}'")
+                logger.debug(f"[GST Update] Company stateCode field: '{company_settings.stateCode}', Client stateCode field: '{instance.client.stateCode if instance.client else 'N/A'}'")
 
                 if company_state_code and client_state_code:
                     is_interstate = company_state_code != client_state_code
-                    print(f"[GST Debug Update] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
+                    logger.debug(f"[GST Update] is_interstate = {is_interstate} (company: {company_state_code} vs client: {client_state_code})")
                 else:
-                    print(f"[GST Debug Update] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
+                    logger.debug(f"[GST Update] Missing state code - defaulting to IGST. company_state_code='{company_state_code}', client_state_code='{client_state_code}'")
             except CompanySettings.DoesNotExist:
-                print("[GST Debug Update] CompanySettings not found - defaulting to IGST")
+                logger.debug("[GST Update] CompanySettings not found - defaulting to IGST")
 
             instance.is_interstate = is_interstate
 
@@ -539,11 +551,17 @@ class PaymentSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='invoice.client.name', read_only=True)
     receipt_id = serializers.SerializerMethodField()
 
+    # Accounting fields (write-only, used for auto voucher creation)
+    cash_bank_account = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    post_to_ledger = serializers.BooleanField(write_only=True, required=False, default=False)
+
     class Meta:
         model = Payment
         fields = ['id', 'invoice', 'invoice_number', 'client_name', 'amount',
                   'tds_amount', 'gst_tds_amount', 'amount_received', 'payment_date', 'payment_method',
-                  'reference_number', 'notes', 'receipt_id', 'created_at', 'updated_at']
+                  'reference_number', 'notes', 'receipt_id',
+                  'cash_bank_account', 'post_to_ledger',
+                  'created_at', 'updated_at']
         read_only_fields = ['id', 'invoice_number', 'client_name', 'receipt_id', 'created_at', 'updated_at']
 
     def get_receipt_id(self, obj):
@@ -1122,6 +1140,8 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 class SupplierSerializer(serializers.ModelSerializer):
     """Serializer for Supplier master"""
+    ledger_balance = serializers.SerializerMethodField()
+    ledger_balance_type = serializers.SerializerMethodField()
 
     class Meta:
         model = Supplier
@@ -1131,15 +1151,46 @@ class SupplierSerializer(serializers.ModelSerializer):
             'gstin', 'pan',
             'bank_name', 'account_number', 'ifsc_code',
             'contact_person', 'payment_terms', 'notes',
+            'ledger_balance', 'ledger_balance_type',
             'is_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'ledger_balance', 'ledger_balance_type']
 
     def validate_code(self, value):
         """Allow empty code for auto-generation"""
         if value and value.strip():
             return value.strip()
         return ''
+
+    def get_ledger_balance(self, obj):
+        """Get the current balance from the linked creditor ledger account"""
+        try:
+            from .models import LedgerAccount
+            ledger = LedgerAccount.objects.filter(
+                organization=obj.organization,
+                linked_supplier=obj,
+                is_active=True
+            ).first()
+            if ledger:
+                return float(ledger.current_balance)
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def get_ledger_balance_type(self, obj):
+        """Get the balance type (Dr/Cr) from the linked creditor ledger account"""
+        try:
+            from .models import LedgerAccount
+            ledger = LedgerAccount.objects.filter(
+                organization=obj.organization,
+                linked_supplier=obj,
+                is_active=True
+            ).first()
+            if ledger:
+                return ledger.current_balance_type
+            return 'Cr'
+        except Exception:
+            return 'Cr'
 
 
 class SupplierListSerializer(serializers.ModelSerializer):
@@ -1355,6 +1406,44 @@ class SupplierPaymentSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class ExpensePaymentSerializer(serializers.ModelSerializer):
+    """Serializer for expense/outgoing payments"""
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+
+    # Accounting fields (write-only, used for auto voucher creation)
+    cash_bank_account = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    expense_ledger = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    post_to_ledger = serializers.BooleanField(write_only=True, required=False, default=False)
+
+    class Meta:
+        model = ExpensePayment
+        fields = [
+            'id', 'payment_date', 'amount', 'payment_method', 'payment_method_display',
+            'category', 'category_display', 'payee_name', 'reference_number',
+            'description', 'notes',
+            'cash_bank_account', 'expense_ledger', 'post_to_ledger',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'payment_method_display', 'category_display', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        # Pop accounting fields before model creation
+        validated_data.pop('cash_bank_account', None)
+        validated_data.pop('expense_ledger', None)
+        validated_data.pop('post_to_ledger', None)
+
+        request = self.context.get('request')
+
+        # Set organization and created_by
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
+        return super().create(validated_data)
+
+
 class StockAdjustmentSerializer(serializers.Serializer):
     """Serializer for stock adjustment operations"""
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
@@ -1401,3 +1490,350 @@ class StockAdjustmentSerializer(serializers.Serializer):
         )
 
         return movement
+
+
+# =============================================================================
+# ACCOUNTING MODULE SERIALIZERS
+# =============================================================================
+
+class FinancialYearSerializer(serializers.ModelSerializer):
+    """Serializer for Financial Year"""
+
+    class Meta:
+        model = FinancialYear
+        fields = [
+            'id', 'name', 'start_date', 'end_date', 'is_active', 'is_closed',
+            'books_beginning_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        return super().create(validated_data)
+
+
+class AccountGroupSerializer(serializers.ModelSerializer):
+    """Serializer for Account Groups (Chart of Accounts hierarchy)"""
+    full_path = serializers.CharField(read_only=True)
+    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    children_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccountGroup
+        fields = [
+            'id', 'name', 'parent', 'parent_name', 'nature', 'is_primary',
+            'sequence', 'full_path', 'children_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'is_primary', 'full_path', 'children_count', 'created_at', 'updated_at']
+
+    def get_children_count(self, obj):
+        return obj.children.count()
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        return super().create(validated_data)
+
+    def validate_parent(self, value):
+        """Ensure parent belongs to same organization"""
+        request = self.context.get('request')
+        if value and request and hasattr(request, 'organization'):
+            if value.organization != request.organization:
+                raise serializers.ValidationError("Parent group must belong to the same organization")
+        return value
+
+
+class AccountGroupTreeSerializer(serializers.ModelSerializer):
+    """Serializer for Account Groups with nested children (tree view)"""
+    children = serializers.SerializerMethodField()
+    ledger_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccountGroup
+        fields = ['id', 'name', 'nature', 'is_primary', 'sequence', 'children', 'ledger_count']
+
+    def get_children(self, obj):
+        children = obj.children.all().order_by('sequence', 'name')
+        return AccountGroupTreeSerializer(children, many=True).data
+
+    def get_ledger_count(self, obj):
+        return obj.accounts.count()
+
+
+class LedgerAccountSerializer(serializers.ModelSerializer):
+    """Serializer for Ledger Accounts"""
+    group_name = serializers.CharField(source='group.name', read_only=True)
+    group_full_path = serializers.CharField(source='group.full_path', read_only=True)
+    balance_display = serializers.CharField(read_only=True)
+    account_type_display = serializers.CharField(source='get_account_type_display', read_only=True)
+    linked_client_name = serializers.CharField(source='linked_client.name', read_only=True, allow_null=True)
+    linked_supplier_name = serializers.CharField(source='linked_supplier.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = LedgerAccount
+        fields = [
+            'id', 'name', 'account_code', 'alias', 'group', 'group_name', 'group_full_path',
+            'account_type', 'account_type_display',
+            'opening_balance', 'opening_balance_type', 'opening_balance_date',
+            'current_balance', 'current_balance_type', 'balance_display',
+            'is_bank_account', 'bank_name', 'account_number', 'ifsc_code', 'branch',
+            'linked_client', 'linked_client_name',
+            'linked_supplier', 'linked_supplier_name',
+            'gst_applicable', 'gstin', 'gst_registration_type',
+            'is_system_account', 'is_active', 'allow_negative_balance',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'group_name', 'group_full_path', 'balance_display', 'account_type_display',
+            'linked_client_name', 'linked_supplier_name',
+            'is_system_account',
+            'created_at', 'updated_at'
+        ]
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        return super().create(validated_data)
+
+    def validate_group(self, value):
+        """Ensure group belongs to same organization"""
+        request = self.context.get('request')
+        if value and request and hasattr(request, 'organization'):
+            if value.organization != request.organization:
+                raise serializers.ValidationError("Account group must belong to the same organization")
+        return value
+
+
+class LedgerAccountListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for ledger dropdowns"""
+    group_name = serializers.CharField(source='group.name', read_only=True)
+    balance_display = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = LedgerAccount
+        fields = ['id', 'name', 'group', 'group_name', 'account_type', 'balance_display', 'is_bank_account']
+
+
+class VoucherEntrySerializer(serializers.ModelSerializer):
+    """Serializer for Voucher Entry (debit/credit line)"""
+    ledger_name = serializers.CharField(source='ledger_account.name', read_only=True)
+    ledger_balance = serializers.CharField(source='ledger_account.balance_display', read_only=True)
+
+    class Meta:
+        model = VoucherEntry
+        fields = [
+            'id', 'ledger_account', 'ledger_name', 'ledger_balance',
+            'debit_amount', 'credit_amount',
+            'bill_reference', 'bill_date', 'bill_type', 'particulars', 'sequence'
+        ]
+        read_only_fields = ['id', 'ledger_name', 'ledger_balance']
+
+
+class VoucherSerializer(serializers.ModelSerializer):
+    """Serializer for Voucher (main voucher record)"""
+    entries = VoucherEntrySerializer(many=True)
+    voucher_type_display = serializers.CharField(source='get_voucher_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    party_ledger_name = serializers.CharField(source='party_ledger.name', read_only=True, allow_null=True)
+    is_balanced = serializers.BooleanField(read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Voucher
+        fields = [
+            'id', 'voucher_type', 'voucher_type_display',
+            'voucher_number', 'voucher_date',
+            'invoice', 'payment_record', 'purchase', 'expense_payment',
+            'party_ledger', 'party_ledger_name',
+            'total_amount', 'narration', 'reference_number', 'reference_date',
+            'status', 'status_display', 'is_balanced',
+            'synced_to_tally', 'tally_voucher_number', 'tally_sync_date',
+            'entries', 'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'voucher_number', 'voucher_type_display', 'status_display',
+            'party_ledger_name', 'is_balanced',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.email
+        return None
+
+    def validate(self, data):
+        """Validate that debit equals credit"""
+        entries = data.get('entries', [])
+        if entries:
+            total_debit = sum(e.get('debit_amount', 0) or 0 for e in entries)
+            total_credit = sum(e.get('credit_amount', 0) or 0 for e in entries)
+            if total_debit != total_credit:
+                raise serializers.ValidationError(
+                    f"Voucher is not balanced. Total Debit: {total_debit}, Total Credit: {total_credit}"
+                )
+        return data
+
+    def create(self, validated_data):
+        from decimal import Decimal
+
+        entries_data = validated_data.pop('entries', [])
+        request = self.context.get('request')
+
+        # Set organization and created_by
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
+        # Determine financial year for voucher numbering (not stored on Voucher model)
+        fy = None
+        voucher_date = validated_data.get('voucher_date')
+        if voucher_date and request and hasattr(request, 'organization'):
+            fy = FinancialYear.get_fy_for_date(request.organization, voucher_date)
+
+        # Generate voucher number using the series
+        voucher_type = validated_data.get('voucher_type')
+        if request and hasattr(request, 'organization') and fy:
+            series = VoucherNumberSeries.get_or_create_series(
+                request.organization, voucher_type, fy.name
+            )
+            validated_data['voucher_number'] = series.get_next_number()
+
+        voucher = Voucher.objects.create(**validated_data)
+
+        # Create entries and calculate total
+        total_amount = Decimal('0.00')
+        for i, entry_data in enumerate(entries_data):
+            entry_data['voucher'] = voucher
+            entry_data['sequence'] = i + 1
+            VoucherEntry.objects.create(**entry_data)
+            total_amount += entry_data.get('debit_amount', 0) or Decimal('0.00')
+
+        voucher.total_amount = total_amount
+        voucher.save()
+
+        # Post voucher (update ledger balances)
+        if voucher.status == 'posted':
+            voucher.post()
+
+        return voucher
+
+    def update(self, instance, validated_data):
+        from decimal import Decimal
+
+        entries_data = validated_data.pop('entries', None)
+
+        # Don't allow editing posted vouchers
+        if instance.status == 'posted' and entries_data is not None:
+            # Cancel old entries effect first
+            instance.cancel()
+
+        # Update voucher fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if entries_data is not None:
+            # Delete old entries
+            instance.entries.all().delete()
+
+            # Create new entries
+            total_amount = Decimal('0.00')
+            for i, entry_data in enumerate(entries_data):
+                entry_data['voucher'] = instance
+                entry_data['sequence'] = i + 1
+                VoucherEntry.objects.create(**entry_data)
+                total_amount += entry_data.get('debit_amount', 0) or Decimal('0.00')
+
+            instance.total_amount = total_amount
+
+        instance.save()
+
+        # Re-post if status is posted
+        if instance.status == 'posted':
+            instance.post()
+
+        return instance
+
+
+class VoucherListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for voucher lists"""
+    voucher_type_display = serializers.CharField(source='get_voucher_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    party_ledger_name = serializers.CharField(source='party_ledger.name', read_only=True)
+
+    class Meta:
+        model = Voucher
+        fields = [
+            'id', 'voucher_type', 'voucher_type_display',
+            'voucher_number', 'voucher_date',
+            'party_ledger_name', 'total_amount', 'narration',
+            'status', 'status_display', 'synced_to_tally'
+        ]
+
+
+class VoucherNumberSeriesSerializer(serializers.ModelSerializer):
+    """Serializer for Voucher Number Series configuration"""
+
+    class Meta:
+        model = VoucherNumberSeries
+        fields = [
+            'id', 'voucher_type', 'prefix', 'suffix',
+            'financial_year', 'starting_number', 'current_number', 'number_width',
+        ]
+        read_only_fields = ['id', 'current_number']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        return super().create(validated_data)
+
+
+class BankReconciliationItemSerializer(serializers.ModelSerializer):
+    """Serializer for Bank Reconciliation Item"""
+    voucher_number = serializers.CharField(source='voucher_entry.voucher.voucher_number', read_only=True)
+    voucher_date = serializers.DateField(source='voucher_entry.voucher.voucher_date', read_only=True)
+    particulars = serializers.CharField(source='voucher_entry.particulars', read_only=True)
+
+    class Meta:
+        model = BankReconciliationItem
+        fields = [
+            'id', 'voucher_entry', 'voucher_number', 'voucher_date',
+            'transaction_date', 'description', 'debit_amount', 'credit_amount',
+            'particulars', 'is_reconciled', 'reconciled_date',
+            'is_bank_only', 'bank_reference'
+        ]
+        read_only_fields = ['id', 'voucher_number', 'voucher_date', 'particulars']
+
+
+class BankReconciliationSerializer(serializers.ModelSerializer):
+    """Serializer for Bank Reconciliation"""
+    items = BankReconciliationItemSerializer(many=True, read_only=True)
+    bank_account_name = serializers.CharField(source='bank_account.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    difference = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BankReconciliation
+        fields = [
+            'id', 'bank_account', 'bank_account_name',
+            'reconciliation_date', 'statement_date',
+            'statement_opening_balance', 'statement_closing_balance',
+            'book_balance', 'reconciled_balance',
+            'status', 'status_display', 'difference',
+            'notes', 'items', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'bank_account_name', 'status_display', 'difference', 'created_at', 'updated_at']
+
+    def get_difference(self, obj):
+        return obj.statement_closing_balance - obj.reconciled_balance
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'organization'):
+            validated_data['organization'] = request.organization
+        return super().create(validated_data)

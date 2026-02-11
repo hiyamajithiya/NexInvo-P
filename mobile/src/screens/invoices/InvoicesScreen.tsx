@@ -4,6 +4,7 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import {
   Text,
@@ -12,13 +13,13 @@ import {
   Searchbar,
   Chip,
   ActivityIndicator,
-  useTheme,
 } from 'react-native-paper';
 import { useFocusEffect, useIsFocused, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import api from '../../services/api';
 import { Invoice, RootStackParamList, MainTabParamList } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatters';
 
 type InvoicesScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -36,7 +37,6 @@ const statusFilters = [
 ];
 
 export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
-  const theme = useTheme();
   const isFocused = useIsFocused();
   const route = useRoute<InvoicesScreenRouteProp>();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -47,6 +47,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [fabOpen, setFabOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Handle initial filter from navigation params
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
 
   const fetchInvoices = async (reset = false) => {
     try {
+      setError(null);
       const currentPage = reset ? 1 : page;
       // For 'pending' filter, we use unpaid_only=true to get all unpaid invoices
       const isPending = statusFilter === 'pending';
@@ -67,8 +69,6 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
         search: search || undefined,
       });
 
-      console.log('Invoices API response:', JSON.stringify(data, null, 2));
-
       if (reset) {
         setInvoices(data.results || []);
         setPage(2);
@@ -77,8 +77,10 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
         setPage((prev) => prev + 1);
       }
       setHasMore(!!data.next);
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
+    } catch (err) {
+      console.error('Failed to load invoices:', err);
+      setError('Failed to load invoices. Pull down to retry.');
+      Alert.alert('Error', 'Failed to load invoices. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -105,37 +107,6 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const loadMore = () => {
     if (hasMore && !loading) {
       fetchInvoices();
-    }
-  };
-
-  const formatCurrency = (amount: string) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(parseFloat(amount));
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return { bg: colors.status.paid.bg, text: colors.status.paid.text };
-      case 'overdue':
-        return { bg: colors.status.overdue.bg, text: colors.status.overdue.text };
-      case 'sent':
-        return { bg: colors.status.sent.bg, text: colors.status.sent.text };
-      case 'draft':
-        return { bg: colors.status.draft.bg, text: colors.status.draft.text };
-      default:
-        return { bg: colors.status.pending.bg, text: colors.status.pending.text };
     }
   };
 

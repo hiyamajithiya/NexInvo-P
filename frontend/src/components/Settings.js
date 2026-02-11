@@ -107,7 +107,6 @@ function Settings() {
         });
       }
     } catch (err) {
-      console.error('Error loading settings:', err);
       // Don't show error if settings don't exist yet (404)
       if (err.response?.status !== 404) {
         setError('Failed to load settings');
@@ -161,7 +160,7 @@ function Settings() {
 
             if (!ctx) {
               // Canvas not supported, return original as base64
-              console.warn('Canvas not supported, using original image');
+              // Canvas not supported, using original image
               resolve(e.target.result);
               return;
             }
@@ -179,21 +178,19 @@ function Settings() {
 
             // Verify the output is valid
             if (!resizedBase64 || resizedBase64 === 'data:,') {
-              console.warn('Canvas toDataURL failed, using original image');
+              // Canvas toDataURL failed, using original image
               resolve(e.target.result);
               return;
             }
 
             resolve(resizedBase64);
           } catch (canvasError) {
-            console.error('Canvas resize error:', canvasError);
             // Fallback to original image if canvas fails
             resolve(e.target.result);
           }
         };
 
         img.onerror = (imgError) => {
-          console.error('Image load error:', imgError);
           // Try to use original base64 if image load fails
           if (e.target.result) {
             resolve(e.target.result);
@@ -208,7 +205,6 @@ function Settings() {
       };
 
       reader.onerror = (readerError) => {
-        console.error('FileReader error:', readerError);
         reject(new Error('Failed to read image file'));
       };
 

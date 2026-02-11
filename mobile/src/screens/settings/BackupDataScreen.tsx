@@ -4,14 +4,11 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  Share,
-  Platform,
 } from 'react-native';
 import {
   Text,
   Card,
   Button,
-  ActivityIndicator,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

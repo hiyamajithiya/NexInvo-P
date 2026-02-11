@@ -30,7 +30,6 @@ function Profile({ onLogout }) {
       setProfileData(response.data);
     } catch (err) {
       setErrorMessage('Failed to load profile');
-      console.error('Error loading profile:', err);
     } finally {
       setLoading(false);
     }
@@ -52,7 +51,6 @@ function Profile({ onLogout }) {
       setIsEditingProfile(false);
     } catch (err) {
       setErrorMessage(err.response?.data?.error || 'Failed to update profile');
-      console.error('Error updating profile:', err);
     }
   };
 
@@ -91,7 +89,6 @@ function Profile({ onLogout }) {
       } else {
         setErrorMessage(errorMsg || 'Failed to change password');
       }
-      console.error('Error changing password:', err);
     }
   };
 

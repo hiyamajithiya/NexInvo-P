@@ -84,7 +84,6 @@ const StaffManagement = () => {
       setStaffList(staffResponse.data);
       setStats(statsResponse.data);
     } catch (error) {
-      console.error('Error loading staff data:', error);
       showSnackbar('Failed to load staff data', 'error');
     } finally {
       setLoading(false);
@@ -156,7 +155,6 @@ const StaffManagement = () => {
       handleCloseDialog();
       loadData();
     } catch (error) {
-      console.error('Error saving staff:', error);
       showSnackbar(error.response?.data?.error || 'Failed to save staff member', 'error');
     }
   };
@@ -171,7 +169,6 @@ const StaffManagement = () => {
       showSnackbar('Staff member deleted successfully');
       loadData();
     } catch (error) {
-      console.error('Error deleting staff:', error);
       showSnackbar('Failed to delete staff member', 'error');
     }
   };

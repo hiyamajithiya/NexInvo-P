@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { formatDate } from '../utils/dateFormat';
 import {
   Box,
@@ -46,8 +45,7 @@ import {
   CurrencyRupee as RupeeIcon,
   EventAvailable as EventAvailableIcon,
 } from '@mui/icons-material';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+import api, { couponAPI, subscriptionAPI } from '../services/api';
 
 const CouponManagement = () => {
   const [coupons, setCoupons] = useState([]);
@@ -84,13 +82,9 @@ const CouponManagement = () => {
   const loadCoupons = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/coupons/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await couponAPI.getAll();
       setCoupons(response.data);
     } catch (error) {
-      console.error('Error loading coupons:', error);
       showSnackbar('Failed to load coupons', 'error');
     } finally {
       setLoading(false);
@@ -99,13 +93,10 @@ const CouponManagement = () => {
 
   const loadPlans = async () => {
     try {
-      const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await subscriptionAPI.getPlans();
       setPlans(response.data);
     } catch (error) {
-      console.error('Error loading plans:', error);
+      // Error handled silently
     }
   };
 
@@ -200,8 +191,6 @@ const CouponManagement = () => {
 
   const handleSubmit = async () => {
     try {
-      const token = sessionStorage.getItem('access_token');
-
       if (!formData.discount_types || formData.discount_types.length === 0) {
         showSnackbar('Please select at least one discount type', 'error');
         return;
@@ -227,25 +216,16 @@ const CouponManagement = () => {
       };
 
       if (editMode) {
-        await axios.put(
-          `${API_BASE_URL}/coupons/${currentCoupon.id}/`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await couponAPI.update(currentCoupon.id, payload);
         showSnackbar('Coupon updated successfully', 'success');
       } else {
-        await axios.post(
-          `${API_BASE_URL}/coupons/`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await couponAPI.create(payload);
         showSnackbar('Coupon created successfully', 'success');
       }
 
       handleCloseDialog();
       loadCoupons();
     } catch (error) {
-      console.error('Error saving coupon:', error);
       showSnackbar(error.response?.data?.error || 'Failed to save coupon', 'error');
     }
   };
@@ -256,30 +236,20 @@ const CouponManagement = () => {
     }
 
     try {
-      const token = sessionStorage.getItem('access_token');
-      await axios.delete(`${API_BASE_URL}/coupons/${couponId}/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await couponAPI.delete(couponId);
       showSnackbar('Coupon deleted successfully', 'success');
       loadCoupons();
     } catch (error) {
-      console.error('Error deleting coupon:', error);
       showSnackbar('Failed to delete coupon', 'error');
     }
   };
 
   const handleDeactivate = async (couponId) => {
     try {
-      const token = sessionStorage.getItem('access_token');
-      await axios.post(
-        `${API_BASE_URL}/coupons/${couponId}/deactivate/`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post(`/coupons/${couponId}/deactivate/`);
       showSnackbar('Coupon deactivated successfully', 'success');
       loadCoupons();
     } catch (error) {
-      console.error('Error deactivating coupon:', error);
       showSnackbar('Failed to deactivate coupon', 'error');
     }
   };

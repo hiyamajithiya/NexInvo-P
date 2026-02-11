@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../services/api';
 import { Invoice, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency } from '../../utils/formatters';
 
 type RecordPaymentScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'RecordPayment'>;
@@ -134,15 +135,6 @@ export default function RecordPaymentScreen({
     } finally {
       setSaving(false);
     }
-  };
-
-  const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(num || 0);
   };
 
   if (loading) {

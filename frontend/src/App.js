@@ -1,13 +1,13 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import axios from 'axios';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ToastProvider } from './components/Toast';
-import { authAPI, staffAPI } from './services/api';
+import { authAPI, superadminAPI, profileAPI } from './services/api';
 import versionCheckService from './services/versionCheck';
 import './theme.css';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 // Lazy load heavy components for faster initial load and smaller bundles
@@ -33,8 +33,6 @@ const LoadingFallback = () => (
     </div>
   </div>
 );
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -65,9 +63,7 @@ function App() {
   const checkUserStatus = async (token) => {
     try {
       // Check if user is superadmin by trying to access superadmin stats
-      await axios.get(`${API_BASE_URL}/superadmin/stats/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await superadminAPI.getStats();
 
       // If the request succeeds, user is superadmin
       setIsSuperAdmin(true);
@@ -80,9 +76,7 @@ function App() {
 
         // Check if user is a staff member (support/sales)
         try {
-          const profileResponse = await axios.get(`${API_BASE_URL}/profile/`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const profileResponse = await profileAPI.getProfile();
           // Check if user has staff profile
           if (profileResponse.data?.staff_type) {
             setStaffType(profileResponse.data.staff_type);
@@ -90,7 +84,7 @@ function App() {
             setStaffType(null);
           }
         } catch (profileError) {
-          console.warn('Error checking staff status:', profileError);
+          // Error handled silently
           setStaffType(null);
         }
 
@@ -103,7 +97,6 @@ function App() {
       } else {
         // For other errors (500, network issues, etc.), assume regular user
         // Don't logout - the token might still be valid
-        console.warn('Error checking superadmin status:', error);
         setIsSuperAdmin(false);
         setStaffType(null);
         setIsAuthenticated(true);
@@ -138,10 +131,8 @@ function App() {
     // Call the backend to clear the session first
     try {
       await authAPI.logout();
-      console.log('Session invalidated on server');
     } catch (error) {
       // Even if the API call fails, proceed with local logout
-      console.warn('Logout API call failed:', error);
     }
 
     // Clear local state and storage
@@ -189,33 +180,35 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ToastProvider>
-        <Suspense fallback={<LoadingFallback />}>
-          <div className="App">
-            {/* Show Landing Page first for non-authenticated users */}
-            {!isAuthenticated && showLanding ? (
-              <LandingPage
-                onNavigateToLogin={handleNavigateToLogin}
-                onNavigateToSignup={handleNavigateToSignup}
-              />
-            ) : !isAuthenticated ? (
-              <Login
-                onLogin={handleLogin}
-                initialMode={showSignup ? 'register' : 'login'}
-                onBackToLanding={handleBackToLanding}
-              />
-            ) : isSuperAdmin ? (
-              <SuperAdminDashboard onLogout={handleLogout} />
-            ) : staffType === 'support' ? (
-              <SupportDashboard onLogout={handleLogout} />
-            ) : staffType === 'sales' ? (
-              <SalesDashboard onLogout={handleLogout} />
-            ) : (
-              <OrganizationProvider>
-                <Dashboard user={user} onLogout={handleLogout} />
-              </OrganizationProvider>
-            )}
-          </div>
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingFallback />}>
+            <div className="App">
+              {/* Show Landing Page first for non-authenticated users */}
+              {!isAuthenticated && showLanding ? (
+                <LandingPage
+                  onNavigateToLogin={handleNavigateToLogin}
+                  onNavigateToSignup={handleNavigateToSignup}
+                />
+              ) : !isAuthenticated ? (
+                <Login
+                  onLogin={handleLogin}
+                  initialMode={showSignup ? 'register' : 'login'}
+                  onBackToLanding={handleBackToLanding}
+                />
+              ) : isSuperAdmin ? (
+                <SuperAdminDashboard onLogout={handleLogout} />
+              ) : staffType === 'support' ? (
+                <SupportDashboard onLogout={handleLogout} />
+              ) : staffType === 'sales' ? (
+                <SalesDashboard onLogout={handleLogout} />
+              ) : (
+                <OrganizationProvider>
+                  <Dashboard user={user} onLogout={handleLogout} />
+                </OrganizationProvider>
+              )}
+            </div>
+          </Suspense>
+        </ErrorBoundary>
       </ToastProvider>
     </ThemeProvider>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { scheduledInvoiceAPI, clientAPI, paymentTermAPI, serviceItemAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
+import { formatCurrency } from '../utils/formatCurrency';
 import { useToast } from './Toast';
 import './Pages.css';
 
@@ -50,7 +51,7 @@ function ScheduledInvoices({ onBack }) {
       const response = await scheduledInvoiceAPI.getAll(params);
       setScheduledInvoices(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading scheduled invoices:', err);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ function ScheduledInvoices({ onBack }) {
       const response = await scheduledInvoiceAPI.getStats();
       setStats(response.data);
     } catch (err) {
-      console.error('Error loading stats:', err);
+      // Error handled silently
     }
   };
 
@@ -76,7 +77,7 @@ function ScheduledInvoices({ onBack }) {
       setPaymentTerms(termsRes.data.results || termsRes.data || []);
       setServiceItems(servicesRes.data.results || servicesRes.data || []);
     } catch (err) {
-      console.error('Error loading form data:', err);
+      // Error handled silently
     }
   };
 
@@ -262,7 +263,6 @@ function ScheduledInvoices({ onBack }) {
       loadScheduledInvoices();
       loadStats();
     } catch (err) {
-      console.error('Scheduled invoice error:', err.response?.data);
       const errorMsg = err.response?.data?.detail ||
                       JSON.stringify(err.response?.data) ||
                       'Failed to save scheduled invoice';
@@ -345,14 +345,6 @@ function ScheduledInvoices({ onBack }) {
 
   const calculateTotal = () => {
     return formData.items.reduce((sum, item) => sum + (parseFloat(item.total_amount) || 0), 0);
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2
-    }).format(amount || 0);
   };
 
   const getFrequencyLabel = (frequency, day_of_month, day_of_week) => {

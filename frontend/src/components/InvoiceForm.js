@@ -1,48 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { invoiceAPI, clientAPI, settingsAPI, serviceItemAPI, paymentTermAPI, productAPI } from '../services/api';
+import { INDIAN_STATES } from '../constants/indianStates';
 import { useToast } from './Toast';
 import { useOrganization } from '../contexts/OrganizationContext';
 import './Pages.css';
-
-// Indian States with GST State Codes
-const INDIAN_STATES = [
-  { name: 'Andaman and Nicobar Islands', code: '35' },
-  { name: 'Andhra Pradesh', code: '37' },
-  { name: 'Arunachal Pradesh', code: '12' },
-  { name: 'Assam', code: '18' },
-  { name: 'Bihar', code: '10' },
-  { name: 'Chandigarh', code: '04' },
-  { name: 'Chhattisgarh', code: '22' },
-  { name: 'Dadra and Nagar Haveli and Daman and Diu', code: '26' },
-  { name: 'Delhi', code: '07' },
-  { name: 'Goa', code: '30' },
-  { name: 'Gujarat', code: '24' },
-  { name: 'Haryana', code: '06' },
-  { name: 'Himachal Pradesh', code: '02' },
-  { name: 'Jammu and Kashmir', code: '01' },
-  { name: 'Jharkhand', code: '20' },
-  { name: 'Karnataka', code: '29' },
-  { name: 'Kerala', code: '32' },
-  { name: 'Ladakh', code: '38' },
-  { name: 'Lakshadweep', code: '31' },
-  { name: 'Madhya Pradesh', code: '23' },
-  { name: 'Maharashtra', code: '27' },
-  { name: 'Manipur', code: '14' },
-  { name: 'Meghalaya', code: '17' },
-  { name: 'Mizoram', code: '15' },
-  { name: 'Nagaland', code: '13' },
-  { name: 'Odisha', code: '21' },
-  { name: 'Puducherry', code: '34' },
-  { name: 'Punjab', code: '03' },
-  { name: 'Rajasthan', code: '08' },
-  { name: 'Sikkim', code: '11' },
-  { name: 'Tamil Nadu', code: '33' },
-  { name: 'Telangana', code: '36' },
-  { name: 'Tripura', code: '16' },
-  { name: 'Uttar Pradesh', code: '09' },
-  { name: 'Uttarakhand', code: '05' },
-  { name: 'West Bengal', code: '19' }
-];
 
 function InvoiceForm({ onBack, invoice }) {
   const { showSuccess } = useToast();
@@ -54,6 +15,7 @@ function InvoiceForm({ onBack, invoice }) {
   const isServiceProvider = businessType === 'services' || businessType === 'both';
 
   const [invoiceSettings, setInvoiceSettings] = useState({
+    gstEnabled: true,
     defaultGstRate: 18,
     paymentDueDays: 30,
     termsAndConditions: '',
@@ -186,7 +148,7 @@ function InvoiceForm({ onBack, invoice }) {
       const response = await clientAPI.getAll();
       setClients(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading clients:', err);
+      // Error handled silently
     }
   };
 
@@ -195,7 +157,7 @@ function InvoiceForm({ onBack, invoice }) {
       const response = await serviceItemAPI.getAll();
       setServices(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading services:', err);
+      // Error handled silently
     }
   };
 
@@ -204,7 +166,7 @@ function InvoiceForm({ onBack, invoice }) {
       const response = await productAPI.getAll();
       setProducts(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading products:', err);
+      // Error handled silently
     }
   };
 
@@ -213,7 +175,7 @@ function InvoiceForm({ onBack, invoice }) {
       const response = await paymentTermAPI.getAll();
       setPaymentTerms(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading payment terms:', err);
+      // Error handled silently
     }
   };
 
@@ -221,20 +183,27 @@ function InvoiceForm({ onBack, invoice }) {
     try {
       const response = await settingsAPI.getInvoiceSettings();
       if (response.data) {
-        setInvoiceSettings(response.data);
+        const gstEnabled = response.data.gstEnabled !== false;
+        setInvoiceSettings({
+          ...response.data,
+          gstEnabled: gstEnabled
+        });
 
         // Apply settings to initial invoice data
+        // If GST is disabled, set gstRate to 0
+        const gstRate = gstEnabled ? (response.data.defaultGstRate || 18) : 0;
         setInvoiceData(prevData => ({
           ...prevData,
           notes: response.data.notes || '',
           items: prevData.items.map(item => ({
             ...item,
-            gstRate: response.data.defaultGstRate || 18
+            gstRate: gstRate,
+            totalAmount: gstEnabled ? item.taxableAmount + (item.taxableAmount * gstRate / 100) : item.taxableAmount
           }))
         }));
       }
     } catch (err) {
-      console.error('Error loading invoice settings:', err);
+      // Error handled silently
     }
   };
 
@@ -248,18 +217,19 @@ function InvoiceForm({ onBack, invoice }) {
         });
       }
     } catch (err) {
-      console.error('Error loading format settings:', err);
+      // Error handled silently
     }
   };
 
   const addItem = () => {
+    const gstRate = invoiceSettings.gstEnabled ? (invoiceSettings.defaultGstRate || 18) : 0;
     const newItem = {
       slNo: invoiceData.items.length + 1,
       description: '',
       hsnSac: '',
       quantity: null,
       rate: null,
-      gstRate: invoiceSettings.defaultGstRate || 18,
+      gstRate: gstRate,
       taxableAmount: 0,
       totalAmount: 0
     };
@@ -283,6 +253,7 @@ function InvoiceForm({ onBack, invoice }) {
 
   const updateItem = (index, field, value) => {
     const newItems = [...invoiceData.items];
+    const gstEnabled = invoiceSettings.gstEnabled;
 
     // If service is selected, populate its details
     if (field === 'serviceId') {
@@ -290,7 +261,8 @@ function InvoiceForm({ onBack, invoice }) {
       if (selectedService) {
         newItems[index].description = selectedService.name;
         newItems[index].hsnSac = selectedService.sac_code;
-        newItems[index].gstRate = selectedService.gst_rate;
+        // Only set GST rate if GST is enabled
+        newItems[index].gstRate = gstEnabled ? selectedService.gst_rate : 0;
         newItems[index].serviceId = value;
         newItems[index].productId = ''; // Clear product selection
       }
@@ -301,7 +273,8 @@ function InvoiceForm({ onBack, invoice }) {
       if (selectedProduct) {
         newItems[index].description = selectedProduct.name;
         newItems[index].hsnSac = selectedProduct.hsn_code;
-        newItems[index].gstRate = selectedProduct.gst_rate;
+        // Only set GST rate if GST is enabled
+        newItems[index].gstRate = gstEnabled ? selectedProduct.gst_rate : 0;
         newItems[index].rate = selectedProduct.selling_price;
         newItems[index].quantity = newItems[index].quantity || 1;
         newItems[index].productId = value;
@@ -324,7 +297,8 @@ function InvoiceForm({ onBack, invoice }) {
     // Calculate total amount if taxableAmount or gstRate changes
     if (field === 'taxableAmount' || field === 'gstRate' || field === 'serviceId' || field === 'productId' || field === 'quantity' || field === 'rate') {
       const item = newItems[index];
-      item.totalAmount = item.taxableAmount + (item.taxableAmount * item.gstRate / 100);
+      // When GST is disabled, total equals taxable amount
+      item.totalAmount = gstEnabled ? (item.taxableAmount + (item.taxableAmount * item.gstRate / 100)) : item.taxableAmount;
     }
 
     setInvoiceData({
@@ -340,7 +314,10 @@ function InvoiceForm({ onBack, invoice }) {
 
     invoiceData.items.forEach(item => {
       subtotal += item.taxableAmount;
-      taxAmount += (item.taxableAmount * item.gstRate / 100);
+      // Only calculate tax if GST is enabled
+      if (invoiceSettings.gstEnabled) {
+        taxAmount += (item.taxableAmount * item.gstRate / 100);
+      }
       total += item.totalAmount;
     });
 
@@ -594,7 +571,6 @@ function InvoiceForm({ onBack, invoice }) {
         onBack();
       }, 1000);
     } catch (err) {
-      console.error('Error saving invoice:', err);
       setError(err.response?.data?.message || 'Failed to save invoice');
     } finally {
       setLoading(false);
@@ -656,7 +632,6 @@ function InvoiceForm({ onBack, invoice }) {
         onBack();
       }, 1000);
     } catch (err) {
-      console.error('Error saving invoice:', err);
       setError(err.response?.data?.message || 'Failed to save invoice and generate PDF');
     } finally {
       setLoading(false);
@@ -823,9 +798,13 @@ function InvoiceForm({ onBack, invoice }) {
                     {(formatSettings.show_rate_column || isGoodsTrader) && (
                       <th style={{width: '100px'}}>Rate (₹)</th>
                     )}
-                    <th style={{width: '80px'}}>GST %</th>
+                    {invoiceSettings.gstEnabled && (
+                      <th style={{width: '80px'}}>GST %</th>
+                    )}
                     <th style={{width: '120px'}}>Amount (₹)</th>
-                    <th style={{width: '120px', textAlign: 'center'}}>Total (₹)</th>
+                    {invoiceSettings.gstEnabled && (
+                      <th style={{width: '120px', textAlign: 'center'}}>Total (₹)</th>
+                    )}
                     <th style={{width: '50px', textAlign: 'center'}}></th>
                   </tr>
                 </thead>
@@ -902,9 +881,11 @@ function InvoiceForm({ onBack, invoice }) {
                           />
                         </td>
                       )}
-                      <td className="text-center">
-                        {item.gstRate}%
-                      </td>
+                      {invoiceSettings.gstEnabled && (
+                        <td className="text-center">
+                          {item.gstRate}%
+                        </td>
+                      )}
                       <td>
                         <input
                           type="number"
@@ -916,7 +897,9 @@ function InvoiceForm({ onBack, invoice }) {
                           placeholder="0.00"
                         />
                       </td>
-                      <td className="text-right">₹{item.totalAmount.toFixed(2)}</td>
+                      {invoiceSettings.gstEnabled && (
+                        <td className="text-right">₹{item.totalAmount.toFixed(2)}</td>
+                      )}
                       <td className="text-center">
                         {invoiceData.items.length > 1 && (
                           <button
@@ -948,14 +931,18 @@ function InvoiceForm({ onBack, invoice }) {
           {/* Totals Section */}
           <div className="form-section">
             <div className="invoice-totals">
-              <div className="totals-row">
-                <span className="totals-label">Subtotal:</span>
-                <span className="totals-value">₹{totals.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="totals-row">
-                <span className="totals-label">GST Amount:</span>
-                <span className="totals-value">₹{totals.taxAmount.toFixed(2)}</span>
-              </div>
+              {invoiceSettings.gstEnabled && (
+                <div className="totals-row">
+                  <span className="totals-label">Subtotal:</span>
+                  <span className="totals-value">₹{totals.subtotal.toFixed(2)}</span>
+                </div>
+              )}
+              {invoiceSettings.gstEnabled && (
+                <div className="totals-row">
+                  <span className="totals-label">GST Amount:</span>
+                  <span className="totals-value">₹{totals.taxAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="totals-row">
                 <span className="totals-label">Round Off:</span>
                 <span className="totals-value" style={{ color: totals.roundOff >= 0 ? '#059669' : '#dc2626' }}>

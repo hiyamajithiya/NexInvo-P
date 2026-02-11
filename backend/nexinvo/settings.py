@@ -25,13 +25,18 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dy2la63y(1a!*3evvtb4!&tczirkr$a=1ghe&lkzz^vj-_+=j3')
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if os.getenv('DEBUG', 'False') == 'True':
+        SECRET_KEY = 'django-insecure-dev-only-key-do-not-use-in-production'
+    else:
+        raise ValueError("SECRET_KEY environment variable must be set in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 # Parse ALLOWED_HOSTS from comma-separated string
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else (['localhost', '127.0.0.1'] if DEBUG else [])
 
 
 # Application definition
@@ -48,6 +53,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "django_apscheduler",
+    "drf_spectacular",
     # Local apps
     "api",
 ]
@@ -62,6 +68,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "api.middleware.OrganizationMiddleware",  # Multi-tenant organization context
+    "api.audit.AuditLogMiddleware",  # Audit logging for security-relevant actions
 ]
 
 # CORS settings - Parse from comma-separated string
@@ -93,6 +100,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
     # =============================================================================
     # RATE LIMITING FOR SECURITY (IT ACT COMPLIANCE - BRUTE FORCE PROTECTION)
     # =============================================================================
@@ -108,6 +117,29 @@ REST_FRAMEWORK = {
         'registration': '30/hour',    # Registration: 30 per hour
         'export': '50/hour',          # Data export: 50 per hour
     },
+    # =============================================================================
+    # API VERSIONING
+    # =============================================================================
+    'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.URLPathVersioning',
+    'DEFAULT_VERSION': 'v1',
+    'ALLOWED_VERSIONS': ['v1'],
+    'VERSION_PARAM': 'version',
+    # =============================================================================
+    # API SCHEMA (drf-spectacular / OpenAPI)
+    # =============================================================================
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# =============================================================================
+# DRF-SPECTACULAR (SWAGGER / OPENAPI) SETTINGS
+# =============================================================================
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'NexInvo Pro API',
+    'DESCRIPTION': 'REST API for NexInvo Pro - Invoice & Accounting Management Platform',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
 }
 
 # JWT settings
@@ -151,6 +183,8 @@ if db_engine == 'postgresql':
             "PASSWORD": os.getenv('DB_PASSWORD', ''),
             "HOST": os.getenv('DB_HOST', 'localhost'),
             "PORT": os.getenv('DB_PORT', '5432'),
+            "CONN_MAX_AGE": 600,  # Keep connections open for 10 minutes
+            "CONN_HEALTH_CHECKS": True,  # Check connection health before use
         }
     }
 else:
@@ -159,6 +193,8 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / os.getenv('DB_NAME', 'db.sqlite3'),
+            "CONN_MAX_AGE": 600,  # Keep connections open for 10 minutes
+            "CONN_HEALTH_CHECKS": True,  # Check connection health before use
         }
     }
 
@@ -391,9 +427,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Kolkata'
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
-# Payment Reminder Schedule (11:30 AM IST)
-PAYMENT_REMINDER_HOUR = 6
-PAYMENT_REMINDER_MINUTE = 0
+# Payment Reminder Schedule (uses env vars defined above, defaults: 9:00 AM UTC)
 
 # Scheduled Invoice Time (11:35 AM IST)
 SCHEDULED_INVOICE_HOUR = 6

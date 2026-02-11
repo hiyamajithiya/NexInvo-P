@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   Modal,
   Linking,
+  Alert,
 } from 'react-native';
 import {
   Text,
   Card,
-  useTheme,
   ActivityIndicator,
   Surface,
   Button,
@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import colors from '../../theme/colors';
+import { formatCurrency } from '../../utils/formatters';
 
 type DashboardNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
@@ -32,20 +33,23 @@ type DashboardNavigationProp = CompositeNavigationProp<
 >;
 
 export default function DashboardScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<DashboardNavigationProp>();
   const { organization, subscriptionWarning, clearSubscriptionWarning } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(!!subscriptionWarning);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
     try {
+      setError(null);
       const data = await api.getDashboardStats();
       setStats(data);
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
+    } catch (err) {
+      console.error('Failed to load dashboard stats:', err);
+      setError('Failed to load dashboard data. Pull down to retry.');
+      Alert.alert('Error', 'Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -61,15 +65,6 @@ export default function DashboardScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchStats();
-  };
-
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(num);
   };
 
   if (loading) {

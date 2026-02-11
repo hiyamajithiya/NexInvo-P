@@ -4,7 +4,6 @@ from django.conf import settings
 from django.utils import timezone
 import uuid
 import base64
-import os
 
 # =============================================================================
 # ENCRYPTION UTILITIES FOR SENSITIVE DATA (IT ACT & DPDP ACT COMPLIANCE)
@@ -82,7 +81,7 @@ class Organization(models.Model):
     business_type = models.CharField(
         max_length=20,
         choices=BUSINESS_TYPE_CHOICES,
-        default='services',
+        default='both',
         help_text='Type of business: Service Provider, Goods Trader, or Both'
     )
 
@@ -393,6 +392,12 @@ class Invoice(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['organization', 'status'], name='idx_invoice_org_status'),
+            models.Index(fields=['organization', 'invoice_type'], name='idx_invoice_org_type'),
+            models.Index(fields=['organization', 'invoice_date'], name='idx_invoice_org_date'),
+            models.Index(fields=['organization', 'client'], name='idx_invoice_org_client'),
+        ]
 
     def __str__(self):
         return f"{self.invoice_number} - {self.client.name}"
@@ -2784,6 +2789,60 @@ class SupplierPayment(models.Model):
             self.purchase.save(update_fields=['amount_paid', 'payment_status', 'updated_at'])
 
 
+class ExpensePayment(models.Model):
+    """
+    General expense/outgoing payments made by the business (cash, bank, etc.).
+    Tracks all types of payments made - salaries, rent, utilities, etc.
+    """
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
+        ('upi', 'UPI'),
+        ('card', 'Card'),
+        ('other', 'Other'),
+    ]
+
+    CATEGORY_CHOICES = [
+        ('general', 'General Expense'),
+        ('salary', 'Salary/Wages'),
+        ('rent', 'Rent'),
+        ('utilities', 'Utilities (Electricity, Water, etc.)'),
+        ('office', 'Office Supplies'),
+        ('travel', 'Travel & Conveyance'),
+        ('professional', 'Professional Fees'),
+        ('maintenance', 'Repair & Maintenance'),
+        ('communication', 'Communication (Phone, Internet)'),
+        ('insurance', 'Insurance'),
+        ('taxes', 'Taxes & Duties'),
+        ('bank_charges', 'Bank Charges'),
+        ('other', 'Other'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='expense_payments')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_expense_payments')
+
+    payment_date = models.DateField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='cash')
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, default='general')
+    payee_name = models.CharField(max_length=200, help_text="Who was the payment made to?")
+    reference_number = models.CharField(max_length=100, blank=True, help_text="Transaction/Cheque/Receipt No.")
+    description = models.CharField(max_length=500, help_text="Brief description of this payment")
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+        verbose_name = "Expense Payment"
+        verbose_name_plural = "Expense Payments"
+
+    def __str__(self):
+        return f"{self.payee_name} - {self.amount} ({self.get_category_display()})"
+
+
 # =============================================================================
 # USER SESSION TRACKING - SINGLE DEVICE LOGIN
 # =============================================================================
@@ -3031,5 +3090,492 @@ class ReviewPromptDismissal(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.dismissal_count} dismissals"
+
+
+# =============================================================================
+# ACCOUNTING MODULE - TALLY-LIKE VOUCHER SYSTEM
+# =============================================================================
+
+class FinancialYear(models.Model):
+    """
+    Financial year configuration (Indian style: April-March)
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='financial_years')
+
+    name = models.CharField(max_length=10)  # "2025-26"
+    start_date = models.DateField()  # April 1, 2025
+    end_date = models.DateField()    # March 31, 2026
+
+    is_active = models.BooleanField(default=True)
+    is_closed = models.BooleanField(default=False)
+
+    # Books Beginning Date
+    books_beginning_date = models.DateField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['organization', 'name']
+        ordering = ['-start_date']
+        verbose_name = "Financial Year"
+        verbose_name_plural = "Financial Years"
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.name}"
+
+    @classmethod
+    def get_current_fy(cls, organization):
+        """Get the current active financial year for an organization"""
+        return cls.objects.filter(organization=organization, is_active=True).first()
+
+    @classmethod
+    def get_fy_for_date(cls, organization, date):
+        """Get the financial year that contains the given date"""
+        return cls.objects.filter(
+            organization=organization,
+            start_date__lte=date,
+            end_date__gte=date
+        ).first()
+
+    @classmethod
+    def create_indian_fy(cls, organization, year):
+        """
+        Create an Indian financial year (April-March).
+        year = 2025 creates FY 2025-26 (April 1, 2025 to March 31, 2026)
+        """
+        from datetime import date
+        name = f"{year}-{str(year + 1)[-2:]}"
+        start_date = date(year, 4, 1)
+        end_date = date(year + 1, 3, 31)
+
+        return cls.objects.create(
+            organization=organization,
+            name=name,
+            start_date=start_date,
+            end_date=end_date,
+            books_beginning_date=start_date,
+            is_active=True
+        )
+
+
+class AccountGroup(models.Model):
+    """
+    Hierarchical account classification (Tally-style groups).
+    Examples: Current Assets > Bank Accounts, Current Liabilities > Duties & Taxes
+    """
+    NATURE_CHOICES = [
+        ('debit', 'Debit'),      # Assets, Expenses
+        ('credit', 'Credit'),    # Liabilities, Income, Equity
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='account_groups')
+    name = models.CharField(max_length=100)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children')
+    nature = models.CharField(max_length=10, choices=NATURE_CHOICES)
+
+    is_primary = models.BooleanField(default=False)  # Primary groups cannot be deleted
+    sequence = models.IntegerField(default=0)  # Display order
+    description = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['organization', 'name']
+        ordering = ['sequence', 'name']
+        verbose_name = "Account Group"
+        verbose_name_plural = "Account Groups"
+
+    def __str__(self):
+        if self.parent:
+            return f"{self.parent.name} > {self.name}"
+        return self.name
+
+    @property
+    def full_path(self):
+        """Get full hierarchical path: Parent > Child > Grandchild"""
+        path = [self.name]
+        current = self.parent
+        while current:
+            path.insert(0, current.name)
+            current = current.parent
+        return ' > '.join(path)
+
+
+class LedgerAccount(models.Model):
+    """
+    Individual ledger accounts (Chart of Accounts).
+    Examples: HDFC Bank A/c, Cash, Sales Account, CGST Payable
+    """
+    ACCOUNT_TYPE_CHOICES = [
+        ('bank', 'Bank Account'),
+        ('cash', 'Cash Account'),
+        ('debtor', 'Sundry Debtor'),
+        ('creditor', 'Sundry Creditor'),
+        ('income', 'Income'),
+        ('expense', 'Expense'),
+        ('asset', 'Asset'),
+        ('liability', 'Liability'),
+        ('equity', 'Capital/Equity'),
+        ('tax', 'Tax Account'),
+        ('stock', 'Stock/Inventory'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='ledger_accounts')
+    account_code = models.CharField(max_length=20, blank=True)  # Optional GL code
+    name = models.CharField(max_length=200)
+    alias = models.CharField(max_length=100, blank=True)  # Short name
+    group = models.ForeignKey(AccountGroup, on_delete=models.PROTECT, related_name='accounts')
+    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES)
+
+    # Opening Balance (as of financial year start)
+    opening_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    opening_balance_type = models.CharField(max_length=2, choices=[('Dr', 'Debit'), ('Cr', 'Credit')], default='Dr')
+    opening_balance_date = models.DateField(null=True, blank=True)
+
+    # Current Balance (computed, updated on each transaction)
+    current_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    current_balance_type = models.CharField(max_length=2, choices=[('Dr', 'Debit'), ('Cr', 'Credit')], default='Dr')
+
+    # Bank Account Details
+    is_bank_account = models.BooleanField(default=False)
+    bank_name = models.CharField(max_length=100, blank=True)
+    account_number = models.CharField(max_length=50, blank=True)
+    ifsc_code = models.CharField(max_length=20, blank=True)
+    branch = models.CharField(max_length=100, blank=True)
+
+    # Party Link (for Debtor/Creditor accounts)
+    linked_client = models.ForeignKey('Client', null=True, blank=True, on_delete=models.SET_NULL, related_name='ledger_account')
+    linked_supplier = models.ForeignKey('Supplier', null=True, blank=True, on_delete=models.SET_NULL, related_name='ledger_account')
+
+    # GST Details
+    gst_applicable = models.BooleanField(default=False)
+    gstin = models.CharField(max_length=15, blank=True)
+    gst_registration_type = models.CharField(max_length=30, blank=True)  # Regular, Composition, etc.
+
+    # Control flags
+    is_active = models.BooleanField(default=True)
+    is_system_account = models.BooleanField(default=False)  # Cannot delete (Cash, Sales, etc.)
+    allow_negative_balance = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['organization', 'name']
+        ordering = ['group__sequence', 'name']
+        verbose_name = "Ledger Account"
+        verbose_name_plural = "Ledger Accounts"
+
+    def __str__(self):
+        return f"{self.name} ({self.group.name})"
+
+    def update_balance(self):
+        """Recalculate current balance from all voucher entries"""
+        from django.db.models import Sum
+
+        entries = self.voucher_entries.filter(voucher__status='posted')
+        totals = entries.aggregate(
+            total_debit=Sum('debit_amount'),
+            total_credit=Sum('credit_amount')
+        )
+
+        total_debit = totals['total_debit'] or 0
+        total_credit = totals['total_credit'] or 0
+
+        # Add opening balance
+        if self.opening_balance_type == 'Dr':
+            total_debit += self.opening_balance
+        else:
+            total_credit += self.opening_balance
+
+        # Calculate net balance
+        if total_debit >= total_credit:
+            self.current_balance = total_debit - total_credit
+            self.current_balance_type = 'Dr'
+        else:
+            self.current_balance = total_credit - total_debit
+            self.current_balance_type = 'Cr'
+
+        self.save(update_fields=['current_balance', 'current_balance_type', 'updated_at'])
+
+    @property
+    def balance_display(self):
+        """Display balance with Dr/Cr suffix"""
+        return f"{self.current_balance:.2f} {self.current_balance_type}"
+
+
+class Voucher(models.Model):
+    """
+    Master voucher record for all transaction types.
+    """
+    VOUCHER_TYPE_CHOICES = [
+        ('sales', 'Sales'),
+        ('purchase', 'Purchase'),
+        ('receipt', 'Receipt'),
+        ('payment', 'Payment'),
+        ('contra', 'Contra'),
+        ('journal', 'Journal'),
+        ('debit_note', 'Debit Note'),
+        ('credit_note', 'Credit Note'),
+    ]
+
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('posted', 'Posted'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='vouchers')
+    voucher_type = models.CharField(max_length=20, choices=VOUCHER_TYPE_CHOICES)
+    voucher_number = models.CharField(max_length=50)  # Auto-generated
+    voucher_date = models.DateField()
+
+    # Reference to existing entities (optional, for linking)
+    invoice = models.ForeignKey('Invoice', null=True, blank=True, on_delete=models.SET_NULL, related_name='vouchers')
+    payment_record = models.ForeignKey('Payment', null=True, blank=True, on_delete=models.SET_NULL, related_name='vouchers')
+    purchase = models.ForeignKey('Purchase', null=True, blank=True, on_delete=models.SET_NULL, related_name='vouchers')
+    expense_payment = models.ForeignKey('ExpensePayment', null=True, blank=True, on_delete=models.SET_NULL, related_name='vouchers')
+
+    # Party account (for Receipt/Payment vouchers)
+    party_ledger = models.ForeignKey(LedgerAccount, null=True, blank=True, on_delete=models.PROTECT, related_name='party_vouchers')
+
+    # Totals
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    # Metadata
+    narration = models.TextField(blank=True)
+    reference_number = models.CharField(max_length=100, blank=True)  # Cheque no, UTR, etc.
+    reference_date = models.DateField(null=True, blank=True)
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='posted')
+
+    # Tally Sync
+    synced_to_tally = models.BooleanField(default=False)
+    tally_voucher_number = models.CharField(max_length=50, blank=True)
+    tally_sync_date = models.DateTimeField(null=True, blank=True)
+
+    # Audit
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_vouchers')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['organization', 'voucher_type', 'voucher_number']
+        ordering = ['-voucher_date', '-created_at']
+        verbose_name = "Voucher"
+        verbose_name_plural = "Vouchers"
+
+    def __str__(self):
+        return f"{self.get_voucher_type_display()} - {self.voucher_number}"
+
+    @property
+    def is_balanced(self):
+        """Check if total debits equal total credits"""
+        from django.db.models import Sum
+        totals = self.entries.aggregate(
+            total_debit=Sum('debit_amount'),
+            total_credit=Sum('credit_amount')
+        )
+        total_debit = totals['total_debit'] or 0
+        total_credit = totals['total_credit'] or 0
+        return abs(total_debit - total_credit) < 0.01  # Allow for rounding
+
+    def post(self):
+        """Post the voucher and update account balances"""
+        if not self.is_balanced:
+            raise ValueError("Voucher is not balanced. Total Debit must equal Total Credit.")
+
+        self.status = 'posted'
+        self.save()
+
+        # Update all affected account balances
+        for entry in self.entries.all():
+            entry.ledger_account.update_balance()
+
+    def cancel(self):
+        """Cancel the voucher and reverse account balances"""
+        self.status = 'cancelled'
+        self.save()
+
+        # Update all affected account balances
+        for entry in self.entries.all():
+            entry.ledger_account.update_balance()
+
+
+class VoucherEntry(models.Model):
+    """
+    Individual debit/credit line in a voucher (Double-Entry).
+    """
+    voucher = models.ForeignKey(Voucher, on_delete=models.CASCADE, related_name='entries')
+    ledger_account = models.ForeignKey(LedgerAccount, on_delete=models.PROTECT, related_name='voucher_entries')
+
+    debit_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    credit_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    # Bill/Invoice reference for party accounts
+    bill_reference = models.CharField(max_length=100, blank=True)
+    bill_date = models.DateField(null=True, blank=True)
+    bill_type = models.CharField(max_length=20, blank=True)  # New Ref, Against Ref, Advance
+
+    # Line narration
+    particulars = models.CharField(max_length=500, blank=True)
+
+    # Display sequence
+    sequence = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['sequence']
+        verbose_name = "Voucher Entry"
+        verbose_name_plural = "Voucher Entries"
+
+    def __str__(self):
+        if self.debit_amount:
+            return f"Dr. {self.ledger_account.name} {self.debit_amount}"
+        return f"Cr. {self.ledger_account.name} {self.credit_amount}"
+
+
+class VoucherNumberSeries(models.Model):
+    """
+    Auto-numbering configuration per voucher type per financial year.
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='voucher_number_series')
+    voucher_type = models.CharField(max_length=20)
+
+    prefix = models.CharField(max_length=20, default='')  # e.g., "RCP/", "PMT/", "CNT/"
+    suffix = models.CharField(max_length=20, blank=True)
+    starting_number = models.IntegerField(default=1)
+    current_number = models.IntegerField(default=0)
+
+    financial_year = models.CharField(max_length=10)  # "2025-26"
+
+    # Width for zero-padding (e.g., 4 means 0001, 0002)
+    number_width = models.IntegerField(default=4)
+
+    class Meta:
+        unique_together = ['organization', 'voucher_type', 'financial_year']
+        verbose_name = "Voucher Number Series"
+        verbose_name_plural = "Voucher Number Series"
+
+    def __str__(self):
+        return f"{self.voucher_type} - {self.financial_year} ({self.prefix})"
+
+    def get_next_number(self):
+        """Generate next voucher number and increment counter"""
+        self.current_number += 1
+        self.save(update_fields=['current_number'])
+
+        # Format: PREFIX/FY/PADDED_NUMBER
+        # Example: RCP/2025-26/0001
+        padded_num = str(self.current_number).zfill(self.number_width)
+
+        if self.prefix:
+            return f"{self.prefix}{self.financial_year}/{padded_num}"
+        return f"{self.financial_year}/{padded_num}"
+
+    @classmethod
+    def get_or_create_series(cls, organization, voucher_type, financial_year):
+        """Get or create a number series for the given voucher type and FY"""
+        # Default prefixes
+        default_prefixes = {
+            'sales': 'SLS/',
+            'purchase': 'PUR/',
+            'receipt': 'RCP/',
+            'payment': 'PMT/',
+            'contra': 'CNT/',
+            'journal': 'JV/',
+            'debit_note': 'DN/',
+            'credit_note': 'CN/',
+        }
+
+        series, created = cls.objects.get_or_create(
+            organization=organization,
+            voucher_type=voucher_type,
+            financial_year=financial_year,
+            defaults={
+                'prefix': default_prefixes.get(voucher_type, ''),
+                'starting_number': 1,
+                'current_number': 0,
+                'number_width': 4
+            }
+        )
+        return series
+
+
+class BankReconciliation(models.Model):
+    """
+    Bank statement reconciliation tracking.
+    """
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='bank_reconciliations')
+    bank_account = models.ForeignKey(LedgerAccount, on_delete=models.CASCADE, related_name='reconciliations')
+
+    reconciliation_date = models.DateField()
+    statement_date = models.DateField()
+
+    # Statement Balance
+    statement_opening_balance = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    statement_closing_balance = models.DecimalField(max_digits=15, decimal_places=2)
+
+    # Book Balance
+    book_balance = models.DecimalField(max_digits=15, decimal_places=2)
+
+    # Reconciliation Summary
+    reconciled_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    unreconciled_credits = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    unreconciled_debits = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    STATUS_CHOICES = [
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
+
+    notes = models.TextField(blank=True)
+    completed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='completed_reconciliations')
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-reconciliation_date']
+        verbose_name = "Bank Reconciliation"
+        verbose_name_plural = "Bank Reconciliations"
+
+    def __str__(self):
+        return f"{self.bank_account.name} - {self.statement_date}"
+
+
+class BankReconciliationItem(models.Model):
+    """
+    Individual entries in bank reconciliation.
+    """
+    reconciliation = models.ForeignKey(BankReconciliation, on_delete=models.CASCADE, related_name='items')
+    voucher_entry = models.ForeignKey(VoucherEntry, null=True, blank=True, on_delete=models.SET_NULL, related_name='reconciliation_items')
+
+    transaction_date = models.DateField()
+    description = models.CharField(max_length=500)
+    debit_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    credit_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    # Bank statement reference
+    bank_reference = models.CharField(max_length=100, blank=True)
+    bank_date = models.DateField(null=True, blank=True)
+
+    is_reconciled = models.BooleanField(default=False)
+    reconciled_date = models.DateField(null=True, blank=True)
+
+    # For unmatched bank entries (not in books)
+    is_bank_only = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['transaction_date']
+        verbose_name = "Bank Reconciliation Item"
+        verbose_name_plural = "Bank Reconciliation Items"
+
+    def __str__(self):
+        return f"{self.transaction_date} - {self.description}"
 
 

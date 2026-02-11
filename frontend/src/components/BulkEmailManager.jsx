@@ -50,9 +50,7 @@ import {
   ContentCopy as CopyIcon,
   Preview as PreviewIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+import api, { bulkEmailAPI } from '../services/api';
 
 const BulkEmailManager = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -104,12 +102,6 @@ const BulkEmailManager = () => {
     { value: 'inactive_users', label: 'Inactive Users', description: 'Users who haven\'t logged in recently', icon: '💤' },
   ];
 
-  const getAuthHeaders = () => ({
-    headers: {
-      Authorization: `Bearer ${sessionStorage.getItem('access_token')}`,
-    },
-  });
-
   useEffect(() => {
     fetchTemplates();
     fetchCampaigns();
@@ -118,33 +110,29 @@ const BulkEmailManager = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/superadmin/bulk-email/templates/`, getAuthHeaders());
+      const response = await bulkEmailAPI.getTemplates();
       setTemplates(response.data);
     } catch (error) {
-      console.error('Error fetching templates:', error);
+      // Error handled silently
     }
   };
 
   const fetchCampaigns = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/superadmin/bulk-email/campaigns/`, getAuthHeaders());
+      const response = await bulkEmailAPI.getCampaigns();
       setCampaigns(response.data);
     } catch (error) {
-      console.error('Error fetching campaigns:', error);
+      // Error handled silently
     }
   };
 
   const fetchRecipientPreview = async (recipientType) => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/superadmin/bulk-email/preview-recipients/?recipient_type=${recipientType}`,
-        getAuthHeaders()
-      );
+      const response = await bulkEmailAPI.previewRecipients({ recipient_type: recipientType });
       setRecipientPreview(response.data);
       setPreviewDialog(true);
     } catch (error) {
-      console.error('Error fetching preview:', error);
       showSnackbar('Failed to load recipient preview', 'error');
     }
     setLoading(false);
@@ -158,25 +146,16 @@ const BulkEmailManager = () => {
     setLoading(true);
     try {
       if (currentTemplate.id) {
-        await axios.put(
-          `${API_BASE_URL}/superadmin/bulk-email/templates/${currentTemplate.id}/`,
-          currentTemplate,
-          getAuthHeaders()
-        );
+        await bulkEmailAPI.updateTemplate(currentTemplate.id, currentTemplate);
         showSnackbar('Template updated successfully');
       } else {
-        await axios.post(
-          `${API_BASE_URL}/superadmin/bulk-email/templates/`,
-          currentTemplate,
-          getAuthHeaders()
-        );
+        await bulkEmailAPI.createTemplate(currentTemplate);
         showSnackbar('Template created successfully');
       }
       fetchTemplates();
       setTemplateDialog(false);
       setCurrentTemplate({ name: '', template_type: 'announcement', subject: '', body: '' });
     } catch (error) {
-      console.error('Error saving template:', error);
       showSnackbar('Failed to save template', 'error');
     }
     setLoading(false);
@@ -185,11 +164,10 @@ const BulkEmailManager = () => {
   const handleDeleteTemplate = async (id) => {
     if (!window.confirm('Are you sure you want to delete this template?')) return;
     try {
-      await axios.delete(`${API_BASE_URL}/superadmin/bulk-email/templates/${id}/`, getAuthHeaders());
+      await bulkEmailAPI.deleteTemplate(id);
       showSnackbar('Template deleted successfully');
       fetchTemplates();
     } catch (error) {
-      console.error('Error deleting template:', error);
       showSnackbar('Failed to delete template', 'error');
     }
   };
@@ -197,11 +175,7 @@ const BulkEmailManager = () => {
   const handleCreateCampaign = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/superadmin/bulk-email/campaigns/`,
-        currentCampaign,
-        getAuthHeaders()
-      );
+      const response = await bulkEmailAPI.createCampaign(currentCampaign);
       showSnackbar('Campaign created successfully');
       fetchCampaigns();
       setCampaignDialog(false);
@@ -209,7 +183,6 @@ const BulkEmailManager = () => {
       setSelectedCampaign({ id: response.data.id, ...currentCampaign });
       setSendDialog(true);
     } catch (error) {
-      console.error('Error creating campaign:', error);
       showSnackbar('Failed to create campaign', 'error');
     }
     setLoading(false);
@@ -218,11 +191,7 @@ const BulkEmailManager = () => {
   const handleSendCampaign = async (campaignId) => {
     setSendingCampaign(true);
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/superadmin/bulk-email/campaigns/${campaignId}/send/`,
-        {},
-        getAuthHeaders()
-      );
+      const response = await bulkEmailAPI.sendCampaign(campaignId);
       showSnackbar(
         `Campaign sent! ${response.data.sent_count} emails sent, ${response.data.failed_count} failed`,
         response.data.failed_count > 0 ? 'warning' : 'success'
@@ -230,7 +199,6 @@ const BulkEmailManager = () => {
       fetchCampaigns();
       setSendDialog(false);
     } catch (error) {
-      console.error('Error sending campaign:', error);
       showSnackbar(error.response?.data?.error || 'Failed to send campaign', 'error');
     }
     setSendingCampaign(false);
@@ -238,14 +206,11 @@ const BulkEmailManager = () => {
 
   const handleViewCampaign = async (campaign) => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/superadmin/bulk-email/campaigns/${campaign.id}/`,
-        getAuthHeaders()
-      );
+      const response = await api.get(`/superadmin/bulk-email/campaigns/${campaign.id}/`);
       setSelectedCampaign(response.data);
       setViewCampaignDialog(true);
     } catch (error) {
-      console.error('Error fetching campaign details:', error);
+      // Error handled silently
     }
   };
 

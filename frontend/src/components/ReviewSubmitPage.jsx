@@ -52,7 +52,6 @@ const ReviewSubmitPage = ({ onNavigate, onReviewSubmitted }) => {
         setSubmitted(true);
       }
     } catch (error) {
-      console.error('Error checking eligibility:', error);
       showSnackbar('Failed to check eligibility', 'error');
     } finally {
       setLoading(false);
@@ -101,7 +100,6 @@ const ReviewSubmitPage = ({ onNavigate, onReviewSubmitted }) => {
       }
       showSnackbar('Thank you for your review! It will be visible after approval.', 'success');
     } catch (error) {
-      console.error('Error submitting review:', error);
       showSnackbar(error.response?.data?.error || 'Failed to submit review', 'error');
     } finally {
       setSubmitting(false);

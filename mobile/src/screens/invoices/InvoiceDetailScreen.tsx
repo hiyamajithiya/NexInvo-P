@@ -12,7 +12,6 @@ import {
   Button,
   ActivityIndicator,
   Divider,
-  useTheme,
   IconButton,
   Menu,
 } from 'react-native-paper';
@@ -29,6 +28,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import api from '../../services/api';
 import { Invoice, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatters';
 
 type InvoiceDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'InvoiceDetail'>;
@@ -39,7 +39,6 @@ export default function InvoiceDetailScreen({
   navigation,
   route,
 }: InvoiceDetailScreenProps) {
-  const theme = useTheme();
   const { invoiceId } = route.params;
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +55,6 @@ export default function InvoiceDetailScreen({
       const data = await api.getInvoice(invoiceId);
       setInvoice(data);
     } catch (error) {
-      console.error('Error fetching invoice:', error);
       Alert.alert('Error', 'Failed to load invoice');
       navigation.goBack();
     } finally {
@@ -86,24 +84,16 @@ export default function InvoiceDetailScreen({
       const fileName = `Invoice_${invoice?.invoice_number?.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
       const fileUri = `${cacheDirectory}${fileName}`;
 
-      console.log('Downloading PDF from:', pdfUrl);
-      console.log('With headers:', Object.keys(headers));
-
       const downloadResult = await downloadAsync(pdfUrl, fileUri, {
         headers: headers as Record<string, string>,
       });
 
-      console.log('Download result status:', downloadResult.status);
-      console.log('Download result uri:', downloadResult.uri);
-
       if (downloadResult.status !== 200) {
-        console.error('PDF download failed with status:', downloadResult.status);
         throw new Error(`Failed to download PDF (status: ${downloadResult.status})`);
       }
 
       // Verify the file exists and has content
       const fileInfo = await getInfoAsync(fileUri);
-      console.log('Downloaded file info:', fileInfo);
 
       if (!fileInfo.exists || (fileInfo.size && fileInfo.size < 100)) {
         throw new Error('Downloaded file is empty or invalid');
@@ -111,7 +101,6 @@ export default function InvoiceDetailScreen({
 
       return fileUri;
     } catch (error) {
-      console.error('Error downloading PDF:', error);
       return null;
     }
   };
@@ -143,7 +132,6 @@ export default function InvoiceDetailScreen({
             type: 'application/pdf',
           });
         } catch (intentError) {
-          console.log('Intent failed, falling back to share:', intentError);
           // Fallback to share sheet if intent fails
           await Sharing.shareAsync(fileUri, {
             mimeType: 'application/pdf',
@@ -160,7 +148,6 @@ export default function InvoiceDetailScreen({
         });
       }
     } catch (error) {
-      console.error('Error viewing PDF:', error);
       Alert.alert('Error', 'Failed to open PDF');
     } finally {
       setSharingPDF(false);
@@ -192,7 +179,6 @@ export default function InvoiceDetailScreen({
       });
 
     } catch (error) {
-      console.error('Error sharing via WhatsApp:', error);
       Alert.alert('Error', 'Failed to share invoice PDF');
     } finally {
       setSharingPDF(false);
@@ -223,37 +209,6 @@ export default function InvoiceDetailScreen({
         },
       ]
     );
-  };
-
-  const formatCurrency = (amount: string) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(parseFloat(amount));
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return { bg: colors.status.paid.bg, text: colors.status.paid.text };
-      case 'overdue':
-        return { bg: colors.status.overdue.bg, text: colors.status.overdue.text };
-      case 'sent':
-        return { bg: colors.status.sent.bg, text: colors.status.sent.text };
-      case 'draft':
-        return { bg: colors.status.draft.bg, text: colors.status.draft.text };
-      default:
-        return { bg: colors.status.pending.bg, text: colors.status.pending.text };
-    }
   };
 
   if (loading) {

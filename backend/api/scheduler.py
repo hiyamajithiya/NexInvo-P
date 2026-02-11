@@ -11,7 +11,6 @@ from datetime import datetime
 from django.conf import settings
 from django.utils import timezone
 from django.core.mail import EmailMessage
-from django.core.cache import cache
 
 from apscheduler.schedulers.background import BackgroundScheduler
 

@@ -105,7 +105,7 @@ function InvoiceFormatEditor() {
       }
     } catch (err) {
       if (err.response?.status !== 404) {
-        console.error('Error loading format settings:', err);
+        // Error loading format settings
       }
     } finally {
       setLoading(false);
@@ -123,7 +123,6 @@ function InvoiceFormatEditor() {
       await settingsAPI.updateInvoiceFormatSettings(formatSettings);
       showSuccess('Invoice format settings saved successfully!');
     } catch (err) {
-      console.error('Error saving format settings:', err);
       setError('Failed to save format settings');
     } finally {
       setLoading(false);

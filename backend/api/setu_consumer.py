@@ -90,7 +90,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
-        print(f"[Setu Disconnect] WebSocket disconnecting, close_code: {close_code}, connector_id: {self.connector_id}")
+        logger.debug(f"[Setu Disconnect] WebSocket disconnecting, close_code: {close_code}, connector_id: {self.connector_id}")
 
         if self.group_name:
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -101,7 +101,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         # Remove connection info from cache immediately
         if self.connector_id:
             await self.remove_connection_info()
-            print(f"[Setu Disconnect] Removed cache entry for: {self.connector_id}")
+            logger.debug(f"[Setu Disconnect] Removed cache entry for: {self.connector_id}")
             logger.info(f"Setu connector disconnected: {self.connector_id}")
 
     async def receive_json(self, content):
@@ -125,7 +125,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
                 pass
 
             elif message_type == 'TALLY_STATUS':
-                print(f"[TALLY_STATUS] Received from {self.connector_id}: {data}")
+                logger.debug(f"[TALLY_STATUS] Received from {self.connector_id}: {data}")
                 await self.handle_tally_status(data)
 
             elif message_type == 'CONNECTION_STATUS':
@@ -196,7 +196,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         connected = data.get('connected', False)
         company_name = data.get('companyName', '') or data.get('company_name', '')
 
-        print(f"[handle_tally_status] Processing: connected={connected}, company_name={company_name}")
+        logger.debug(f"[handle_tally_status] Processing: connected={connected}, company_name={company_name}")
 
         # Broadcast to web clients
         await self.channel_layer.group_send(
@@ -210,12 +210,12 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         )
 
         # Update stored status with company name
-        print(f"[handle_tally_status] Updating cache for {self.connector_id}")
+        logger.debug(f"[handle_tally_status] Updating cache for {self.connector_id}")
         await self.update_connection_info({
             'tally_connected': connected,
             'company_name': company_name
         })
-        print(f"[handle_tally_status] Cache updated successfully")
+        logger.debug(f"[handle_tally_status] Cache updated successfully")
 
     async def handle_connection_status(self, data):
         """Handle connection check response."""
@@ -234,7 +234,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         ledgers = data.get('ledgers', [])
 
-        print(f"[handle_ledgers_response] Received {len(ledgers)} ledgers for request {request_id}")
+        logger.debug(f"[handle_ledgers_response] Received {len(ledgers)} ledgers for request {request_id}")
 
         # Store in cache for synchronous API to retrieve
         if request_id:
@@ -255,7 +255,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         error = data.get('error', 'Unknown error')
 
-        print(f"[handle_ledgers_error] Error for request {request_id}: {error}")
+        logger.error(f"[handle_ledgers_error] Error for request {request_id}: {error}")
 
         # Store error in cache for synchronous API to retrieve
         if request_id:
@@ -277,7 +277,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         from django.core.cache import cache
         cache_key = f"ledgers_response_{self.organization_id}_{request_id}"
         cache.set(cache_key, data, timeout=60)  # Store for 60 seconds
-        print(f"[cache_ledgers_response] Cached response at key: {cache_key}")
+        logger.debug(f"[cache_ledgers_response] Cached response at key: {cache_key}")
 
     @database_sync_to_async
     def cache_sync_response(self, request_id, data):
@@ -285,7 +285,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         from django.core.cache import cache
         cache_key = f"sync_response_{self.organization_id}_{request_id}"
         cache.set(cache_key, data, timeout=120)  # Store for 2 minutes
-        print(f"[cache_sync_response] Cached response at key: {cache_key}")
+        logger.debug(f"[cache_sync_response] Cached response at key: {cache_key}")
 
     async def handle_sync_result(self, data):
         """Handle sync result from connector."""
@@ -362,7 +362,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         parties = data.get('parties', [])
 
-        print(f"[handle_parties_response] Received {len(parties)} parties for request {request_id}")
+        logger.debug(f"[handle_parties_response] Received {len(parties)} parties for request {request_id}")
 
         # Store in cache for synchronous API to retrieve
         if request_id:
@@ -383,7 +383,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         error = data.get('error', 'Unknown error')
 
-        print(f"[handle_parties_error] Error for request {request_id}: {error}")
+        logger.error(f"[handle_parties_error] Error for request {request_id}: {error}")
 
         if request_id:
             await self.cache_parties_response(request_id, {'error': error, 'parties': []})
@@ -403,14 +403,14 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         from django.core.cache import cache
         cache_key = f"parties_response_{self.organization_id}_{request_id}"
         cache.set(cache_key, data, timeout=60)
-        print(f"[cache_parties_response] Cached response at key: {cache_key}")
+        logger.debug(f"[cache_parties_response] Cached response at key: {cache_key}")
 
     async def handle_stock_items_response(self, data):
         """Handle stock items list response from Tally."""
         request_id = data.get('request_id', data.get('requestId', ''))
         stock_items = data.get('stock_items', [])
 
-        print(f"[handle_stock_items_response] Received {len(stock_items)} stock items for request {request_id}")
+        logger.debug(f"[handle_stock_items_response] Received {len(stock_items)} stock items for request {request_id}")
 
         if request_id:
             await self.cache_stock_items_response(request_id, {'stock_items': stock_items})
@@ -429,7 +429,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         error = data.get('error', 'Unknown error')
 
-        print(f"[handle_stock_items_error] Error for request {request_id}: {error}")
+        logger.error(f"[handle_stock_items_error] Error for request {request_id}: {error}")
 
         if request_id:
             await self.cache_stock_items_response(request_id, {'error': error, 'stock_items': []})
@@ -449,14 +449,14 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         from django.core.cache import cache
         cache_key = f"stock_items_response_{self.organization_id}_{request_id}"
         cache.set(cache_key, data, timeout=60)
-        print(f"[cache_stock_items_response] Cached response at key: {cache_key}")
+        logger.debug(f"[cache_stock_items_response] Cached response at key: {cache_key}")
 
     async def handle_sales_vouchers_response(self, data):
         """Handle sales vouchers list response from Tally."""
         request_id = data.get('request_id', data.get('requestId', ''))
         vouchers = data.get('vouchers', [])
 
-        print(f"[handle_sales_vouchers_response] Received {len(vouchers)} sales vouchers for request {request_id}")
+        logger.debug(f"[handle_sales_vouchers_response] Received {len(vouchers)} sales vouchers for request {request_id}")
 
         if request_id:
             await self.cache_sales_vouchers_response(request_id, {'vouchers': vouchers})
@@ -475,7 +475,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         request_id = data.get('request_id', data.get('requestId', ''))
         error = data.get('error', 'Unknown error')
 
-        print(f"[handle_sales_vouchers_error] Error for request {request_id}: {error}")
+        logger.error(f"[handle_sales_vouchers_error] Error for request {request_id}: {error}")
 
         if request_id:
             await self.cache_sales_vouchers_response(request_id, {'error': error, 'vouchers': []})
@@ -495,7 +495,7 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
         from django.core.cache import cache
         cache_key = f"sales_vouchers_response_{self.organization_id}_{request_id}"
         cache.set(cache_key, data, timeout=120)  # 2 minutes as it may have more data
-        print(f"[cache_sales_vouchers_response] Cached response at key: {cache_key}")
+        logger.debug(f"[cache_sales_vouchers_response] Cached response at key: {cache_key}")
 
     # Channel layer message handlers (from web app)
 

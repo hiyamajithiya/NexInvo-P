@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { invoiceAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
+import { formatCurrency } from '../utils/formatCurrency';
+import { statCardStyles } from '../styles/statCardStyles';
 import './Pages.css';
 import InvoiceForm from './InvoiceForm';
 import ScheduledInvoices from './ScheduledInvoices';
 
 function Invoices({ initialFilter = null }) {
   const [invoices, setInvoices] = useState([]);
+  const [allProformaInvoices, setAllProformaInvoices] = useState([]);
+  const [allTaxInvoices, setAllTaxInvoices] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showScheduledInvoices, setShowScheduledInvoices] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
@@ -22,6 +26,16 @@ function Invoices({ initialFilter = null }) {
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const isMountedRef = useRef(true);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const allInvoices = [...allProformaInvoices, ...allTaxInvoices];
+    const totalAmount = allInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0);
+    const pendingAmount = allInvoices
+      .filter(inv => inv.status === 'pending' || inv.status === 'sent' || inv.status === 'draft' || !inv.is_paid)
+      .reduce((sum, inv) => sum + (parseFloat(inv.balance_due) || parseFloat(inv.total_amount) || 0), 0);
+    return { totalAmount, pendingAmount };
+  }, [allProformaInvoices, allTaxInvoices]);
 
   // Handle initial filter from props
   useEffect(() => {
@@ -65,9 +79,7 @@ function Invoices({ initialFilter = null }) {
         setInvoices(response.data.results || response.data || []);
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        console.error('Error loading invoices:', err);
-      }
+      // Error handled silently
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -78,18 +90,20 @@ function Invoices({ initialFilter = null }) {
   const loadInvoiceCounts = async () => {
     try {
       const proformaResponse = await invoiceAPI.getAll({ invoice_type: 'proforma' });
+      const proformaData = proformaResponse.data.results || proformaResponse.data || [];
       if (isMountedRef.current) {
-        setProformaCount((proformaResponse.data.results || proformaResponse.data || []).length);
+        setProformaCount(proformaData.length);
+        setAllProformaInvoices(proformaData);
       }
 
       const taxResponse = await invoiceAPI.getAll({ invoice_type: 'tax' });
+      const taxData = taxResponse.data.results || taxResponse.data || [];
       if (isMountedRef.current) {
-        setTaxInvoiceCount((taxResponse.data.results || taxResponse.data || []).length);
+        setTaxInvoiceCount(taxData.length);
+        setAllTaxInvoices(taxData);
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        console.error('Error loading invoice counts:', err);
-      }
+      // Error handled silently
     }
   };
 
@@ -99,7 +113,6 @@ function Invoices({ initialFilter = null }) {
         await invoiceAPI.delete(id);
         loadInvoices();
       } catch (err) {
-        console.error('Error deleting invoice:', err);
         alert('Failed to delete invoice');
       }
     }
@@ -116,7 +129,6 @@ function Invoices({ initialFilter = null }) {
       link.click();
       link.remove();
     } catch (err) {
-      console.error('Error generating PDF:', err);
       alert('Failed to generate PDF');
     }
   };
@@ -128,7 +140,6 @@ function Invoices({ initialFilter = null }) {
       const url = window.URL.createObjectURL(blob);
       window.open(url, '_blank');
     } catch (err) {
-      console.error('Error viewing PDF:', err);
       alert('Failed to view PDF');
     }
   };
@@ -139,7 +150,6 @@ function Invoices({ initialFilter = null }) {
       alert(response.data.message || 'Invoice sent successfully!');
       loadInvoices();
     } catch (err) {
-      console.error('Error sending email:', err);
       alert(err.response?.data?.error || 'Failed to send invoice email');
     }
   };
@@ -151,7 +161,6 @@ function Invoices({ initialFilter = null }) {
         alert(response.data.message || 'Proforma converted to tax invoice successfully!');
         loadInvoices();
       } catch (err) {
-        console.error('Error converting invoice:', err);
         alert(err.response?.data?.error || 'Failed to convert invoice');
       }
     }
@@ -188,7 +197,6 @@ Thank you for your business!`;
       const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
     } catch (err) {
-      console.error('Error sharing via WhatsApp:', err);
       alert('Failed to share via WhatsApp');
     }
   };
@@ -199,7 +207,6 @@ Thank you for your business!`;
       setEditingInvoice(response.data);
       setShowForm(true);
     } catch (err) {
-      console.error('Error loading invoice:', err);
       alert('Failed to load invoice for editing');
     }
   };
@@ -246,12 +253,11 @@ Thank you for your business!`;
       if (failed_count > 0) {
         message += `, ${failed_count} failed`;
         if (errors && errors.length > 0) {
-          console.warn('Bulk email errors:', errors);
+          // Errors tracked in server response
         }
       }
       alert(message);
     } catch (err) {
-      console.error('Error sending bulk emails:', err);
       alert(err.response?.data?.error || 'Failed to send emails');
     }
 
@@ -279,7 +285,7 @@ Thank you for your business!`;
         // Small delay between downloads
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err) {
-        console.error(`Error downloading PDF for invoice ${id}:`, err);
+        // Error handled silently
       }
     }
 
@@ -308,7 +314,7 @@ Thank you for your business!`;
         // Small delay between opening windows
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (err) {
-        console.error(`Error printing invoice ${id}:`, err);
+        // Error handled silently
       }
     }
 
@@ -332,7 +338,6 @@ Thank you for your business!`;
         await invoiceAPI.delete(id);
         successCount++;
       } catch (err) {
-        console.error(`Error deleting invoice ${id}:`, err);
         failedCount++;
       }
     }
@@ -388,7 +393,6 @@ Thank you for your business!`;
       link.click();
       link.remove();
     } catch (err) {
-      console.error('Error downloading template:', err);
       alert('Failed to download template');
     }
   };
@@ -451,7 +455,6 @@ Thank you for your business!`;
       alert(message);
       loadInvoices();
     } catch (err) {
-      console.error('Error importing invoices:', err);
       setImportProgress(null);
       alert(err.response?.data?.error || 'Failed to import invoices');
     } finally {
@@ -495,6 +498,38 @@ Thank you for your business!`;
             <span className="btn-icon">➕</span>
             Create Invoice
           </button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div style={statCardStyles.statsGrid}>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#6366f1'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>📄</span>
+            <span style={statCardStyles.statLabel}>Total Invoices</span>
+          </div>
+          <p style={statCardStyles.statValue}>{proformaCount + taxInvoiceCount}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#10b981'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>📋</span>
+            <span style={statCardStyles.statLabel}>Proforma Invoices</span>
+          </div>
+          <p style={statCardStyles.statValue}>{proformaCount}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#f59e0b'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>🧾</span>
+            <span style={statCardStyles.statLabel}>Tax Invoices</span>
+          </div>
+          <p style={statCardStyles.statValue}>{taxInvoiceCount}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#ef4444'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>💰</span>
+            <span style={statCardStyles.statLabel}>Pending Amount</span>
+          </div>
+          <p style={{...statCardStyles.statValue, fontSize: '22px', color: '#ef4444'}}>{formatCurrency(stats.pendingAmount)}</p>
         </div>
       </div>
 

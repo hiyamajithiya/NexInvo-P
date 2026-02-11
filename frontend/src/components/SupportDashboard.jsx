@@ -49,7 +49,7 @@ const SupportDashboard = () => {
       setOrganizations(orgsResponse.data);
       setStats(statsResponse.data);
     } catch (error) {
-      console.error('Error loading data:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }

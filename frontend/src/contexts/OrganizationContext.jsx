@@ -44,7 +44,6 @@ export const OrganizationProvider = ({ children }) => {
 
       setLoading(false);
     } catch (err) {
-      console.error('Failed to load organizations:', err);
       setError(err.response?.data?.message || 'Failed to load organizations');
       setLoading(false);
     }
@@ -63,7 +62,6 @@ export const OrganizationProvider = ({ children }) => {
       }
       return response.data;
     } catch (err) {
-      console.error('Failed to switch organization:', err);
       throw err;
     }
   }, [organizations]);
@@ -75,7 +73,6 @@ export const OrganizationProvider = ({ children }) => {
       await loadOrganizations(); // Reload organizations
       return response.data;
     } catch (err) {
-      console.error('Failed to create organization:', err);
       throw err;
     }
   }, [loadOrganizations]);
@@ -87,7 +84,6 @@ export const OrganizationProvider = ({ children }) => {
       await loadOrganizations(); // Reload organizations
       return response.data;
     } catch (err) {
-      console.error('Failed to update organization:', err);
       throw err;
     }
   }, [loadOrganizations]);
@@ -98,7 +94,6 @@ export const OrganizationProvider = ({ children }) => {
       const response = await organizationAPI.inviteMember(orgId, { email, role });
       return response.data;
     } catch (err) {
-      console.error('Failed to invite member:', err);
       throw err;
     }
   }, []);
@@ -109,7 +104,6 @@ export const OrganizationProvider = ({ children }) => {
       const response = await organizationAPI.getMembers(orgId);
       return response.data;
     } catch (err) {
-      console.error('Failed to get members:', err);
       throw err;
     }
   }, []);
@@ -120,7 +114,6 @@ export const OrganizationProvider = ({ children }) => {
       const response = await organizationAPI.updateMember(orgId, userId, data);
       return response.data;
     } catch (err) {
-      console.error('Failed to update member:', err);
       throw err;
     }
   }, []);
@@ -130,7 +123,6 @@ export const OrganizationProvider = ({ children }) => {
     try {
       await organizationAPI.removeMember(orgId, userId);
     } catch (err) {
-      console.error('Failed to remove member:', err);
       throw err;
     }
   }, []);

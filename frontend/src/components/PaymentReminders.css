@@ -1,0 +1,506 @@
+.payment-reminders-container {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.reminders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.reminders-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.reminders-tabs {
+  display: flex;
+  gap: 5px;
+  background: #f0f0f0;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.reminders-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reminders-tab:hover {
+  background: rgba(255,255,255,0.5);
+}
+
+.reminders-tab.active {
+  background: white;
+  color: #4f46e5;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.payment-reminders-container .filter-section {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.payment-reminders-container .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-reminders-container .filter-group label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.payment-reminders-container .filter-group select,
+.payment-reminders-container .filter-group input {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.payment-reminders-container .filter-group input {
+  width: 100px;
+}
+
+.payment-reminders-container .action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background: #e8f4fd;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.payment-reminders-container .selection-info {
+  font-size: 14px;
+  color: #333;
+}
+
+.payment-reminders-container .action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.payment-reminders-container .btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.payment-reminders-container .btn-primary {
+  background: #4f46e5;
+  color: white;
+}
+
+.payment-reminders-container .btn-primary:hover {
+  background: #4338ca;
+}
+
+.payment-reminders-container .btn-primary:disabled {
+  background: #a5a3d9;
+  cursor: not-allowed;
+}
+
+.payment-reminders-container .btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.payment-reminders-container .btn-secondary:hover {
+  background: #5a6268;
+}
+
+.payment-reminders-container .btn-success {
+  background: #28a745;
+  color: white;
+}
+
+.payment-reminders-container .btn-success:hover {
+  background: #218838;
+}
+
+.payment-reminders-container .btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.payment-reminders-container .btn-danger:hover {
+  background: #c82333;
+}
+
+.payment-reminders-container .payments-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.payment-reminders-container .payments-table th {
+  background: #f8f9fa;
+  padding: 12px 15px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.payment-reminders-container .payments-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+.payment-reminders-container .payments-table tr:hover {
+  background: #f8f9fa;
+}
+
+.payment-reminders-container .payments-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.payment-reminders-container .party-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.payment-reminders-container .party-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.payment-reminders-container .party-contact {
+  font-size: 12px;
+  color: #888;
+}
+
+.payment-reminders-container .voucher-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.payment-reminders-container .voucher-number {
+  font-weight: 500;
+  color: #4f46e5;
+}
+
+.payment-reminders-container .voucher-type {
+  font-size: 12px;
+  color: #888;
+}
+
+.payment-reminders-container .amount-cell {
+  text-align: right;
+  font-weight: 500;
+}
+
+.payment-reminders-container .overdue-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.payment-reminders-container .type-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.payment-reminders-container .type-receivable {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.payment-reminders-container .type-payable {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.payment-reminders-container .modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.payment-reminders-container .modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.payment-reminders-container .modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.payment-reminders-container .form-group {
+  margin-bottom: 15px;
+}
+
+.payment-reminders-container .form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.payment-reminders-container .form-group select,
+.payment-reminders-container .form-group input,
+.payment-reminders-container .form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.payment-reminders-container .form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.payment-reminders-container .channel-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.payment-reminders-container .channel-option {
+  flex: 1;
+  min-width: 100px;
+  padding: 15px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.payment-reminders-container .channel-option:hover {
+  border-color: #4f46e5;
+}
+
+.payment-reminders-container .channel-option.selected {
+  border-color: #4f46e5;
+  background: #f0f0ff;
+}
+
+.payment-reminders-container .channel-option .icon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.payment-reminders-container .channel-option span {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.payment-reminders-container .modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.payment-reminders-container .settings-section {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.payment-reminders-container .settings-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-reminders-container .settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.payment-reminders-container .settings-row:last-child {
+  border-bottom: none;
+}
+
+.payment-reminders-container .settings-label {
+  font-size: 14px;
+  color: #333;
+}
+
+.payment-reminders-container .settings-description {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.payment-reminders-container .toggle-switch {
+  position: relative;
+  width: 50px;
+  height: 26px;
+}
+
+.payment-reminders-container .toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.payment-reminders-container .toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.payment-reminders-container .toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.payment-reminders-container .toggle-switch input:checked + .toggle-slider {
+  background-color: #4f46e5;
+}
+
+.payment-reminders-container .toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+.payment-reminders-container .empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+}
+
+.payment-reminders-container .empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.payment-reminders-container .empty-state h3 {
+  font-size: 18px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.payment-reminders-container .loading-spinner {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.payment-reminders-container .summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.payment-reminders-container .summary-card {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.payment-reminders-container .summary-card-title {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 5px;
+}
+
+.payment-reminders-container .summary-card-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.payment-reminders-container .summary-card-subtitle {
+  font-size: 12px;
+  color: #888;
+  margin-top: 5px;
+}

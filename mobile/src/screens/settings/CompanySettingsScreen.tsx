@@ -6,7 +6,6 @@ import {
   Alert,
   Image,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import {
   Text,
@@ -71,7 +70,6 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
       setEmail(data.email || '');
       setLogo(data.logo || null);
     } catch (error) {
-      console.error('Error fetching company settings:', error);
       Alert.alert('Error', 'Failed to load company settings');
     } finally {
       setLoading(false);
@@ -112,7 +110,6 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
         }
       }
     } catch (error) {
-      console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image');
     }
   };
@@ -155,7 +152,6 @@ export default function CompanySettingsScreen({ navigation }: CompanySettingsScr
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error: any) {
-      console.error('Error updating company settings:', error);
       Alert.alert(
         'Error',
         error.response?.data?.error || 'Failed to update company settings'

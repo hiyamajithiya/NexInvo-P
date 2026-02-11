@@ -204,7 +204,7 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
       }
 
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      // Error handled silently
     } finally {
       setIsLoading(false);
     }
@@ -274,7 +274,7 @@ function OnboardingWizard({ onComplete, onNavigate, onMinimize }) {
 
       setStepsCompleted(completionStatus);
     } catch (error) {
-      console.error('Error refreshing completion status:', error);
+      // Error handled silently
     }
   }, [stepsCompleted]);
 

@@ -12,7 +12,6 @@ import {
   Divider,
   Button,
   Avatar,
-  useTheme,
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,7 +22,6 @@ import colors from '../../theme/colors';
 type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SettingsScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<SettingsScreenNavigationProp>();
   const { user, organization, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -42,7 +40,7 @@ export default function SettingsScreen() {
             try {
               await logout();
             } catch (error) {
-              console.error('Logout error:', error);
+              // Error handled silently
             } finally {
               setLoggingOut(false);
             }

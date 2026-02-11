@@ -4,7 +4,6 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  TouchableOpacity,
   Alert,
 } from 'react-native';
 import {
@@ -22,6 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import api from '../../services/api';
 import { ScheduledInvoiceListItem, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatters';
 
 type ScheduledInvoicesScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -52,7 +52,7 @@ export default function ScheduledInvoicesScreen() {
       }
       setHasMore(!!data.next);
     } catch (error) {
-      console.error('Error fetching scheduled invoices:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -79,39 +79,6 @@ export default function ScheduledInvoicesScreen() {
   const loadMore = () => {
     if (hasMore && !loading) {
       fetchScheduledInvoices();
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    const normalizedStatus = status?.toLowerCase()?.trim();
-    switch (normalizedStatus) {
-      case 'active':
-        return { bg: colors.success.light, text: colors.success.dark };
-      case 'paused':
-        return { bg: colors.warning.light, text: colors.warning.dark };
-      case 'completed':
-        return { bg: '#e0e7ff', text: '#4f46e5' }; // Purple/Indigo for completed
-      case 'cancelled':
-        return { bg: colors.error.light, text: colors.error.dark };
-      default:
-        return { bg: colors.gray[200], text: colors.gray[600] };
     }
   };
 

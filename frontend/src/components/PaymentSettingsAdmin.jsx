@@ -47,7 +47,6 @@ const PaymentSettingsAdmin = () => {
         setSettings(response.data.settings);
       }
     } catch (error) {
-      console.error('Error loading payment settings:', error);
       showSnackbar('Failed to load payment settings', 'error');
     } finally {
       setLoading(false);
@@ -67,7 +66,6 @@ const PaymentSettingsAdmin = () => {
       await api.put('/superadmin/payment-settings/', settings);
       showSnackbar('Payment settings saved successfully', 'success');
     } catch (error) {
-      console.error('Error saving payment settings:', error);
       showSnackbar(error.response?.data?.error || 'Failed to save payment settings', 'error');
     } finally {
       setSaving(false);

@@ -49,7 +49,7 @@ function Reports() {
       setClients(clientsResponse.data.results || clientsResponse.data || []);
       setPayments(paymentsResponse.data.results || paymentsResponse.data || []);
     } catch (err) {
-      console.error('Error loading data:', err);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -346,7 +346,6 @@ function Reports() {
       setShowEmailModal(false);
       setEmailRecipient('');
     } catch (err) {
-      console.error('Error sending report:', err);
       alert(err.response?.data?.error || 'Failed to send report. Please check your email settings.');
     } finally {
       setSendingEmail(false);

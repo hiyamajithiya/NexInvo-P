@@ -74,12 +74,6 @@ class ApiService {
           config.headers['X-Organization-ID'] = this.organizationId;
         }
 
-        console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-          hasAuth: !!this.accessToken,
-          hasSession: !!this.sessionToken,
-          orgId: this.organizationId,
-        });
-
         return config;
       },
       (error) => Promise.reject(error)
@@ -111,7 +105,7 @@ class ApiService {
       this.sessionToken = await SecureStore.getItemAsync('sessionToken');
       this.organizationId = await SecureStore.getItemAsync('organizationId');
     } catch (error) {
-      console.error('Error loading tokens:', error);
+      // Error handled silently
     }
   }
 
@@ -124,7 +118,7 @@ class ApiService {
       this.sessionToken = session;
       this.organizationId = orgId;
     } catch (error) {
-      console.error('Error saving tokens:', error);
+      // Error handled silently
     }
   }
 
@@ -138,7 +132,7 @@ class ApiService {
       this.sessionToken = null;
       this.organizationId = null;
     } catch (error) {
-      console.error('Error clearing tokens:', error);
+      // Error handled silently
     }
   }
 
@@ -579,179 +573,6 @@ class ApiService {
     return response.data;
   }
 
-  // ==================== GOODS TRADER APIS ====================
-
-  // ==================== Products ====================
-
-  async getProducts(params?: { page?: number; search?: string }): Promise<any> {
-    const response = await this.api.get('products/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
-
-  async getProduct(id: number): Promise<any> {
-    const response = await this.api.get(`products/${id}/`);
-    return response.data;
-  }
-
-  async createProduct(data: any): Promise<any> {
-    const response = await this.api.post('products/', data);
-    return response.data;
-  }
-
-  async updateProduct(id: number, data: any): Promise<any> {
-    const response = await this.api.put(`products/${id}/`, data);
-    return response.data;
-  }
-
-  async deleteProduct(id: number): Promise<void> {
-    await this.api.delete(`products/${id}/`);
-  }
-
-  async adjustProductStock(id: number, data: { adjustment_type: string; quantity: number; notes?: string }): Promise<any> {
-    const response = await this.api.post(`products/${id}/adjust_stock/`, data);
-    return response.data;
-  }
-
-  async getLowStockProducts(): Promise<any> {
-    const response = await this.api.get('products/low_stock/');
-    return response.data;
-  }
-
-  // ==================== Suppliers ====================
-
-  async getSuppliers(params?: { page?: number; search?: string }): Promise<any> {
-    const response = await this.api.get('suppliers/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
-
-  async getSupplier(id: number): Promise<any> {
-    const response = await this.api.get(`suppliers/${id}/`);
-    return response.data;
-  }
-
-  async createSupplier(data: any): Promise<any> {
-    const response = await this.api.post('suppliers/', data);
-    return response.data;
-  }
-
-  async updateSupplier(id: number, data: any): Promise<any> {
-    const response = await this.api.put(`suppliers/${id}/`, data);
-    return response.data;
-  }
-
-  async deleteSupplier(id: number): Promise<void> {
-    await this.api.delete(`suppliers/${id}/`);
-  }
-
-  // ==================== Purchases ====================
-
-  async getPurchases(params?: { page?: number; search?: string; status?: string; payment_status?: string }): Promise<any> {
-    const response = await this.api.get('purchases/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
-
-  async getPurchase(id: number): Promise<any> {
-    const response = await this.api.get(`purchases/${id}/`);
-    return response.data;
-  }
-
-  async createPurchase(data: any): Promise<any> {
-    const response = await this.api.post('purchases/', data);
-    return response.data;
-  }
-
-  async updatePurchase(id: number, data: any): Promise<any> {
-    const response = await this.api.put(`purchases/${id}/`, data);
-    return response.data;
-  }
-
-  async deletePurchase(id: number): Promise<void> {
-    await this.api.delete(`purchases/${id}/`);
-  }
-
-  async markPurchaseReceived(id: number): Promise<any> {
-    const response = await this.api.post(`purchases/${id}/mark_received/`);
-    return response.data;
-  }
-
-  // ==================== Supplier Payments ====================
-
-  async getSupplierPayments(params?: { page?: number; supplier?: number }): Promise<any> {
-    const response = await this.api.get('supplier-payments/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
-
-  async createSupplierPayment(data: any): Promise<any> {
-    const response = await this.api.post('supplier-payments/', data);
-    return response.data;
-  }
-
-  // ==================== Units of Measurement ====================
-
-  async getUnits(params?: { page?: number }): Promise<any> {
-    const response = await this.api.get('units/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
-
-  async getPredefinedUnits(): Promise<any> {
-    const response = await this.api.get('units/predefined/');
-    return response.data;
-  }
-
-  // ==================== Inventory Movements ====================
-
-  async getInventoryMovements(params?: { page?: number; product?: number }): Promise<any> {
-    const response = await this.api.get('inventory-movements/', { params });
-    if (Array.isArray(response.data)) {
-      return {
-        count: response.data.length,
-        next: null,
-        previous: null,
-        results: response.data,
-      };
-    }
-    return response.data;
-  }
 }
 
 export const api = new ApiService();

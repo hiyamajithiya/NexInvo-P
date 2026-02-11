@@ -76,8 +76,8 @@ def get_setu_status(request):
         pattern = f":1:setu_connector_setu_{organization_id}_*"
         matching_keys = r.keys(pattern)
 
-        print(f"[Setu Status Debug] Org ID: {organization_id}, Pattern: {pattern}")
-        print(f"[Setu Status Debug] Matching keys: {matching_keys}")
+        logger.debug(f"[Setu Status] Org ID: {organization_id}, Pattern: {pattern}")
+        logger.debug(f"[Setu Status] Matching keys: {matching_keys}")
 
         # Try each matching key until we find a fresh connection
         for key in matching_keys:
@@ -88,7 +88,7 @@ def get_setu_status(request):
             cache_key = key_str.replace(":1:", "", 1) if key_str.startswith(":1:") else key_str
 
             connector_info = cache.get(cache_key)
-            print(f"[Setu Status Debug] Checking key {cache_key}: {connector_info}")
+            logger.debug(f"[Setu Status] Checking key {cache_key}: {connector_info}")
 
             if connector_info:
                 break
@@ -97,14 +97,14 @@ def get_setu_status(request):
         if not connector_info:
             user_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
             connector_info = cache.get(user_key)
-            print(f"[Setu Status Debug] Fallback to user key {user_key}: {connector_info}")
+            logger.debug(f"[Setu Status] Fallback to user key {user_key}: {connector_info}")
 
     except Exception as e:
-        print(f"[Setu Status Debug] Error scanning Redis: {e}")
+        logger.error(f"[Setu Status] Error scanning Redis: {e}")
         # Fallback to user-specific key
         connector_key = f"setu_connector_setu_{organization_id}_{request.user.id}"
         connector_info = cache.get(connector_key)
-        print(f"[Setu Status Debug] Fallback cache result: {connector_info}")
+        logger.debug(f"[Setu Status] Fallback cache result: {connector_info}")
 
     if connector_info:
         # Verify the connection is still fresh by checking last_heartbeat
@@ -118,13 +118,13 @@ def get_setu_status(request):
                 # Allow 2 minutes grace period for heartbeat
                 time_diff = datetime.now() - heartbeat_time
                 is_fresh = time_diff < timedelta(minutes=2)
-                print(f"[Setu Status Debug] Heartbeat age: {time_diff.total_seconds()}s, is_fresh: {is_fresh}")
+                logger.debug(f"[Setu Status] Heartbeat age: {time_diff.total_seconds()}s, is_fresh: {is_fresh}")
             except (ValueError, TypeError) as e:
-                print(f"[Setu Status Debug] Failed to parse heartbeat: {e}")
+                logger.error(f"[Setu Status] Failed to parse heartbeat: {e}")
                 is_fresh = False
         else:
             # No heartbeat field - this is a stale/old format cache entry
-            print(f"[Setu Status Debug] No last_heartbeat field in cache entry")
+            logger.debug(f"[Setu Status] No last_heartbeat field in cache entry")
             is_fresh = False
 
         if is_fresh:
@@ -134,7 +134,7 @@ def get_setu_status(request):
         else:
             # Stale connection - delete the cache entry
             cache.delete(connector_key)
-            print(f"[Setu Status Debug] Deleted stale cache entry: {connector_key}")
+            logger.debug(f"[Setu Status] Deleted stale cache entry: {connector_key}")
 
     return Response({
         'setu_connected': setu_connected,
@@ -161,18 +161,17 @@ def check_setu_connector(request):
     connector_key = f"setu_connector_setu_{organization_id}_*"
     connectors = []
 
-    # Get all connector keys for this organization
-    # Note: This is a simplified approach. In production, use Redis SCAN
-    for key in cache.keys(f"setu_connector_*"):
-        if f"_{organization_id}_" in key:
-            connector_info = cache.get(key)
-            if connector_info:
-                connectors.append({
-                    'id': key.replace('setu_connector_', ''),
-                    'connected_at': connector_info.get('connected_at'),
-                    'tally_connected': connector_info.get('tally_connected', False),
-                    'version': connector_info.get('version', 'unknown')
-                })
+    # Get connector status for this organization
+    # Use a known cache key pattern instead of cache.keys() which is Redis-only
+    connector_key = f"setu_connector_setu_{organization_id}"
+    connector_info = cache.get(connector_key)
+    if connector_info:
+        connectors.append({
+            'id': f"setu_{organization_id}",
+            'connected_at': connector_info.get('connected_at'),
+            'tally_connected': connector_info.get('tally_connected', False),
+            'version': connector_info.get('version', 'unknown')
+        })
 
     if connectors:
         return Response({

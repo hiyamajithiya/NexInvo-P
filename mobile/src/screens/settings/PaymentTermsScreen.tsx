@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -34,7 +34,6 @@ export default function PaymentTermsScreen({ navigation }: PaymentTermsScreenPro
       const data = await api.getPaymentTerms();
       setTerms(data.results);
     } catch (error) {
-      console.error('Error fetching payment terms:', error);
       Alert.alert('Error', 'Failed to load payment terms');
     } finally {
       setLoading(false);

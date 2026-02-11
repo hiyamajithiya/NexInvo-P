@@ -2,12 +2,14 @@
 Tally Sync Module
 Handles communication with Tally Prime/ERP 9 via ODBC protocol.
 """
+import logging
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models import Sum
+
+logger = logging.getLogger(__name__)
 
 
 class TallyConnector:
@@ -29,22 +31,22 @@ class TallyConnector:
                 'Content-Type': 'text/xml; charset=utf-8',
                 'Accept': 'text/xml'
             }
-            print(f"Connecting to Tally at {self.base_url}")
+            logger.info(f"Connecting to Tally at {self.base_url}")
             response = requests.post(
                 self.base_url,
                 data=xml_data.encode('utf-8'),
                 headers=headers,
                 timeout=30
             )
-            print(f"Tally response status: {response.status_code}")
+            logger.debug(f"Tally response status: {response.status_code}")
             return response.text
         except requests.exceptions.ConnectionError as e:
-            print(f"Tally ConnectionError: {e}")
+            logger.error(f"Tally ConnectionError: {e}")
             raise ConnectionError(f"Cannot connect to Tally at {self.base_url}. Ensure Tally is running with ODBC Server enabled on port {self.port}. Error: {str(e)}")
         except requests.exceptions.Timeout:
             raise TimeoutError(f"Tally request timed out after 30 seconds. Check if Tally is responding on {self.base_url}.")
         except Exception as e:
-            print(f"Tally request error: {e}")
+            logger.error(f"Tally request error: {e}")
             raise
 
     def check_connection(self):
@@ -70,7 +72,7 @@ class TallyConnector:
 
         try:
             response = self._send_request(xml_request_simple)
-            print(f"Tally check_connection response (first 500 chars): {response[:500]}")
+            logger.debug(f"Tally check_connection response (first 500 chars): {response[:500]}")
 
             # Check if we got a valid XML response
             if response and ('<ENVELOPE' in response or '<RESPONSE' in response or '<COMPANY' in response):
@@ -128,7 +130,7 @@ class TallyConnector:
                 'tally_version': ''
             }
         except Exception as e:
-            print(f"Unexpected error in check_connection: {e}")
+            logger.error(f"Unexpected error in check_connection: {e}")
             return {
                 'connected': False,
                 'message': f'Unexpected error: {str(e)}',
@@ -165,14 +167,13 @@ class TallyConnector:
             response = self._send_request(xml_request)
             ledgers = []
 
-            # Debug: Print first 1000 chars of response
-            print(f"Tally Response (first 1000 chars): {response[:1000]}")
+            logger.debug(f"Tally Response (first 1000 chars): {response[:1000]}")
 
             # First try regex-based parsing (more robust for Tally's sometimes malformed XML)
             ledgers = self._parse_ledgers_with_regex(response, group)
 
             if ledgers:
-                print(f"Parsed {len(ledgers)} ledgers using regex")
+                logger.info(f"Parsed {len(ledgers)} ledgers using regex")
                 return ledgers
 
             # Fallback to XML parsing
@@ -196,16 +197,16 @@ class TallyConnector:
                         if group is None or parent_group.lower() == group.lower():
                             ledgers.append(ledger_info)
 
-                print(f"Parsed {len(ledgers)} ledgers from Tally using XML")
+                logger.info(f"Parsed {len(ledgers)} ledgers from Tally using XML")
 
             except ET.ParseError as e:
-                print(f"XML Parse Error: {e}")
+                logger.error(f"XML Parse Error: {e}")
                 # Regex parsing already tried above
 
             return ledgers
 
         except Exception as e:
-            print(f"Error fetching ledgers: {e}")
+            logger.error(f"Error fetching ledgers: {e}")
             return []
 
     def _clean_xml_response(self, response):
@@ -287,7 +288,7 @@ class TallyConnector:
             response = self._send_request(xml_request)
             ledgers = []
 
-            print(f"Simple Request Response (first 1000 chars): {response[:1000]}")
+            logger.debug(f"Simple Request Response (first 1000 chars): {response[:1000]}")
 
             try:
                 root = ET.fromstring(response)
@@ -309,7 +310,7 @@ class TallyConnector:
                         if name and name not in [l['name'] for l in ledgers]:
                             ledgers.append({'name': name, 'group': parent})
 
-                print(f"Simple request parsed {len(ledgers)} ledgers")
+                logger.info(f"Simple request parsed {len(ledgers)} ledgers")
 
             except ET.ParseError:
                 pass
@@ -317,7 +318,7 @@ class TallyConnector:
             return ledgers
 
         except Exception as e:
-            print(f"Simple request error: {e}")
+            logger.error(f"Simple request error: {e}")
             return []
 
     def create_sales_voucher(self, invoice, mapping):
@@ -458,8 +459,7 @@ class TallyConnector:
 </BODY>
 </ENVELOPE>'''
 
-        print(f"Generated Voucher XML for {invoice.invoice_number}:")
-        print(voucher_xml)
+        logger.debug(f"Generated Voucher XML for {invoice.invoice_number}:\n{voucher_xml}")
         return voucher_xml
 
     def _build_narration(self, invoice):
@@ -512,7 +512,7 @@ class TallyConnector:
             # Check if the voucher number appears in the response
             return voucher_number in response
         except Exception as e:
-            print(f"Error checking voucher existence: {e}")
+            logger.error(f"Error checking voucher existence: {e}")
             return False  # Assume doesn't exist if we can't check
 
     def create_party_ledger(self, client, mapping):
@@ -559,7 +559,7 @@ class TallyConnector:
             # Check for success in response
             return 'Created' in response or 'CREATED' in response or 'success' in response.lower()
         except Exception as e:
-            print(f"Error creating party ledger: {e}")
+            logger.error(f"Error creating party ledger: {e}")
             return False
 
     def post_voucher(self, xml_data):
@@ -569,7 +569,7 @@ class TallyConnector:
         import re
         try:
             response = self._send_request(xml_data)
-            print(f"Tally Voucher Response: {response}")
+            logger.debug(f"Tally Voucher Response: {response}")
 
             # Parse the response to check CREATED count
             created_match = re.search(r'<CREATED>(\d+)</CREATED>', response, re.IGNORECASE)
@@ -588,7 +588,7 @@ class TallyConnector:
             lineerror_match = re.search(r'<LINEERROR>(.*?)</LINEERROR>', response, re.IGNORECASE | re.DOTALL)
             error_message = lineerror_match.group(1) if lineerror_match else ''
 
-            print(f"Tally Response - Created: {created_count}, Altered: {altered_count}, Errors: {errors_count}, Exceptions: {exceptions_count}")
+            logger.debug(f"Tally Response - Created: {created_count}, Altered: {altered_count}, Errors: {errors_count}, Exceptions: {exceptions_count}")
 
             # Success only if at least one voucher was created or altered
             success = (created_count > 0 or altered_count > 0) and errors_count == 0
@@ -608,7 +608,7 @@ class TallyConnector:
                 }
 
         except Exception as e:
-            print(f"Error posting voucher: {e}")
+            logger.error(f"Error posting voucher: {e}")
             return {
                 'success': False,
                 'response': str(e),
@@ -630,7 +630,7 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
     """
     from .models import Invoice, TallySyncHistory, InvoiceTallySync
 
-    print(f"Starting Tally sync for org {organization.id} from {start_date} to {end_date} (force_resync={force_resync})")
+    logger.info(f"Starting Tally sync for org {organization.id} from {start_date} to {end_date} (force_resync={force_resync})")
 
     # Create sync history record
     sync_history = TallySyncHistory.objects.create(
@@ -656,13 +656,13 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
     if force_resync:
         # Include all invoices, even already synced ones
         invoices = invoices_query
-        print("Force resync enabled - including previously synced invoices")
+        logger.info("Force resync enabled - including previously synced invoices")
     else:
         # Exclude already synced invoices
         invoices = invoices_query.exclude(tally_sync__synced=True)
 
     total_count = invoices.count()
-    print(f"Found {total_count} tax invoices to sync")
+    logger.info(f"Found {total_count} tax invoices to sync")
 
     # Also log if there are proforma invoices in the date range
     proforma_count = Invoice.objects.filter(
@@ -672,7 +672,7 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
         invoice_type='proforma'
     ).count()
     if proforma_count > 0:
-        print(f"Note: {proforma_count} proforma invoices found but not synced (only tax invoices are synced)")
+        logger.info(f"Note: {proforma_count} proforma invoices found but not synced (only tax invoices are synced)")
 
     synced_count = 0
     failed_count = 0
@@ -682,7 +682,7 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
 
     for invoice in invoices:
         try:
-            print(f"Syncing invoice {invoice.invoice_number} (status: {invoice.status})")
+            logger.info(f"Syncing invoice {invoice.invoice_number} (status: {invoice.status})")
 
             # Check if invoice was previously synced
             existing_sync = InvoiceTallySync.objects.filter(invoice=invoice).first()
@@ -694,11 +694,11 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
                     invoice.invoice_date
                 )
                 if voucher_exists:
-                    print(f"Invoice {invoice.invoice_number} already exists in Tally - skipping")
+                    logger.info(f"Invoice {invoice.invoice_number} already exists in Tally - skipping")
                     skipped_existing += 1
                     continue
                 else:
-                    print(f"Invoice {invoice.invoice_number} not found in Tally - will re-sync")
+                    logger.info(f"Invoice {invoice.invoice_number} not found in Tally - will re-sync")
                     # Delete old sync record to allow re-creation
                     existing_sync.delete()
 
@@ -721,16 +721,14 @@ def sync_invoices_to_tally(organization, user, start_date, end_date, mapping, fo
                 )
                 synced_count += 1
                 total_amount += invoice.total_amount or Decimal('0')
-                print(f"Successfully synced invoice {invoice.invoice_number}")
+                logger.info(f"Successfully synced invoice {invoice.invoice_number}")
             else:
                 failed_count += 1
                 failed_ids.append(invoice.id)
-                print(f"Failed to sync invoice {invoice.invoice_number}: {result.get('message', 'Unknown error')}")
+                logger.error(f"Failed to sync invoice {invoice.invoice_number}: {result.get('message', 'Unknown error')}")
 
         except Exception as e:
-            print(f"Error syncing invoice {invoice.invoice_number}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error syncing invoice {invoice.invoice_number}: {e}", exc_info=True)
             failed_count += 1
             failed_ids.append(invoice.id)
 

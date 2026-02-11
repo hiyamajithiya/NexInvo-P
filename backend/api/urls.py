@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from . import setu_views
+from . import dashboard_views
 
 router = DefaultRouter()
 router.register(r'organizations', views.OrganizationViewSet, basename='organization')
@@ -27,6 +28,15 @@ router.register(r'suppliers', views.SupplierViewSet, basename='supplier')
 router.register(r'purchases', views.PurchaseViewSet, basename='purchase')
 router.register(r'inventory-movements', views.InventoryMovementViewSet, basename='inventory-movement')
 router.register(r'supplier-payments', views.SupplierPaymentViewSet, basename='supplier-payment')
+router.register(r'expense-payments', views.ExpensePaymentViewSet, basename='expense-payment')
+
+# Accounting Module routes
+router.register(r'financial-years', views.FinancialYearViewSet, basename='financial-year')
+router.register(r'account-groups', views.AccountGroupViewSet, basename='account-group')
+router.register(r'ledger-accounts', views.LedgerAccountViewSet, basename='ledger-account')
+router.register(r'vouchers', views.VoucherViewSet, basename='voucher')
+router.register(r'voucher-series', views.VoucherNumberSeriesViewSet, basename='voucher-series')
+router.register(r'bank-reconciliations', views.BankReconciliationViewSet, basename='bank-reconciliation')
 urlpatterns = [
     # Invoice-specific endpoints must come before router to avoid conflicts
     path('invoices/import/', views.import_invoices, name='import-invoices'),
@@ -114,4 +124,15 @@ urlpatterns = [
 
     # Goods Trader additional endpoints
     path('units/predefined/', views.predefined_units_view, name='predefined-units'),
+
+    # Accounting Module additional endpoints
+    path('accounting/dashboard/', views.accounting_dashboard_stats, name='accounting-dashboard'),
+
+    # Dashboard Summary APIs (for dashboard widgets)
+    path('dashboard/ageing-summary/', dashboard_views.ageing_report_summary, name='dashboard-ageing-summary'),
+    path('dashboard/analytics-summary/', dashboard_views.analytics_summary, name='dashboard-analytics-summary'),
+    path('dashboard/bank-reconciliation-status/', dashboard_views.bank_reconciliation_status, name='dashboard-bank-reconciliation-status'),
+    path('dashboard/tally-sync-status/', dashboard_views.tally_sync_status, name='dashboard-tally-sync-status'),
+    path('dashboard/opening-balance-status/', dashboard_views.opening_balance_status, name='dashboard-opening-balance-status'),
+    path('dashboard/payment-reminders/', dashboard_views.payment_reminders_summary, name='dashboard-payment-reminders'),
 ]

@@ -64,6 +64,7 @@ const OrganizationSettings = () => {
   // Organization details state
   const [orgName, setOrgName] = useState('');
   const [orgSlug, setOrgSlug] = useState('');
+  const [businessType, setBusinessType] = useState('both');
 
   // Invite dialog state
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -81,6 +82,7 @@ const OrganizationSettings = () => {
     if (currentOrganization) {
       setOrgName(currentOrganization.name);
       setOrgSlug(currentOrganization.slug);
+      setBusinessType(currentOrganization.business_type || 'both');
     }
   }, [currentOrganization]);
 
@@ -98,7 +100,7 @@ const OrganizationSettings = () => {
       const data = await getMembers(currentOrganization.id);
       setMembers(data);
     } catch (err) {
-      console.error('Failed to load members:', err);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -113,6 +115,7 @@ const OrganizationSettings = () => {
       await updateOrganization(currentOrganization.id, {
         name: orgName,
         slug: orgSlug,
+        business_type: businessType,
       });
       setSuccess('Organization updated successfully');
     } catch (err) {
@@ -253,6 +256,62 @@ const OrganizationSettings = () => {
                 margin="normal"
                 helperText="URL-friendly identifier for your organization"
               />
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Business Type</InputLabel>
+                <Select
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                  label="Business Type"
+                >
+                  <MenuItem value="services">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>🛠️</span>
+                      <Box>
+                        <Typography variant="body2">Service Provider</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Professional services, consulting, etc.
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="goods">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>📦</span>
+                      <Box>
+                        <Typography variant="body2">Goods Trader</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Products, inventory, trading
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="both">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>🏢</span>
+                      <Box>
+                        <Typography variant="body2">Both</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Services & goods trading
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+              <Alert severity="info" sx={{ mt: 1, mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Business Type determines dashboard features:</strong>
+                </Typography>
+                <Typography variant="caption" component="div">
+                  • <strong>Service Provider:</strong> Services, Invoices, Receipts
+                </Typography>
+                <Typography variant="caption" component="div">
+                  • <strong>Goods Trader:</strong> Products, Inventory, Purchases, Suppliers
+                </Typography>
+                <Typography variant="caption" component="div">
+                  • <strong>Both:</strong> All features available
+                </Typography>
+              </Alert>
               <TextField
                 label="Plan"
                 value={currentOrganization.plan.toUpperCase()}

@@ -57,7 +57,7 @@ const SalesDashboard = ({ onLogout }) => {
       setMyPerformance(performanceResponse.data);
       setAllOrganizations(orgsResponse.data);
     } catch (error) {
-      console.error('Error loading data:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }

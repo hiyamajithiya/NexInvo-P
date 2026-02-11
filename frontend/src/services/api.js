@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -255,7 +255,10 @@ export const userAPI = {
   getById: (id) => api.get(`/users/${id}/`),
   create: (data) => api.post('/users/', data),
   update: (id, data) => api.put(`/users/${id}/`, data),
+  patch: (id, data) => api.patch(`/users/${id}/`, data),
   delete: (id) => api.delete(`/users/${id}/`),
+  getOrganizations: (id) => api.get(`/users/${id}/organizations/`),
+  resetPassword: (id) => api.post(`/users/${id}/reset-password/`),
 };
 
 // SuperAdmin APIs
@@ -395,6 +398,118 @@ export const supplierPaymentAPI = {
   create: (data) => api.post('/supplier-payments/', data),
   update: (id, data) => api.put(`/supplier-payments/${id}/`, data),
   delete: (id) => api.delete(`/supplier-payments/${id}/`),
+};
+
+// Expense/Outgoing Payment APIs (payments made by business - cash, bank, etc.)
+export const expensePaymentAPI = {
+  getAll: (params) => api.get('/expense-payments/', { params }),
+  getById: (id) => api.get(`/expense-payments/${id}/`),
+  create: (data) => api.post('/expense-payments/', data),
+  update: (id, data) => api.put(`/expense-payments/${id}/`, data),
+  delete: (id) => api.delete(`/expense-payments/${id}/`),
+};
+
+// =============================================================================
+// ACCOUNTING MODULE APIs
+// =============================================================================
+
+// Financial Year APIs
+export const financialYearAPI = {
+  getAll: (params) => api.get('/financial-years/', { params }),
+  getById: (id) => api.get(`/financial-years/${id}/`),
+  create: (data) => api.post('/financial-years/', data),
+  update: (id, data) => api.put(`/financial-years/${id}/`, data),
+  delete: (id) => api.delete(`/financial-years/${id}/`),
+  getCurrent: () => api.get('/financial-years/current/'),
+  createIndianFY: (year) => api.post('/financial-years/create_indian_fy/', { year }),
+};
+
+// Account Group APIs (Chart of Accounts hierarchy)
+export const accountGroupAPI = {
+  getAll: (params) => api.get('/account-groups/', { params }),
+  getById: (id) => api.get(`/account-groups/${id}/`),
+  create: (data) => api.post('/account-groups/', data),
+  update: (id, data) => api.put(`/account-groups/${id}/`, data),
+  delete: (id) => api.delete(`/account-groups/${id}/`),
+  getTree: () => api.get('/account-groups/tree/'),
+};
+
+// Ledger Account APIs (Chart of Accounts)
+export const ledgerAccountAPI = {
+  getAll: (params) => api.get('/ledger-accounts/', { params }),
+  getById: (id) => api.get(`/ledger-accounts/${id}/`),
+  create: (data) => api.post('/ledger-accounts/', data),
+  update: (id, data) => api.put(`/ledger-accounts/${id}/`, data),
+  delete: (id) => api.delete(`/ledger-accounts/${id}/`),
+  getByGroup: () => api.get('/ledger-accounts/by_group/'),
+  getStatement: (id, params) => api.get(`/ledger-accounts/${id}/statement/`, { params }),
+  getCashOrBank: () => api.get('/ledger-accounts/', { params: { cash_or_bank: true, minimal: true } }),
+  getParties: (type) => api.get('/ledger-accounts/', { params: { party_type: type, minimal: true } }),
+};
+
+// Voucher APIs (all transaction types)
+export const voucherAPI = {
+  getAll: (params) => api.get('/vouchers/', { params }),
+  getById: (id) => api.get(`/vouchers/${id}/`),
+  create: (data) => api.post('/vouchers/', data),
+  update: (id, data) => api.put(`/vouchers/${id}/`, data),
+  delete: (id) => api.delete(`/vouchers/${id}/`),
+  post: (id) => api.post(`/vouchers/${id}/post_voucher/`),
+  cancel: (id) => api.post(`/vouchers/${id}/cancel_voucher/`),
+  getDayBook: (date) => api.get('/vouchers/day_book/', { params: { date } }),
+};
+
+// Bank Reconciliation APIs
+export const bankReconciliationAPI = {
+  getAll: (params) => api.get('/bank-reconciliations/', { params }),
+  getById: (id) => api.get(`/bank-reconciliations/${id}/`),
+  create: (data) => api.post('/bank-reconciliations/', data),
+  update: (id, data) => api.put(`/bank-reconciliations/${id}/`, data),
+  delete: (id) => api.delete(`/bank-reconciliations/${id}/`),
+  getUnreconciledEntries: (bank_account) => api.get('/bank-reconciliations/unreconciled_entries/', { params: { bank_account } }),
+  reconcileItem: (id, item_id, is_reconciled) => api.post(`/bank-reconciliations/${id}/reconcile_item/`, { item_id, is_reconciled }),
+};
+
+// Coupon Management APIs
+export const couponAPI = {
+  getAll: (params) => api.get('/coupons/', { params }),
+  getById: (id) => api.get(`/coupons/${id}/`),
+  create: (data) => api.post('/coupons/', data),
+  update: (id, data) => api.put(`/coupons/${id}/`, data),
+  delete: (id) => api.delete(`/coupons/${id}/`),
+  validate: (code) => api.post(`/coupons/${code}/validate/`),
+};
+
+// Bulk Email APIs (SuperAdmin)
+export const bulkEmailAPI = {
+  getTemplates: () => api.get('/superadmin/bulk-email/templates/'),
+  createTemplate: (data) => api.post('/superadmin/bulk-email/templates/', data),
+  updateTemplate: (id, data) => api.put(`/superadmin/bulk-email/templates/${id}/`, data),
+  deleteTemplate: (id) => api.delete(`/superadmin/bulk-email/templates/${id}/`),
+  getCampaigns: () => api.get('/superadmin/bulk-email/campaigns/'),
+  createCampaign: (data) => api.post('/superadmin/bulk-email/campaigns/', data),
+  sendCampaign: (id) => api.post(`/superadmin/bulk-email/campaigns/${id}/send/`),
+  previewCampaign: (id) => api.get(`/superadmin/bulk-email/campaigns/${id}/preview/`),
+  previewRecipients: (params) => api.get('/superadmin/bulk-email/preview-recipients/', { params }),
+};
+
+// Payment Reminder APIs
+export const paymentReminderAPI = {
+  getInvoices: (params) => api.get('/invoices/', { params }),
+  getPurchaseBills: (params) => api.get('/purchases/', { params }),
+  getScheduled: () => api.get('/payment-reminders/scheduled/'),
+  getHistory: () => api.get('/payment-reminders/history/'),
+  send: (data) => api.post('/payment-reminders/send/', data),
+  delete: (id) => api.delete(`/payment-reminders/${id}/`),
+  updateSettings: (data) => api.post('/payment-reminders/settings/', data),
+};
+
+// Review APIs
+export const reviewAPI = {
+  getPublic: () => api.get('/reviews/public/'),
+  checkEligibility: () => api.get('/reviews/check-eligibility/'),
+  dismissPrompt: () => api.post('/reviews/dismiss-prompt/'),
+  submit: (data) => api.post('/reviews/submit/', data),
 };
 
 export default api;

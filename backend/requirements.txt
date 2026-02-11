@@ -10,6 +10,9 @@ django-cors-headers==4.3.1
 django-filter==24.1
 django-extensions==4.1
 
+# API Documentation
+drf-spectacular==0.28.0
+
 # Authentication & Security
 djangorestframework-simplejwt==5.3.1
 PyJWT==2.8.0

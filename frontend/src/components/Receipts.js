@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { invoiceAPI, paymentAPI, receiptAPI } from '../services/api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { invoiceAPI, paymentAPI, receiptAPI, ledgerAccountAPI } from '../services/api';
 import { formatDate } from '../utils/dateFormat';
+import { formatCurrency } from '../utils/formatCurrency';
+import { statCardStyles } from '../styles/statCardStyles';
 import { useToast } from './Toast';
 import './Pages.css';
 
 function Receipts() {
-  const { showSuccess } = useToast();
+  const { showSuccess, showError } = useToast();
   const [receipts, setReceipts] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [cashBankAccounts, setCashBankAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -15,6 +18,7 @@ function Receipts() {
   const [modeFilter, setModeFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const [error, setError] = useState('');
+  const [accountingEnabled, setAccountingEnabled] = useState(false);
 
   // Multi-select states
   const [selectedReceipts, setSelectedReceipts] = useState([]);
@@ -29,7 +33,9 @@ function Receipts() {
     amount_received: 0,
     payment_method: 'bank_transfer',
     reference_number: '',
-    notes: ''
+    notes: '',
+    cash_bank_account: '',
+    post_to_ledger: true
   });
 
   useEffect(() => {
@@ -44,12 +50,26 @@ function Receipts() {
       ]);
       setReceipts(receiptsResponse.data.results || receiptsResponse.data || []);
       setInvoices(invoicesResponse.data.results || invoicesResponse.data || []);
+
+      // Try to load accounting data (cash/bank accounts)
+      try {
+        const cashBankRes = await ledgerAccountAPI.getCashOrBank();
+        const accounts = cashBankRes.data.results || cashBankRes.data || [];
+        setCashBankAccounts(accounts);
+        setAccountingEnabled(accounts.length > 0);
+      } catch (accountErr) {
+        // Accounting not set up yet
+        setAccountingEnabled(false);
+      }
     } catch (err) {
-      console.error('Error loading data:', err);
+      // Error handled silently
     }
   };
 
   const handleRecordReceipt = () => {
+    // Set default cash/bank account based on payment method
+    const defaultAccount = cashBankAccounts.find(acc => acc.account_type === 'bank')?.id ||
+                          cashBankAccounts.find(acc => acc.account_type === 'cash')?.id || '';
     setCurrentReceipt({
       invoice: '',
       payment_date: new Date().toISOString().split('T')[0],
@@ -59,7 +79,9 @@ function Receipts() {
       amount_received: 0,
       payment_method: 'bank_transfer',
       reference_number: '',
-      notes: ''
+      notes: '',
+      cash_bank_account: defaultAccount,
+      post_to_ledger: accountingEnabled
     });
     setShowForm(true);
     setError('');
@@ -101,6 +123,17 @@ function Receipts() {
       updatedReceipt.amount_received = total - tds - gstTds;
     }
 
+    // When payment method changes, suggest appropriate account
+    if (field === 'payment_method' && accountingEnabled) {
+      if (value === 'cash') {
+        const cashAccount = cashBankAccounts.find(acc => acc.account_type === 'cash');
+        if (cashAccount) updatedReceipt.cash_bank_account = cashAccount.id;
+      } else {
+        const bankAccount = cashBankAccounts.find(acc => acc.account_type === 'bank');
+        if (bankAccount) updatedReceipt.cash_bank_account = bankAccount.id;
+      }
+    }
+
     setCurrentReceipt(updatedReceipt);
   };
 
@@ -123,7 +156,6 @@ function Receipts() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Error downloading receipt:', err);
       setError('Failed to download receipt');
     } finally {
       setDownloadingReceipt(null);
@@ -142,7 +174,6 @@ function Receipts() {
       const url = window.URL.createObjectURL(blob);
       window.open(url, '_blank');
     } catch (err) {
-      console.error('Error viewing receipt:', err);
       setError('Failed to view receipt');
     }
   };
@@ -164,11 +195,24 @@ function Receipts() {
       return;
     }
 
+    // Accounting validation
+    if (accountingEnabled && currentReceipt.post_to_ledger && !currentReceipt.cash_bank_account) {
+      setError('Please select a Cash/Bank account for ledger posting');
+      setLoading(false);
+      return;
+    }
+
     try {
+      // Send accounting fields along with payment data - backend handles voucher creation
+      const paymentData = {
+        ...currentReceipt,
+        post_to_ledger: accountingEnabled && currentReceipt.post_to_ledger,
+      };
+
       if (currentReceipt.id) {
-        await paymentAPI.update(currentReceipt.id, currentReceipt);
+        await paymentAPI.update(currentReceipt.id, paymentData);
       } else {
-        await paymentAPI.create(currentReceipt);
+        await paymentAPI.create(paymentData);
       }
 
       showSuccess('Receipt recorded successfully!');
@@ -259,7 +303,6 @@ function Receipts() {
         await receiptAPI.resendEmail(receipt.receipt_id);
         successCount++;
       } catch (err) {
-        console.error(`Error sending email for receipt ${receipt.receipt_id}:`, err);
         failedCount++;
       }
     }
@@ -299,7 +342,7 @@ function Receipts() {
         // Small delay between downloads
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err) {
-        console.error(`Error downloading receipt ${receipt.receipt_id}:`, err);
+        // Error handled silently
       }
     }
 
@@ -337,7 +380,7 @@ function Receipts() {
         // Small delay between opening windows
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (err) {
-        console.error(`Error printing receipt ${receipt.receipt_id}:`, err);
+        // Error handled silently
       }
     }
 
@@ -424,6 +467,14 @@ Thank you for your payment!`;
     })
     .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date)); // Sort by date, recent first
 
+  // Calculate stats
+  const stats = useMemo(() => {
+    const totalReceived = receipts.reduce((sum, r) => sum + (parseFloat(r.amount_received) || parseFloat(r.amount) || 0), 0);
+    const cashReceipts = receipts.filter(r => r.payment_method === 'cash').length;
+    const bankReceipts = receipts.filter(r => r.payment_method !== 'cash').length;
+    return { totalReceived, cashReceipts, bankReceipts };
+  }, [receipts]);
+
   return (
     <div className="page-content">
       <div className="page-header">
@@ -436,6 +487,38 @@ Thank you for your payment!`;
             <span className="btn-icon">➕</span>
             Record Receipt
           </button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div style={statCardStyles.statsGrid}>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#6366f1'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>📥</span>
+            <span style={statCardStyles.statLabel}>Total Receipts</span>
+          </div>
+          <p style={statCardStyles.statValue}>{receipts.length}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#10b981'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>💵</span>
+            <span style={statCardStyles.statLabel}>Total Received</span>
+          </div>
+          <p style={{...statCardStyles.statValue, fontSize: '22px', color: '#10b981'}}>{formatCurrency(stats.totalReceived)}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#f59e0b'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>💳</span>
+            <span style={statCardStyles.statLabel}>Cash Receipts</span>
+          </div>
+          <p style={statCardStyles.statValue}>{stats.cashReceipts}</p>
+        </div>
+        <div style={{...statCardStyles.statCard, borderLeftColor: '#3b82f6'}}>
+          <div style={statCardStyles.statHeader}>
+            <span style={statCardStyles.statIcon}>🏦</span>
+            <span style={statCardStyles.statLabel}>Bank Receipts</span>
+          </div>
+          <p style={statCardStyles.statValue}>{stats.bankReceipts}</p>
         </div>
       </div>
 
@@ -548,6 +631,26 @@ Thank you for your payment!`;
                   placeholder="Transaction/Cheque No."
                 />
               </div>
+              {/* Accounting Fields - integrated into main form */}
+              {accountingEnabled && (
+                <div className="form-field">
+                  <label>Cash/Bank Account {currentReceipt.post_to_ledger ? '*' : ''}</label>
+                  <select
+                    className="form-input"
+                    value={currentReceipt.cash_bank_account}
+                    onChange={(e) => handleReceiptChange('cash_bank_account', e.target.value)}
+                  >
+                    <option value="">-- Select Account --</option>
+                    {cashBankAccounts.map(account => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} {account.account_type === 'bank' ? '(Bank)' : '(Cash)'}
+                      </option>
+                    ))}
+                  </select>
+                  <small style={{color: '#666', fontSize: '11px'}}>Account where money is received</small>
+                </div>
+              )}
+
               <div className="form-field full-width">
                 <label>Notes</label>
                 <textarea
@@ -558,6 +661,20 @@ Thank you for your payment!`;
                   placeholder="Any additional notes..."
                 ></textarea>
               </div>
+
+              {accountingEnabled && (
+                <div className="form-field full-width">
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={currentReceipt.post_to_ledger}
+                      onChange={(e) => handleReceiptChange('post_to_ledger', e.target.checked)}
+                      style={{ marginRight: '8px', width: '16px', height: '16px' }}
+                    />
+                    Post to Ledger (Create Receipt Voucher)
+                  </label>
+                </div>
+              )}
             </div>
             <div className="form-actions">
               <button className="btn-create" onClick={handleSaveReceipt} disabled={loading}>

@@ -5,6 +5,7 @@ Using DocMold Theme (Indigo/Purple Gradient)
 This module provides a consistent, professional email template system
 for all emails sent from the NexInvo application.
 """
+from datetime import datetime
 
 
 def get_base_email_template(
@@ -177,7 +178,7 @@ def get_base_email_template(
                                 <tr>
                                     <td align="center">
                                         <p style="margin: 0; font-size: 12px; color: #9ca3af;">
-                                            &copy; 2025 {footer}
+                                            &copy; {datetime.now().year} {footer}
                                         </p>
                                     </td>
                                 </tr>

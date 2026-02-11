@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import {
   Box,
   Paper,
@@ -39,8 +38,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
 } from '@mui/icons-material';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+import api, { subscriptionAPI } from '../services/api';
 
 const SubscriptionPlans = () => {
   const [plans, setPlans] = useState([]);
@@ -74,13 +72,9 @@ const SubscriptionPlans = () => {
   const loadPlans = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('access_token');
-      const response = await axios.get(`${API_BASE_URL}/subscription-plans/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await subscriptionAPI.getPlans();
       setPlans(response.data.sort((a, b) => a.sort_order - b.sort_order));
     } catch (error) {
-      console.error('Error loading subscription plans:', error);
       showSnackbar('Failed to load subscription plans', 'error');
     } finally {
       setLoading(false);
@@ -146,8 +140,6 @@ const SubscriptionPlans = () => {
 
   const handleSubmit = async () => {
     try {
-      const token = sessionStorage.getItem('access_token');
-
       // Convert features from string to array
       const featuresArray = formData.features
         .split('\n')
@@ -167,25 +159,16 @@ const SubscriptionPlans = () => {
       };
 
       if (editMode) {
-        await axios.put(
-          `${API_BASE_URL}/subscription-plans/${currentPlan.id}/`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await api.put(`/subscription-plans/${currentPlan.id}/`, payload);
         showSnackbar('Subscription plan updated successfully', 'success');
       } else {
-        await axios.post(
-          `${API_BASE_URL}/subscription-plans/`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await api.post('/subscription-plans/', payload);
         showSnackbar('Subscription plan created successfully', 'success');
       }
 
       handleCloseDialog();
       loadPlans();
     } catch (error) {
-      console.error('Error saving subscription plan:', error);
       showSnackbar(error.response?.data?.error || 'Failed to save subscription plan', 'error');
     }
   };
@@ -196,46 +179,30 @@ const SubscriptionPlans = () => {
     }
 
     try {
-      const token = sessionStorage.getItem('access_token');
-      await axios.delete(`${API_BASE_URL}/subscription-plans/${planId}/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/subscription-plans/${planId}/`);
       showSnackbar('Subscription plan deleted successfully', 'success');
       loadPlans();
     } catch (error) {
-      console.error('Error deleting subscription plan:', error);
       showSnackbar('Failed to delete subscription plan', 'error');
     }
   };
 
   const handleToggleActive = async (plan) => {
     try {
-      const token = sessionStorage.getItem('access_token');
-      await axios.patch(
-        `${API_BASE_URL}/subscription-plans/${plan.id}/`,
-        { is_active: !plan.is_active },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.patch(`/subscription-plans/${plan.id}/`, { is_active: !plan.is_active });
       showSnackbar(`Plan ${!plan.is_active ? 'activated' : 'deactivated'} successfully`, 'success');
       loadPlans();
     } catch (error) {
-      console.error('Error toggling plan status:', error);
       showSnackbar('Failed to update plan status', 'error');
     }
   };
 
   const handleToggleVisible = async (plan) => {
     try {
-      const token = sessionStorage.getItem('access_token');
-      await axios.patch(
-        `${API_BASE_URL}/subscription-plans/${plan.id}/`,
-        { is_visible: !plan.is_visible },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.patch(`/subscription-plans/${plan.id}/`, { is_visible: !plan.is_visible });
       showSnackbar(`Plan visibility updated successfully`, 'success');
       loadPlans();
     } catch (error) {
-      console.error('Error toggling plan visibility:', error);
       showSnackbar('Failed to update plan visibility', 'error');
     }
   };

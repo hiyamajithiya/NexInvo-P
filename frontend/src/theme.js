@@ -493,31 +493,4 @@ const theme = createTheme({
   },
 });
 
-// Custom theme extensions for gradients and glass effects
-export const themeExtensions = {
-  gradient: {
-    primary: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-    secondary: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-    card: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
-    button: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-    sidebar: 'linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%)',
-    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-    accent: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
-    buttonHover: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-  },
-  glass: {
-    light: 'rgba(255, 255, 255, 0.98)',
-    medium: 'rgba(255, 255, 255, 0.9)',
-    dark: 'rgba(255, 255, 255, 0.8)',
-  },
-  shadow: {
-    soft: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
-    medium: '0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06)',
-    strong: '0 20px 40px rgba(0, 0, 0, 0.1)',
-    colored: '0 4px 15px rgba(99, 102, 241, 0.3)',
-    coloredHover: '0 6px 20px rgba(99, 102, 241, 0.4)',
-    card: '0 20px 40px rgba(0,0,0,0.08)',
-  },
-};
-
 export default theme;

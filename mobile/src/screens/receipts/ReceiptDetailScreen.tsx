@@ -28,6 +28,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import api from '../../services/api';
 import { Receipt, RootStackParamList } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency, formatDate, getPaymentMethodColor } from '../../utils/formatters';
 
 type ReceiptDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ReceiptDetail'>;
@@ -180,39 +181,6 @@ export default function ReceiptDetailScreen({
       Alert.alert('Error', 'Failed to share receipt PDF');
     } finally {
       setSharingPDF(false);
-    }
-  };
-
-  const formatCurrency = (amount: string) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(parseFloat(amount));
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  const getPaymentMethodColor = (method: string) => {
-    switch (method?.toLowerCase()) {
-      case 'cash':
-        return { bg: colors.success.light, text: colors.success.dark };
-      case 'bank':
-      case 'bank_transfer':
-      case 'bank transfer':
-        return { bg: colors.info.light, text: colors.info.dark };
-      case 'upi':
-        return { bg: colors.secondary[100], text: colors.secondary[700] };
-      case 'cheque':
-        return { bg: colors.warning.light, text: colors.warning.dark };
-      default:
-        return { bg: colors.gray[100], text: colors.gray[500] };
     }
   };
 

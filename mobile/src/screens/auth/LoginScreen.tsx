@@ -11,9 +11,7 @@ import {
   TextInput,
   Button,
   Text,
-  useTheme,
   HelperText,
-  ActivityIndicator,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types';
@@ -25,7 +23,6 @@ type LoginScreenProps = {
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const theme = useTheme();
   const { login } = useAuth();
 
   const [username, setUsername] = useState('');
@@ -55,7 +52,6 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       await login(loginData);
       // Navigation will be handled by AuthContext
     } catch (err: any) {
-      console.log('Login error:', JSON.stringify(err.response?.data || err.message));
       const message = err.response?.data?.detail ||
                      err.response?.data?.error ||
                      err.message ||

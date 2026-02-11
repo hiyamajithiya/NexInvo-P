@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
-import axios from 'axios';
+import { subscriptionAPI, reviewAPI } from '../services/api';
 import './LandingPage.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   const [showHelpCenter, setShowHelpCenter] = useState(false);
@@ -64,13 +62,12 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/subscription-plans/`);
+        const response = await subscriptionAPI.getPlans();
         const activePlans = response.data
           .filter(plan => plan.is_active)
           .sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
         setSubscriptionPlans(activePlans);
       } catch (error) {
-        console.error('Error fetching subscription plans:', error);
         setSubscriptionPlans([]);
       } finally {
         setLoadingPlans(false);
@@ -83,7 +80,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/reviews/public/`);
+        const response = await reviewAPI.getPublic();
         if (response.data.reviews && response.data.reviews.length > 0) {
           // Transform API reviews to match testimonials format
           const formattedReviews = response.data.reviews.map(review => ({
@@ -98,7 +95,7 @@ function LandingPage({ onNavigateToLogin, onNavigateToSignup }) {
           setCustomerReviews(formattedReviews);
         }
       } catch (error) {
-        console.error('Error fetching reviews:', error);
+        // Error handled silently
       } finally {
         setLoadingReviews(false);
       }

@@ -33,9 +33,11 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [menuVisible, setMenuVisible] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchClients = async (reset = false) => {
     try {
+      setError(null);
       const currentPage = reset ? 1 : page;
       const data = await api.getClients({
         page: currentPage,
@@ -52,8 +54,10 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
         setPage((prev) => prev + 1);
       }
       setHasMore(!!data.next);
-    } catch (error) {
-      console.error('Error fetching clients:', error);
+    } catch (err) {
+      console.error('Failed to load clients:', err);
+      setError('Failed to load clients. Pull down to retry.');
+      Alert.alert('Error', 'Failed to load clients. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);

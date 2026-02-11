@@ -13,11 +13,11 @@ import {
   ActivityIndicator,
   SegmentedButtons,
   DataTable,
-  Chip,
 } from 'react-native-paper';
 import api from '../../services/api';
-import { Invoice, Payment } from '../../types';
+import { Invoice } from '../../types';
 import colors from '../../theme/colors';
+import { formatCurrency } from '../../utils/formatters';
 
 type Report = {
   id: number;
@@ -70,7 +70,6 @@ export default function ReportsScreen() {
   const [dateFilter, setDateFilter] = useState('this_month');
   const [loading, setLoading] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
 
   useEffect(() => {
     loadData();
@@ -79,14 +78,10 @@ export default function ReportsScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [invoicesData, paymentsData] = await Promise.all([
-        api.getInvoices(),
-        api.getPayments(),
-      ]);
+      const invoicesData = await api.getInvoices();
       setInvoices(invoicesData.results || []);
-      setPayments(paymentsData.results || []);
     } catch (error) {
-      console.error('Error loading data:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -112,15 +107,6 @@ export default function ReportsScreen() {
       }
       return true;
     });
-  };
-
-  const formatCurrency = (amount: number | string) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(num || 0);
   };
 
   const generateReportData = (): { summary: ReportSummary; data: Invoice[] | { client: string; invoices: number; total: number }[] } => {
@@ -227,7 +213,7 @@ export default function ReportsScreen() {
     try {
       await Share.share({ message, title: selectedReport.name });
     } catch (error) {
-      console.error('Error sharing:', error);
+      // Error handled silently
     }
   };
 

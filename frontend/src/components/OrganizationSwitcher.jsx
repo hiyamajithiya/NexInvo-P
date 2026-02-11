@@ -48,7 +48,7 @@ const OrganizationSwitcher = () => {
         const response = await organizationAPI.getLimits();
         setOrgLimits(response.data);
       } catch (error) {
-        console.error('Failed to load organization limits:', error);
+        // Error handled silently
       }
     };
     loadLimits();
@@ -67,7 +67,7 @@ const OrganizationSwitcher = () => {
     try {
       await switchOrganization(orgId);
     } catch (error) {
-      console.error('Failed to switch organization:', error);
+      // Error handled silently
     }
   };
 
@@ -105,7 +105,6 @@ const OrganizationSwitcher = () => {
       });
       handleCreateDialogClose();
     } catch (error) {
-      console.error('Failed to create organization:', error);
       setCreateError(error.response?.data?.error || 'Failed to create organization');
     } finally {
       setCreating(false);

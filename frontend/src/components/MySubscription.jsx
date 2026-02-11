@@ -57,7 +57,6 @@ const MySubscription = ({ onNavigate }) => {
       if (error.response?.status === 404) {
         setSubscription(null);
       } else {
-        console.error('Error loading subscription:', error);
         showSnackbar('Failed to load subscription', 'error');
       }
     } finally {
@@ -71,7 +70,7 @@ const MySubscription = ({ onNavigate }) => {
       const response = await api.get('/payment-requests/');
       setPaymentRequests(response.data.requests || []);
     } catch (error) {
-      console.error('Error loading payment requests:', error);
+      // Error handled silently
     } finally {
       setLoadingRequests(false);
     }
@@ -85,7 +84,6 @@ const MySubscription = ({ onNavigate }) => {
       setOpenCancelDialog(false);
       loadSubscription();
     } catch (error) {
-      console.error('Error cancelling subscription:', error);
       showSnackbar('Failed to cancel subscription', 'error');
     } finally {
       setCancelling(false);

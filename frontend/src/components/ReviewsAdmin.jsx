@@ -59,7 +59,6 @@ const ReviewsAdmin = () => {
       const response = await api.get(`/superadmin/reviews/${statusFilter ? `?status=${statusFilter}` : ''}`);
       setReviews(response.data.reviews || []);
     } catch (error) {
-      console.error('Error loading reviews:', error);
       showSnackbar('Failed to load reviews', 'error');
     } finally {
       setLoading(false);
@@ -73,7 +72,6 @@ const ReviewsAdmin = () => {
       showSnackbar('Review approved successfully', 'success');
       loadReviews();
     } catch (error) {
-      console.error('Error approving review:', error);
       showSnackbar(error.response?.data?.error || 'Failed to approve review', 'error');
     } finally {
       setProcessing(false);
@@ -96,7 +94,6 @@ const ReviewsAdmin = () => {
       setRejectionReason('');
       loadReviews();
     } catch (error) {
-      console.error('Error rejecting review:', error);
       showSnackbar(error.response?.data?.error || 'Failed to reject review', 'error');
     } finally {
       setProcessing(false);
@@ -109,7 +106,6 @@ const ReviewsAdmin = () => {
       showSnackbar(response.data.message, 'success');
       loadReviews();
     } catch (error) {
-      console.error('Error toggling featured:', error);
       showSnackbar(error.response?.data?.error || 'Failed to update featured status', 'error');
     }
   };

@@ -79,7 +79,6 @@ const PricingPlans = ({ onNavigate }) => {
       const response = await api.get('/subscription-plans/public/');
       setPlans(response.data);
     } catch (error) {
-      console.error('Error loading plans:', error);
       showSnackbar('Failed to load subscription plans', 'error');
     } finally {
       setLoading(false);
@@ -92,7 +91,6 @@ const PricingPlans = ({ onNavigate }) => {
       const response = await api.get('/payment-settings/');
       setPaymentSettings(response.data.settings);
     } catch (error) {
-      console.error('Error loading payment settings:', error);
       showSnackbar('Failed to load payment details', 'error');
     } finally {
       setLoadingPaymentSettings(false);
@@ -141,7 +139,6 @@ const PricingPlans = ({ onNavigate }) => {
       setDiscountInfo(response.data.discount);
       showSnackbar('Coupon applied successfully!', 'success');
     } catch (error) {
-      console.error('Error validating coupon:', error);
       showSnackbar(error.response?.data?.error || 'Invalid coupon code', 'error');
       setCouponData(null);
       setDiscountInfo(null);
@@ -221,7 +218,6 @@ const PricingPlans = ({ onNavigate }) => {
         }
       }, 2000);
     } catch (error) {
-      console.error('Error submitting payment request:', error);
       showSnackbar(error.response?.data?.error || 'Failed to submit payment request', 'error');
     } finally {
       setSubscribing(false);

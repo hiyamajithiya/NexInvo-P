@@ -37,7 +37,7 @@ def get_cached_connection(email_settings):
             # Test if connection is still alive
             conn.noop()
             return conn
-        except:
+        except Exception:
             # Connection is dead, remove it
             del _thread_local.connections[cache_key]
 
@@ -64,7 +64,7 @@ def clear_cached_connections():
         for conn in _thread_local.connections.values():
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         _thread_local.connections = {}
 
@@ -306,7 +306,7 @@ def send_bulk_invoice_emails(invoices, company_settings):
         # Always close connection
         try:
             connection.close()
-        except:
+        except Exception:
             pass
 
     return result

@@ -1,47 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supplierAPI } from '../services/api';
+import { INDIAN_STATES } from '../constants/indianStates';
 import { useToast } from './Toast';
 import './Pages.css';
-
-// Indian States with GST State Codes (same as Clients.js)
-const INDIAN_STATES = [
-  { name: 'Andaman and Nicobar Islands', code: '35' },
-  { name: 'Andhra Pradesh', code: '37' },
-  { name: 'Arunachal Pradesh', code: '12' },
-  { name: 'Assam', code: '18' },
-  { name: 'Bihar', code: '10' },
-  { name: 'Chandigarh', code: '04' },
-  { name: 'Chhattisgarh', code: '22' },
-  { name: 'Dadra and Nagar Haveli and Daman and Diu', code: '26' },
-  { name: 'Delhi', code: '07' },
-  { name: 'Goa', code: '30' },
-  { name: 'Gujarat', code: '24' },
-  { name: 'Haryana', code: '06' },
-  { name: 'Himachal Pradesh', code: '02' },
-  { name: 'Jammu and Kashmir', code: '01' },
-  { name: 'Jharkhand', code: '20' },
-  { name: 'Karnataka', code: '29' },
-  { name: 'Kerala', code: '32' },
-  { name: 'Ladakh', code: '38' },
-  { name: 'Lakshadweep', code: '31' },
-  { name: 'Madhya Pradesh', code: '23' },
-  { name: 'Maharashtra', code: '27' },
-  { name: 'Manipur', code: '14' },
-  { name: 'Meghalaya', code: '17' },
-  { name: 'Mizoram', code: '15' },
-  { name: 'Nagaland', code: '13' },
-  { name: 'Odisha', code: '21' },
-  { name: 'Puducherry', code: '34' },
-  { name: 'Punjab', code: '03' },
-  { name: 'Rajasthan', code: '08' },
-  { name: 'Sikkim', code: '11' },
-  { name: 'Tamil Nadu', code: '33' },
-  { name: 'Telangana', code: '36' },
-  { name: 'Tripura', code: '16' },
-  { name: 'Uttar Pradesh', code: '09' },
-  { name: 'Uttarakhand', code: '05' },
-  { name: 'West Bengal', code: '19' }
-];
 
 function Suppliers() {
   const { showSuccess } = useToast();
@@ -82,7 +43,7 @@ function Suppliers() {
       const response = await supplierAPI.getAll();
       setSuppliers(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading suppliers:', err);
+      // Error handled silently
     }
   };
 
@@ -523,7 +484,7 @@ function Suppliers() {
                       <th>GSTIN</th>
                       <th>Contact</th>
                       <th>Email</th>
-                      <th>Payment Terms</th>
+                      <th style={{ textAlign: 'right' }}>Balance</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -543,7 +504,22 @@ function Suppliers() {
                         <td>{supplier.gstin || '-'}</td>
                         <td>{supplier.mobile || supplier.phone || '-'}</td>
                         <td>{supplier.email || '-'}</td>
-                        <td>{supplier.payment_terms || '-'}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {supplier.ledger_balance > 0 ? (
+                            <span style={{
+                              color: supplier.ledger_balance_type === 'Cr' ? '#dc2626' : '#16a34a',
+                              fontWeight: 500
+                            }}>
+                              {new Intl.NumberFormat('en-IN', {
+                                style: 'currency',
+                                currency: 'INR',
+                                minimumFractionDigits: 2
+                              }).format(supplier.ledger_balance)} {supplier.ledger_balance_type}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>-</span>
+                          )}
+                        </td>
                         <td>
                           <button
                             className="btn-icon-small"

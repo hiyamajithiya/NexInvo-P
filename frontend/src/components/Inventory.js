@@ -42,7 +42,7 @@ function Inventory() {
       const inventoryProducts = allProducts.filter(p => p.track_inventory);
       setProducts(inventoryProducts);
     } catch (err) {
-      console.error('Error loading products:', err);
+      // Error handled silently
     }
   };
 
@@ -52,7 +52,7 @@ function Inventory() {
       const response = await inventoryAPI.getAll(params);
       setMovements(response.data.results || response.data || []);
     } catch (err) {
-      console.error('Error loading movements:', err);
+      // Error handled silently
     }
   };
 

@@ -81,7 +81,5 @@ class OrganizationMiddleware(MiddlewareMixin):
                 request.organization = membership.organization
                 request.organization_role = membership.role
         except Exception as e:
-            # Log the exception for debugging
-            import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Error setting organization for user {request.user.email}: {str(e)}")
