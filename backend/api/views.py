@@ -135,6 +135,23 @@ from .views_tally import (
     tally_get_sales_vouchers,
     tally_two_way_sync_preview,
     tally_sync_to_nexinvo,
+    # Feature 1: Company Info Import
+    tally_get_company_info,
+    tally_import_company_info,
+    # Feature 2: Opening Balances Import
+    tally_get_ledgers_with_balances,
+    tally_preview_opening_balances,
+    tally_import_opening_balances,
+    # Feature 3: All Vouchers Import
+    tally_get_all_vouchers,
+    tally_preview_import_vouchers,
+    tally_import_vouchers,
+    # Feature 4: Real-Time Sync
+    tally_realtime_sync_config,
+    tally_realtime_sync_status,
+    tally_realtime_sync_log,
+    tally_get_pending_changes,
+    tally_mark_changes_synced,
 )
 
 # Goods Trader
@@ -158,6 +175,7 @@ from .views_accounting import (
     VoucherNumberSeriesViewSet,
     BankReconciliationViewSet,
     accounting_dashboard_stats,
+    recalculate_all_balances,
 )
 
 # Scheduled Invoices

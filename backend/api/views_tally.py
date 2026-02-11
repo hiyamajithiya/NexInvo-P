@@ -1936,3 +1936,844 @@ def tally_sync_to_nexinvo(request):
         'detected_prefixes': list(detected_prefixes),
         'errors': errors
     })
+
+
+# =============================================================================
+# FEATURE 1: COMPANY INFO IMPORT FROM TALLY
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_get_company_info(request):
+    """Fetch company info from Tally via Setu connector."""
+    import time
+    import uuid
+    from django.core.cache import cache
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    request_id = str(uuid.uuid4())[:8]
+    channel_layer = get_channel_layer()
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f"setu_org_{org_id}",
+            {
+                'type': 'get_company_info',
+                'data': {'request_id': request_id}
+            }
+        )
+    except Exception as e:
+        return Response({'error': f'Failed to send request to Setu: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Poll cache for response
+    cache_key = f"company_info_response_{org_id}_{request_id}"
+    for _ in range(40):  # 20 seconds timeout
+        time.sleep(0.5)
+        result = cache.get(cache_key)
+        if result:
+            cache.delete(cache_key)
+            if 'error' in result:
+                return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'company_info': result.get('company_info', {})})
+
+    return Response({'error': 'Timeout waiting for Tally response. Ensure Setu connector is running.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_import_company_info(request):
+    """Import company info from Tally into NexInvo organization settings."""
+    from .models import TallyMapping
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    company_info = request.data.get('company_info', {})
+    fields_to_import = request.data.get('fields', [])
+
+    if not company_info:
+        return Response({'error': 'No company info provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    updated_fields = []
+
+    # Map Tally fields to Organization/CompanySettings fields
+    if 'name' in fields_to_import and company_info.get('name'):
+        org.name = company_info['name']
+        updated_fields.append('name')
+
+    if 'address' in fields_to_import and company_info.get('address'):
+        org.address = company_info['address']
+        updated_fields.append('address')
+
+    if 'state' in fields_to_import and company_info.get('state'):
+        org.state = company_info['state']
+        updated_fields.append('state')
+
+    if 'pincode' in fields_to_import and company_info.get('pincode'):
+        org.pincode = company_info['pincode']
+        updated_fields.append('pincode')
+
+    if 'gstin' in fields_to_import and company_info.get('gstin'):
+        org.gstin = company_info['gstin']
+        updated_fields.append('gstin')
+
+    if 'phone' in fields_to_import and company_info.get('phone'):
+        org.phone = company_info['phone']
+        updated_fields.append('phone')
+
+    if 'email' in fields_to_import and company_info.get('email'):
+        org.email = company_info['email']
+        updated_fields.append('email')
+
+    if updated_fields:
+        org.save()
+
+    # Also update company settings if available
+    try:
+        from .models import CompanySettings
+        settings, _ = CompanySettings.objects.get_or_create(organization=org)
+
+        if 'name' in fields_to_import and company_info.get('name'):
+            settings.company_name = company_info['name']
+        if 'address' in fields_to_import and company_info.get('address'):
+            settings.address = company_info['address']
+        if 'state' in fields_to_import and company_info.get('state'):
+            settings.state = company_info['state']
+        if 'pincode' in fields_to_import and company_info.get('pincode'):
+            settings.pincode = company_info['pincode']
+        if 'gstin' in fields_to_import and company_info.get('gstin'):
+            settings.gstin = company_info['gstin']
+        if 'phone' in fields_to_import and company_info.get('phone'):
+            settings.phone = company_info['phone']
+        if 'email' in fields_to_import and company_info.get('email'):
+            settings.email = company_info['email']
+
+        settings.save()
+    except Exception:
+        pass  # CompanySettings may not exist yet
+
+    # Update TallyMapping with company name
+    if company_info.get('name'):
+        mapping, _ = TallyMapping.objects.get_or_create(organization=org)
+        mapping.tally_company_name = company_info['name']
+        mapping.save(update_fields=['tally_company_name', 'updated_at'])
+
+    return Response({
+        'success': True,
+        'message': f'Imported {len(updated_fields)} field(s) from Tally',
+        'updated_fields': updated_fields
+    })
+
+
+# =============================================================================
+# FEATURE 2: OPENING BALANCES IMPORT FROM TALLY
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_get_ledgers_with_balances(request):
+    """Fetch ledgers with opening/closing balances from Tally via Setu."""
+    import time
+    import uuid
+    from django.core.cache import cache
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    request_id = str(uuid.uuid4())[:8]
+    channel_layer = get_channel_layer()
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f"setu_org_{org_id}",
+            {
+                'type': 'get_ledgers_with_balances',
+                'data': {'request_id': request_id}
+            }
+        )
+    except Exception as e:
+        return Response({'error': f'Failed to send request to Setu: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    cache_key = f"ledgers_balances_response_{org_id}_{request_id}"
+    for _ in range(40):
+        time.sleep(0.5)
+        result = cache.get(cache_key)
+        if result:
+            cache.delete(cache_key)
+            if 'error' in result:
+                return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'ledgers': result.get('ledgers', [])})
+
+    return Response({'error': 'Timeout waiting for Tally response.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_preview_opening_balances(request):
+    """Preview opening balances: match Tally ledgers to NexInvo ledgers by name."""
+    from .models import LedgerAccount
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    tally_ledgers = request.data.get('ledgers', [])
+    if not tally_ledgers:
+        return Response({'error': 'No ledgers provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Get all NexInvo ledgers for this org
+    nexinvo_ledgers = LedgerAccount.objects.filter(
+        organization_id=org_id, is_active=True
+    ).values('id', 'name', 'opening_balance', 'opening_balance_type', 'group__name')
+
+    # Build lookup map (case-insensitive)
+    nexinvo_map = {}
+    for ledger in nexinvo_ledgers:
+        nexinvo_map[ledger['name'].strip().lower()] = ledger
+
+    matched = []
+    unmatched = []
+
+    for tally_ledger in tally_ledgers:
+        tally_name = (tally_ledger.get('name') or '').strip()
+        tally_ob = float(tally_ledger.get('opening_balance', 0) or 0)
+        tally_parent = tally_ledger.get('parent', '')
+
+        # Use explicit type if provided by connector, otherwise infer from sign
+        tally_ob_type = tally_ledger.get('opening_balance_type') or ('Cr' if tally_ob < 0 else 'Dr')
+        tally_ob_abs = abs(tally_ob)
+
+        lookup_key = tally_name.lower()
+        nexinvo_ledger = nexinvo_map.get(lookup_key)
+
+        if nexinvo_ledger:
+            nexinvo_ob = float(nexinvo_ledger['opening_balance'] or 0)
+            nexinvo_ob_type = nexinvo_ledger['opening_balance_type'] or 'Dr'
+            has_difference = abs(tally_ob_abs - nexinvo_ob) > 0.01 or tally_ob_type != nexinvo_ob_type
+
+            matched.append({
+                'tally_name': tally_name,
+                'tally_parent': tally_parent,
+                'tally_ob': tally_ob_abs,
+                'tally_ob_type': tally_ob_type,
+                'nexinvo_id': nexinvo_ledger['id'],
+                'nexinvo_name': nexinvo_ledger['name'],
+                'nexinvo_group': nexinvo_ledger['group__name'],
+                'nexinvo_ob': nexinvo_ob,
+                'nexinvo_ob_type': nexinvo_ob_type,
+                'has_difference': has_difference,
+                'status': 'different' if has_difference else 'same'
+            })
+        else:
+            unmatched.append({
+                'tally_name': tally_name,
+                'tally_parent': tally_parent,
+                'tally_ob': tally_ob_abs,
+                'tally_ob_type': tally_ob_type,
+                'status': 'unmatched'
+            })
+
+    return Response({
+        'matched': matched,
+        'unmatched': unmatched,
+        'total_tally': len(tally_ledgers),
+        'total_matched': len(matched),
+        'total_unmatched': len(unmatched),
+        'total_with_differences': sum(1 for m in matched if m['has_difference'])
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_import_opening_balances(request):
+    """Import selected opening balances from Tally into NexInvo ledgers."""
+    from .models import LedgerAccount
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    balances_to_import = request.data.get('balances', [])
+    if not balances_to_import:
+        return Response({'error': 'No balances selected for import'}, status=status.HTTP_400_BAD_REQUEST)
+
+    updated_count = 0
+    errors = []
+
+    for item in balances_to_import:
+        nexinvo_id = item.get('nexinvo_id')
+        tally_ob = Decimal(str(item.get('tally_ob', 0)))
+        tally_ob_type = item.get('tally_ob_type', 'Dr')
+
+        try:
+            ledger = LedgerAccount.objects.get(id=nexinvo_id, organization_id=org_id)
+            ledger.opening_balance = tally_ob
+            ledger.opening_balance_type = tally_ob_type
+            ledger.save(update_fields=['opening_balance', 'opening_balance_type', 'updated_at'])
+            ledger.update_balance()
+            updated_count += 1
+        except LedgerAccount.DoesNotExist:
+            errors.append(f"Ledger ID {nexinvo_id} not found")
+        except Exception as e:
+            errors.append(f"Error updating ledger {nexinvo_id}: {str(e)}")
+
+    return Response({
+        'success': True,
+        'message': f'Updated opening balances for {updated_count} ledger(s)',
+        'updated_count': updated_count,
+        'errors': errors
+    })
+
+
+# =============================================================================
+# FEATURE 3: ALL VOUCHERS IMPORT FROM TALLY
+# =============================================================================
+
+TALLY_VOUCHER_TYPE_MAP = {
+    'Sales': 'sales',
+    'Purchase': 'purchase',
+    'Receipt': 'receipt',
+    'Payment': 'payment',
+    'Contra': 'contra',
+    'Journal': 'journal',
+    'Debit Note': 'debit_note',
+    'Credit Note': 'credit_note',
+}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_get_all_vouchers(request):
+    """Fetch all vouchers from Tally for a date range via Setu."""
+    import time
+    import uuid
+    from django.core.cache import cache
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    start_date = request.query_params.get('start_date', '')
+    end_date = request.query_params.get('end_date', '')
+
+    if not start_date or not end_date:
+        return Response({'error': 'start_date and end_date are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    request_id = str(uuid.uuid4())[:8]
+    channel_layer = get_channel_layer()
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f"setu_org_{org_id}",
+            {
+                'type': 'get_all_vouchers',
+                'data': {
+                    'request_id': request_id,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                }
+            }
+        )
+    except Exception as e:
+        return Response({'error': f'Failed to send request: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    cache_key = f"all_vouchers_response_{org_id}_{request_id}"
+    for _ in range(60):  # 30 seconds timeout for larger data
+        time.sleep(0.5)
+        result = cache.get(cache_key)
+        if result:
+            cache.delete(cache_key)
+            if 'error' in result:
+                return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+            vouchers = result.get('vouchers', [])
+            # Summarize by type
+            type_counts = {}
+            for v in vouchers:
+                vt = v.get('voucher_type', 'Unknown')
+                type_counts[vt] = type_counts.get(vt, 0) + 1
+            return Response({
+                'vouchers': vouchers,
+                'total': len(vouchers),
+                'type_counts': type_counts
+            })
+
+    return Response({'error': 'Timeout waiting for Tally response.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_preview_import_vouchers(request):
+    """Preview voucher import: check duplicates, missing ledgers, counts by type."""
+    from .models import Voucher, LedgerAccount
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    vouchers = request.data.get('vouchers', [])
+    selected_types = request.data.get('voucher_types', list(TALLY_VOUCHER_TYPE_MAP.keys()))
+
+    if not vouchers:
+        return Response({'error': 'No vouchers provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Get existing voucher numbers for duplicate check
+    existing_vouchers = set(
+        Voucher.objects.filter(organization_id=org_id)
+        .values_list('voucher_number', 'voucher_type', 'voucher_date')
+    )
+
+    # Get existing ledger names
+    existing_ledgers = set(
+        LedgerAccount.objects.filter(organization_id=org_id, is_active=True)
+        .values_list('name', flat=True)
+    )
+    existing_ledgers_lower = {n.lower() for n in existing_ledgers}
+
+    to_create = []
+    duplicates = []
+    missing_ledgers = set()
+    counts_by_type = {}
+
+    for v in vouchers:
+        tally_type = v.get('voucher_type', '')
+        if tally_type not in selected_types:
+            continue
+
+        mapped_type = TALLY_VOUCHER_TYPE_MAP.get(tally_type)
+        if not mapped_type:
+            continue
+
+        voucher_number = v.get('voucher_number', '')
+        voucher_date = v.get('date', '')
+
+        # Check duplicate
+        is_duplicate = False
+        for ev_num, ev_type, ev_date in existing_vouchers:
+            if ev_num == voucher_number and ev_type == mapped_type and str(ev_date) == voucher_date:
+                is_duplicate = True
+                break
+
+        # Check missing ledgers from entries
+        entry_ledgers = []
+        for entry in v.get('entries', []):
+            ledger_name = entry.get('ledger_name', '').strip()
+            if ledger_name and ledger_name.lower() not in existing_ledgers_lower:
+                missing_ledgers.add(ledger_name)
+            entry_ledgers.append(ledger_name)
+
+        item = {
+            'voucher_number': voucher_number,
+            'voucher_type': tally_type,
+            'mapped_type': mapped_type,
+            'date': voucher_date,
+            'amount': v.get('amount', 0),
+            'narration': v.get('narration', ''),
+            'entries': v.get('entries', []),
+            'is_duplicate': is_duplicate,
+            'entry_ledgers': entry_ledgers,
+        }
+
+        if is_duplicate:
+            duplicates.append(item)
+        else:
+            to_create.append(item)
+
+        counts_by_type[tally_type] = counts_by_type.get(tally_type, 0) + 1
+
+    return Response({
+        'to_create': to_create,
+        'duplicates': duplicates,
+        'missing_ledgers': sorted(missing_ledgers),
+        'counts_by_type': counts_by_type,
+        'total_to_create': len(to_create),
+        'total_duplicates': len(duplicates),
+        'total_missing_ledgers': len(missing_ledgers)
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_import_vouchers(request):
+    """Import vouchers from Tally into NexInvo with double-entry bookkeeping."""
+    from .models import Voucher, VoucherEntry, LedgerAccount, AccountGroup
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    vouchers_to_import = request.data.get('vouchers', [])
+    auto_create_ledgers = request.data.get('auto_create_ledgers', False)
+
+    if not vouchers_to_import:
+        return Response({'error': 'No vouchers to import'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Build ledger lookup
+    ledger_map = {}
+    for ledger in LedgerAccount.objects.filter(organization=org, is_active=True):
+        ledger_map[ledger.name.lower()] = ledger
+
+    # Default group for auto-created ledgers
+    default_group = AccountGroup.objects.filter(
+        organization=org, name='Suspense Account'
+    ).first() or AccountGroup.objects.filter(
+        organization=org, parent__isnull=True
+    ).first()
+
+    created_count = 0
+    errors = []
+    ledgers_created = []
+
+    for v in vouchers_to_import:
+        mapped_type = TALLY_VOUCHER_TYPE_MAP.get(v.get('voucher_type', ''))
+        if not mapped_type:
+            errors.append(f"Unknown voucher type: {v.get('voucher_type')}")
+            continue
+
+        try:
+            with transaction.atomic():
+                voucher = Voucher.objects.create(
+                    organization=org,
+                    voucher_type=mapped_type,
+                    voucher_number=v.get('voucher_number', f"TALLY-{created_count+1}"),
+                    voucher_date=v.get('date', date.today().isoformat()),
+                    total_amount=Decimal(str(abs(float(v.get('amount', 0))))),
+                    narration=v.get('narration', ''),
+                    status='posted',
+                    synced_to_tally=True,
+                    tally_voucher_number=v.get('voucher_number', ''),
+                    tally_sync_date=timezone.now(),
+                    created_by=request.user
+                )
+
+                seq = 0
+                for entry in v.get('entries', []):
+                    ledger_name = entry.get('ledger_name', '').strip()
+                    if not ledger_name:
+                        continue
+
+                    ledger = ledger_map.get(ledger_name.lower())
+
+                    # Auto-create missing ledger if enabled
+                    if not ledger and auto_create_ledgers and default_group:
+                        ledger = LedgerAccount.objects.create(
+                            organization=org,
+                            name=ledger_name,
+                            group=default_group,
+                            account_type='asset',
+                            opening_balance=0,
+                            opening_balance_type='Dr',
+                            current_balance=0,
+                            current_balance_type='Dr',
+                            is_active=True
+                        )
+                        ledger_map[ledger_name.lower()] = ledger
+                        ledgers_created.append(ledger_name)
+
+                    if not ledger:
+                        errors.append(f"Ledger '{ledger_name}' not found for voucher {v.get('voucher_number')}")
+                        continue
+
+                    amount = abs(float(entry.get('amount', 0)))
+                    is_debit = entry.get('is_debit', entry.get('is_deemed_positive', False))
+
+                    VoucherEntry.objects.create(
+                        voucher=voucher,
+                        ledger_account=ledger,
+                        debit_amount=Decimal(str(amount)) if is_debit else Decimal('0'),
+                        credit_amount=Decimal(str(amount)) if not is_debit else Decimal('0'),
+                        particulars=entry.get('particulars', ''),
+                        sequence=seq
+                    )
+                    seq += 1
+
+                # Update balances for all affected ledgers
+                for entry in voucher.entries.all():
+                    entry.ledger_account.update_balance()
+
+                created_count += 1
+
+        except Exception as e:
+            errors.append(f"Error importing voucher {v.get('voucher_number', '?')}: {str(e)}")
+
+    return Response({
+        'success': True,
+        'message': f'Imported {created_count} voucher(s)',
+        'created_count': created_count,
+        'ledgers_created': ledgers_created,
+        'errors': errors
+    })
+
+
+# =============================================================================
+# FEATURE 4: TWO-WAY REAL-TIME SYNC
+# =============================================================================
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def tally_realtime_sync_config(request):
+    """Get or update real-time sync configuration."""
+    from .models import TallyMapping, TallyRealtimeSyncLog
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    mapping, _ = TallyMapping.objects.get_or_create(organization=org)
+
+    if request.method == 'GET':
+        return Response({
+            'realtime_sync_enabled': mapping.realtime_sync_enabled,
+            'realtime_sync_interval': mapping.realtime_sync_interval,
+            'realtime_sync_voucher_types': mapping.realtime_sync_voucher_types,
+            'last_realtime_sync': mapping.last_realtime_sync,
+        })
+
+    # POST - update config
+    enabled = request.data.get('enabled', mapping.realtime_sync_enabled)
+    interval = request.data.get('interval', mapping.realtime_sync_interval)
+    voucher_types = request.data.get('voucher_types', mapping.realtime_sync_voucher_types)
+
+    # Validate interval
+    interval = max(30, min(300, int(interval)))
+
+    was_enabled = mapping.realtime_sync_enabled
+    mapping.realtime_sync_enabled = enabled
+    mapping.realtime_sync_interval = interval
+    mapping.realtime_sync_voucher_types = voucher_types
+    mapping.save(update_fields=[
+        'realtime_sync_enabled', 'realtime_sync_interval',
+        'realtime_sync_voucher_types', 'updated_at'
+    ])
+
+    # Send enable/disable/update to Setu connector
+    channel_layer = get_channel_layer()
+    if enabled:
+        try:
+            async_to_sync(channel_layer.group_send)(
+                f"setu_org_{org_id}",
+                {
+                    'type': 'enable_realtime_sync',
+                    'data': {
+                        'interval': interval,
+                        'voucher_types': voucher_types,
+                        'last_state': mapping.realtime_sync_state,
+                    }
+                }
+            )
+            if not was_enabled:
+                TallyRealtimeSyncLog.objects.create(
+                    organization=org,
+                    event_type='sync_started',
+                    description=f'Real-time sync enabled (interval: {interval}s)',
+                    details={'voucher_types': voucher_types}
+                )
+            else:
+                TallyRealtimeSyncLog.objects.create(
+                    organization=org,
+                    event_type='sync_started',
+                    description=f'Real-time sync config updated (interval: {interval}s)',
+                    details={'voucher_types': voucher_types}
+                )
+        except Exception as e:
+            logger.error(f"Error enabling realtime sync: {e}")
+
+    elif not enabled and was_enabled:
+        try:
+            async_to_sync(channel_layer.group_send)(
+                f"setu_org_{org_id}",
+                {
+                    'type': 'disable_realtime_sync',
+                    'data': {}
+                }
+            )
+            TallyRealtimeSyncLog.objects.create(
+                organization=org,
+                event_type='sync_stopped',
+                description='Real-time sync disabled'
+            )
+        except Exception as e:
+            logger.error(f"Error disabling realtime sync: {e}")
+
+    return Response({
+        'success': True,
+        'realtime_sync_enabled': mapping.realtime_sync_enabled,
+        'realtime_sync_interval': mapping.realtime_sync_interval,
+        'realtime_sync_voucher_types': mapping.realtime_sync_voucher_types,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_realtime_sync_status(request):
+    """Get real-time sync status."""
+    from .models import TallyMapping
+    from django.core.cache import cache
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        mapping = TallyMapping.objects.get(organization_id=org_id)
+    except TallyMapping.DoesNotExist:
+        return Response({
+            'enabled': False,
+            'connector_online': False,
+            'last_sync': None,
+        })
+
+    # Check if Setu connector is online
+    connector_online = False
+    for key in cache.keys(f"setu_connector_setu_{org_id}_*") if hasattr(cache, 'keys') else []:
+        info = cache.get(key)
+        if info:
+            connector_online = True
+            break
+
+    # Fallback: scan known pattern
+    if not connector_online:
+        from django.core.cache import cache as django_cache
+        try:
+            # Try common cache key patterns
+            for i in range(10):
+                test_key = f"setu_connector_setu_{org_id}_{i}"
+                if django_cache.get(test_key):
+                    connector_online = True
+                    break
+        except Exception:
+            pass
+
+    return Response({
+        'enabled': mapping.realtime_sync_enabled,
+        'interval': mapping.realtime_sync_interval,
+        'voucher_types': mapping.realtime_sync_voucher_types,
+        'last_sync': mapping.last_realtime_sync,
+        'connector_online': connector_online,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_realtime_sync_log(request):
+    """Get paginated real-time sync activity log."""
+    from .models import TallyRealtimeSyncLog
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    page = int(request.query_params.get('page', 1))
+    page_size = int(request.query_params.get('page_size', 50))
+    offset = (page - 1) * page_size
+
+    logs = TallyRealtimeSyncLog.objects.filter(organization_id=org_id).order_by('-created_at')
+    total = logs.count()
+
+    items = logs[offset:offset + page_size].values(
+        'id', 'event_type', 'description', 'details', 'created_at'
+    )
+
+    return Response({
+        'results': list(items),
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tally_get_pending_changes(request):
+    """Get pending NexInvo changes for Setu connector to sync to Tally."""
+    from .models import TallyPendingSync
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    pending = TallyPendingSync.objects.filter(
+        organization_id=org_id, status='pending'
+    ).values('id', 'record_type', 'record_id', 'action', 'data', 'created_at')
+
+    return Response({'pending_changes': list(pending)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def tally_mark_changes_synced(request):
+    """Mark pending changes as synced after Setu confirms posting to Tally."""
+    from .models import TallyPendingSync, TallyRealtimeSyncLog
+
+    org_id = request.headers.get('X-Organization-ID')
+    if not org_id:
+        return Response({'error': 'Organization ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    change_ids = request.data.get('change_ids', [])
+    if not change_ids:
+        return Response({'error': 'No change IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    updated = TallyPendingSync.objects.filter(
+        id__in=change_ids, organization_id=org_id, status='pending'
+    ).update(status='synced', synced_at=timezone.now())
+
+    if updated:
+        TallyRealtimeSyncLog.objects.create(
+            organization_id=org_id,
+            event_type='nexinvo_to_tally',
+            description=f'Synced {updated} change(s) to Tally',
+            details={'change_ids': change_ids}
+        )
+
+    # Update last sync time
+    from .models import TallyMapping
+    TallyMapping.objects.filter(organization_id=org_id).update(
+        last_realtime_sync=timezone.now()
+    )
+
+    return Response({
+        'success': True,
+        'synced_count': updated
+    })

@@ -33,6 +33,7 @@ function InvoiceForm({ onBack, invoice }) {
     client: '',
     paymentTerms: '',
     notes: '',
+    postToLedger: true,
     items: [
       {
         slNo: 1,
@@ -121,6 +122,7 @@ function InvoiceForm({ onBack, invoice }) {
         client: invoice.client,
         paymentTerms: invoice.payment_terms || '',
         notes: invoice.notes || '',
+        postToLedger: invoice.post_to_ledger !== false,
         items: invoice.items.map((item, index) => {
           // Try to find matching service by description or SAC code
           const matchingService = services.find(
@@ -523,53 +525,53 @@ function InvoiceForm({ onBack, invoice }) {
     }
   };
 
+  const buildPayload = (overrides = {}) => {
+    const totals = calculateTotals();
+    return {
+      invoice_type: invoiceData.invoiceType,
+      invoice_date: invoiceData.invoiceDate,
+      client: invoiceData.client,
+      payment_term: invoiceData.paymentTerms || null,
+      notes: invoiceData.notes,
+      post_to_ledger: invoiceData.postToLedger,
+      subtotal: totals.subtotal,
+      tax_amount: totals.taxAmount,
+      round_off: totals.roundOff,
+      total_amount: totals.roundedTotal,
+      items: invoiceData.items.map(item => ({
+        description: item.description,
+        hsn_sac: item.hsnSac,
+        quantity: item.quantity,
+        rate: item.rate,
+        gst_rate: item.gstRate,
+        taxable_amount: item.taxableAmount,
+        total_amount: item.totalAmount
+      })),
+      ...overrides
+    };
+  };
+
   const handleSaveInvoice = async () => {
     setLoading(true);
     setError('');
 
-    // Validate required fields
     if (!invoiceData.client) {
       setError('Please select a client');
       setLoading(false);
       return;
     }
 
-    const totals = calculateTotals();
-
     try {
-      const payload = {
-        invoice_type: invoiceData.invoiceType,
-        invoice_date: invoiceData.invoiceDate,
-        client: invoiceData.client,
-        payment_term: invoiceData.paymentTerms || null,
-        notes: invoiceData.notes,
-        subtotal: totals.subtotal,
-        tax_amount: totals.taxAmount,
-        round_off: totals.roundOff,
-        total_amount: totals.roundedTotal,
-        items: invoiceData.items.map(item => ({
-          description: item.description,
-          hsn_sac: item.hsnSac,
-          quantity: item.quantity,
-          rate: item.rate,
-          gst_rate: item.gstRate,
-          taxable_amount: item.taxableAmount,
-          total_amount: item.totalAmount
-        }))
-      };
+      const payload = buildPayload();
 
       if (invoiceData.id) {
-        // Update existing invoice
         await invoiceAPI.update(invoiceData.id, payload);
       } else {
-        // Create new invoice
         await invoiceAPI.create(payload);
       }
 
       showSuccess('Invoice saved successfully!');
-      setTimeout(() => {
-        onBack();
-      }, 1000);
+      setTimeout(() => { onBack(); }, 1000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save invoice');
     } finally {
@@ -581,37 +583,14 @@ function InvoiceForm({ onBack, invoice }) {
     setLoading(true);
     setError('');
 
-    // Validate required fields
     if (!invoiceData.client) {
       setError('Please select a client');
       setLoading(false);
       return;
     }
 
-    const totals = calculateTotals();
-
     try {
-      const payload = {
-        invoice_type: invoiceData.invoiceType,
-        invoice_date: invoiceData.invoiceDate,
-        client: invoiceData.client,
-        payment_term: invoiceData.paymentTerms || null,
-        notes: invoiceData.notes,
-        subtotal: totals.subtotal,
-        tax_amount: totals.taxAmount,
-        round_off: totals.roundOff,
-        total_amount: totals.roundedTotal,
-        items: invoiceData.items.map(item => ({
-          description: item.description,
-          hsn_sac: item.hsnSac,
-          quantity: item.quantity,
-          rate: item.rate,
-          gst_rate: item.gstRate,
-          taxable_amount: item.taxableAmount,
-          total_amount: item.totalAmount
-        }))
-      };
-
+      const payload = buildPayload();
       const response = await invoiceAPI.create(payload);
       const invoiceId = response.data.id;
 
@@ -628,11 +607,43 @@ function InvoiceForm({ onBack, invoice }) {
       link.remove();
 
       showSuccess('Invoice saved and PDF generated successfully!');
-      setTimeout(() => {
-        onBack();
-      }, 1000);
+      setTimeout(() => { onBack(); }, 1000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save invoice and generate PDF');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveAndMail = async () => {
+    setLoading(true);
+    setError('');
+
+    if (!invoiceData.client) {
+      setError('Please select a client');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const payload = buildPayload({ status: 'sent' });
+
+      let invoiceId;
+      if (invoiceData.id) {
+        await invoiceAPI.update(invoiceData.id, payload);
+        invoiceId = invoiceData.id;
+      } else {
+        const response = await invoiceAPI.create(payload);
+        invoiceId = response.data.id;
+      }
+
+      // Send email
+      await invoiceAPI.sendEmail(invoiceId);
+
+      showSuccess('Invoice saved and emailed to client!');
+      setTimeout(() => { onBack(); }, 1000);
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to save and send invoice');
     } finally {
       setLoading(false);
     }
@@ -988,8 +999,46 @@ function InvoiceForm({ onBack, invoice }) {
             </div>
           </div>
 
+          {/* Post to Ledger Option */}
+          {invoiceData.invoiceType === 'tax' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '12px 16px',
+              backgroundColor: invoiceData.postToLedger ? '#f0fdf4' : '#fefce8',
+              border: `1px solid ${invoiceData.postToLedger ? '#bbf7d0' : '#fef08a'}`,
+              borderRadius: '8px',
+              marginBottom: '16px'
+            }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#334155',
+                margin: 0
+              }}>
+                <input
+                  type="checkbox"
+                  checked={invoiceData.postToLedger}
+                  onChange={(e) => setInvoiceData({...invoiceData, postToLedger: e.target.checked})}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#6366f1' }}
+                />
+                Post to Ledger
+              </label>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                {invoiceData.postToLedger
+                  ? 'Accounting entries will be auto-created when this invoice is saved'
+                  : 'No accounting entries will be created for this invoice'}
+              </span>
+            </div>
+          )}
+
           {/* Action Buttons */}
-          <div className="form-actions">
+          <div className="form-actions" style={{ flexWrap: 'wrap' }}>
             <button className="btn-create" onClick={handleSaveInvoice} disabled={loading}>
               <span className="btn-icon">💾</span>
               {loading ? 'Saving...' : 'Save Invoice'}
@@ -1002,6 +1051,15 @@ function InvoiceForm({ onBack, invoice }) {
             >
               <span className="btn-icon">📄</span>
               {loading ? 'Processing...' : 'Save & Generate PDF'}
+            </button>
+            <button
+              className="btn-create"
+              style={{background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}}
+              onClick={handleSaveAndMail}
+              disabled={loading}
+            >
+              <span className="btn-icon">✉</span>
+              {loading ? 'Sending...' : 'Save & Mail'}
             </button>
             <button className="btn-secondary" onClick={onBack} disabled={loading}>
               Cancel

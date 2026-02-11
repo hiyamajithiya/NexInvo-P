@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { voucherAPI, financialYearAPI } from '../services/api';
+import { voucherAPI, financialYearAPI, settingsAPI } from '../services/api';
 import { useToast } from './Toast';
-import './Pages.css';
-import './Accounting.css';
+import { formatIndianNumber, formatTallyDate } from '../utils/formatIndianNumber';
+import './TallyReport.css';
 
 function DayBook() {
   const { showError } = useToast();
   const [vouchers, setVouchers] = useState([]);
   const [financialYear, setFinancialYear] = useState(null);
+  const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
@@ -25,19 +26,21 @@ function DayBook() {
 
   const loadFinancialYear = async () => {
     try {
+      const s = await settingsAPI.getCompanySettings();
+      setCompanyName(s.data?.company_name || '');
+    } catch (e) {}
+
+    try {
       const fyRes = await financialYearAPI.getCurrent();
       if (fyRes.data && !fyRes.data.error) {
         setFinancialYear(fyRes.data);
         setFromDate(fyRes.data.start_date);
         return;
       }
-    } catch (err) {
-      // Financial year not configured, use defaults
-    }
+    } catch (err) {}
 
-    // Set default dates if no financial year (Indian FY: April-March)
     const today = new Date();
-    const startOfYear = new Date(today.getFullYear(), 3, 1); // April 1st
+    const startOfYear = new Date(today.getFullYear(), 3, 1);
     if (today < startOfYear) {
       startOfYear.setFullYear(startOfYear.getFullYear() - 1);
     }
@@ -51,7 +54,8 @@ function DayBook() {
       const params = {
         from_date: fromDate,
         to_date: toDate,
-        ordering: 'voucher_date'
+        ordering: 'voucher_date',
+        page_size: 500
       };
       if (voucherTypeFilter) {
         params.voucher_type = voucherTypeFilter;
@@ -84,31 +88,14 @@ function DayBook() {
     return found ? found.label : type;
   };
 
-  const getVoucherTypeColor = (type) => {
-    const colors = {
-      receipt: '#059669',
-      payment: '#dc2626',
-      contra: '#7c3aed',
-      journal: '#2563eb',
-      sales: '#16a34a',
-      purchase: '#ea580c',
-      debit_note: '#be123c',
-      credit_note: '#0891b2'
-    };
-    return colors[type] || '#64748b';
-  };
-
   // Group vouchers by date
   const groupedByDate = vouchers.reduce((acc, voucher) => {
     const date = voucher.voucher_date;
-    if (!acc[date]) {
-      acc[date] = [];
-    }
+    if (!acc[date]) acc[date] = [];
     acc[date].push(voucher);
     return acc;
   }, {});
 
-  // Calculate totals
   const totalDebit = vouchers.reduce((sum, v) => {
     return sum + (v.entries || []).reduce((s, e) => s + parseFloat(e.debit_amount || 0), 0);
   }, 0);
@@ -117,197 +104,117 @@ function DayBook() {
     return sum + (v.entries || []).reduce((s, e) => s + parseFloat(e.credit_amount || 0), 0);
   }, 0);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleExport = () => {
-    let csv = 'Date,Voucher No,Type,Particulars,Debit,Credit\n';
-
+    let csv = 'Date,Particulars,Vch Type,Vch No.,Debit,Credit\n';
     vouchers.forEach(voucher => {
       const entries = voucher.entries || [];
       entries.forEach((entry, idx) => {
         csv += `${idx === 0 ? voucher.voucher_date : ''},`;
-        csv += `${idx === 0 ? voucher.voucher_number : ''},`;
-        csv += `${idx === 0 ? getVoucherTypeLabel(voucher.voucher_type) : ''},`;
         csv += `"${entry.ledger_name || ''}",`;
+        csv += `${idx === 0 ? getVoucherTypeLabel(voucher.voucher_type) : ''},`;
+        csv += `${idx === 0 ? voucher.voucher_number : ''},`;
         csv += `${parseFloat(entry.debit_amount || 0).toFixed(2)},`;
         csv += `${parseFloat(entry.credit_amount || 0).toFixed(2)}\n`;
       });
     });
-
     csv += `\nTotal,,,,${totalDebit.toFixed(2)},${totalCredit.toFixed(2)}\n`;
-
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `day-book-${fromDate}-to-${toDate}.csv`;
-    link.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `day-book-${fromDate}-to-${toDate}.csv`;
+    a.click();
     window.URL.revokeObjectURL(url);
   };
 
   return (
     <div className="page-content">
-      <div className="page-header">
-        <div className="page-header-left">
-          <h1 className="page-main-title">Day Book</h1>
-          <p className="page-description">View all transactions by date</p>
-          {financialYear && (
-            <span className="badge badge-primary" style={{ marginTop: '8px' }}>
-              FY: {financialYear.name}
-            </span>
-          )}
+      <div className="tally-report" id="day-book-report">
+        <div className="tally-report-header">
+          {companyName && <p className="tally-company-name">{companyName}</p>}
+          <p className="tally-report-title">Day Book</p>
+          <p className="tally-report-period">
+            {fromDate && toDate ? `${formatTallyDate(fromDate)} to ${formatTallyDate(toDate)}` : ''}
+            {financialYear ? ` (FY: ${financialYear.name})` : ''}
+          </p>
         </div>
-        <div className="page-header-right" style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-secondary" onClick={handleExport}>
-            <span className="btn-icon">📥</span>
-            Export CSV
-          </button>
-          <button className="btn-secondary" onClick={handlePrint}>
-            <span className="btn-icon">🖨️</span>
-            Print
-          </button>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="filters-section" style={{ marginBottom: '24px' }}>
-        <div className="filter-group">
-          <label style={{ marginRight: '8px', fontWeight: '500' }}>From:</label>
-          <input
-            type="date"
-            className="filter-select"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-          />
-        </div>
-        <div className="filter-group">
-          <label style={{ marginRight: '8px', fontWeight: '500' }}>To:</label>
-          <input
-            type="date"
-            className="filter-select"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-          />
-        </div>
-        <div className="filter-group">
-          <label style={{ marginRight: '8px', fontWeight: '500' }}>Type:</label>
-          <select
-            className="filter-select"
-            value={voucherTypeFilter}
-            onChange={(e) => setVoucherTypeFilter(e.target.value)}
-          >
+        <div className="tally-filter-bar">
+          <label>From:</label>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <label>To:</label>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <label>Type:</label>
+          <select value={voucherTypeFilter} onChange={(e) => setVoucherTypeFilter(e.target.value)}>
             {voucherTypes.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
-        </div>
-      </div>
-
-      {/* Day Book Report */}
-      <div className="content-card" id="day-book-report">
-        <div style={{
-          textAlign: 'center',
-          padding: '20px',
-          borderBottom: '2px solid #e2e8f0',
-          marginBottom: '20px'
-        }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#1e293b' }}>
-            Day Book
-          </h2>
-          <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '14px' }}>
-            {new Date(fromDate).toLocaleDateString('en-IN')} to {new Date(toDate).toLocaleDateString('en-IN')}
-          </p>
+          <div className="tally-actions">
+            <button className="tally-btn" onClick={handleExport}>Export CSV</button>
+            <button className="tally-btn" onClick={() => window.print()}>Print</button>
+          </div>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{ fontSize: '32px', marginBottom: '8px' }}>...</div>
-            <div>Loading day book...</div>
-          </div>
+          <div className="tally-loading">Loading Day Book...</div>
         ) : vouchers.length === 0 ? (
-          <div className="empty-state-large">
-            <div className="empty-icon-large">📅</div>
-            <h3 className="empty-title">No Transactions Found</h3>
-            <p className="empty-description">No vouchers found for the selected period.</p>
+          <div className="tally-empty-state">
+            <p>No transactions found for the selected period</p>
           </div>
         ) : (
-          <div className="data-table">
-            <table>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9' }}>
-                  <th style={{ textAlign: 'left', padding: '12px', width: '100px' }}>Date</th>
-                  <th style={{ textAlign: 'left', padding: '12px', width: '120px' }}>Voucher No</th>
-                  <th style={{ textAlign: 'left', padding: '12px', width: '100px' }}>Type</th>
-                  <th style={{ textAlign: 'left', padding: '12px' }}>Particulars</th>
-                  <th style={{ textAlign: 'right', padding: '12px', width: '120px' }}>Debit</th>
-                  <th style={{ textAlign: 'right', padding: '12px', width: '120px' }}>Credit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.keys(groupedByDate).sort().map(date => (
-                  <React.Fragment key={date}>
-                    <tr style={{ backgroundColor: '#f8fafc' }}>
-                      <td colSpan="6" style={{ padding: '10px 12px', fontWeight: '600', color: '#475569' }}>
-                        {new Date(date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                    </tr>
-                    {groupedByDate[date].map(voucher => {
-                      const entries = voucher.entries || [];
-                      return entries.map((entry, idx) => (
-                        <tr key={`${voucher.id}-${idx}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <td style={{ padding: '8px 12px' }}>
-                            {idx === 0 ? '' : ''}
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            {idx === 0 ? voucher.voucher_number : ''}
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            {idx === 0 && (
-                              <span style={{
-                                backgroundColor: getVoucherTypeColor(voucher.voucher_type),
-                                color: 'white',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '12px'
-                              }}>
-                                {getVoucherTypeLabel(voucher.voucher_type)}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            {entry.ledger_name}
-                            {idx === 0 && voucher.narration && (
-                              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                                {voucher.narration}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '8px 12px', color: '#059669' }}>
-                            {parseFloat(entry.debit_amount) > 0 ? parseFloat(entry.debit_amount).toFixed(2) : ''}
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '8px 12px', color: '#dc2626' }}>
-                            {parseFloat(entry.credit_amount) > 0 ? parseFloat(entry.credit_amount).toFixed(2) : ''}
-                          </td>
-                        </tr>
-                      ));
-                    })}
-                  </React.Fragment>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{ backgroundColor: '#1e293b', color: 'white', fontWeight: '700' }}>
-                  <td colSpan="4" style={{ padding: '14px 12px' }}>Total ({vouchers.length} vouchers)</td>
-                  <td style={{ textAlign: 'right', padding: '14px 12px' }}>{totalDebit.toFixed(2)}</td>
-                  <td style={{ textAlign: 'right', padding: '14px 12px' }}>{totalCredit.toFixed(2)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <table className="tally-table tally-ledger-table">
+            <thead>
+              <tr>
+                <th style={{ width: '90px' }}>Date</th>
+                <th>Particulars</th>
+                <th style={{ width: '90px' }}>Vch Type</th>
+                <th style={{ width: '90px' }}>Vch No.</th>
+                <th className="col-amount">Debit</th>
+                <th className="col-amount">Credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.keys(groupedByDate).sort().map(date => (
+                <React.Fragment key={date}>
+                  <tr className="tally-date-separator">
+                    <td colSpan="6">{formatTallyDate(date)}</td>
+                  </tr>
+                  {groupedByDate[date].map(voucher => {
+                    const entries = voucher.entries || [];
+                    return entries.map((entry, idx) => (
+                      <tr key={`${voucher.id}-${idx}`} className="tally-ledger-row">
+                        <td></td>
+                        <td>
+                          {entry.ledger_name}
+                          {idx === 0 && voucher.narration && (
+                            <span className="tally-narration"> ({voucher.narration})</span>
+                          )}
+                        </td>
+                        <td>{idx === 0 ? getVoucherTypeLabel(voucher.voucher_type) : ''}</td>
+                        <td>{idx === 0 ? voucher.voucher_number : ''}</td>
+                        <td className="col-amount">
+                          {parseFloat(entry.debit_amount) > 0 ? formatIndianNumber(parseFloat(entry.debit_amount)) : ''}
+                        </td>
+                        <td className="col-amount">
+                          {parseFloat(entry.credit_amount) > 0 ? formatIndianNumber(parseFloat(entry.credit_amount)) : ''}
+                        </td>
+                      </tr>
+                    ));
+                  })}
+                </React.Fragment>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="tally-grand-total">
+                <td colSpan="4">Total ({vouchers.length} vouchers)</td>
+                <td className="col-amount">{formatIndianNumber(totalDebit)}</td>
+                <td className="col-amount">{formatIndianNumber(totalCredit)}</td>
+              </tr>
+            </tfoot>
+          </table>
         )}
       </div>
-
     </div>
   );
 }

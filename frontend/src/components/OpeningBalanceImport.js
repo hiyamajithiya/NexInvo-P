@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ledgerAccountAPI } from '../services/api';
+import { ledgerAccountAPI, accountGroupAPI } from '../services/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import { useToast } from './Toast';
 
@@ -456,19 +456,12 @@ const styles = {
   }
 };
 
-const ledgerGroups = [
-  'Assets', 'Liabilities', 'Capital Account', 'Loans (Liability)',
-  'Current Assets', 'Current Liabilities', 'Fixed Assets', 'Investments',
-  'Bank Accounts', 'Cash-in-Hand', 'Sundry Debtors', 'Sundry Creditors',
-  'Stock-in-Hand', 'Duties & Taxes', 'Income', 'Expenses',
-  'Purchase Accounts', 'Sales Accounts', 'Direct Expenses', 'Indirect Expenses',
-  'Direct Income', 'Indirect Income'
-];
 
 const OpeningBalanceImport = () => {
   const { showSuccess, showError } = useToast();
   const fileInputRef = useRef(null);
   const [ledgers, setLedgers] = useState([]);
+  const [accountGroups, setAccountGroups] = useState([]);
   const [openingBalances, setOpeningBalances] = useState([]);
   const [importedData, setImportedData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -512,7 +505,39 @@ const OpeningBalanceImport = () => {
 
   useEffect(() => {
     fetchLedgers();
+    loadAccountGroups();
   }, [fetchLedgers]);
+
+  const loadAccountGroups = async () => {
+    try {
+      const response = await accountGroupAPI.getAll();
+      const data = response.data?.results || response.data || [];
+      data.sort((a, b) => {
+        const pathA = (a.full_path || a.name || '').toLowerCase();
+        const pathB = (b.full_path || b.name || '').toLowerCase();
+        return pathA.localeCompare(pathB);
+      });
+      setAccountGroups(data);
+    } catch (err) {
+      // Fallback silently
+    }
+  };
+
+  const getIndentedGroupName = (group) => {
+    const path = group.full_path || group.name;
+    const depth = (path.match(/>/g) || []).length;
+    const prefix = depth > 0 ? '\u00A0\u00A0\u00A0\u00A0'.repeat(depth) + '— ' : '';
+    return prefix + group.name;
+  };
+
+  const getLedgersSortedByGroup = () => {
+    return [...ledgers].sort((a, b) => {
+      const groupA = (a.group_full_path || a.group_name || '').toLowerCase();
+      const groupB = (b.group_full_path || b.group_name || '').toLowerCase();
+      if (groupA !== groupB) return groupA.localeCompare(groupB);
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
+    });
+  };
 
   const parseCSVLine = (line) => {
     const result = [];
@@ -646,7 +671,7 @@ XYZ Suppliers,0,45000`;
         const openingBalance = item.debit_balance > 0 ? item.debit_balance : item.credit_balance;
         const balanceType = item.debit_balance > 0 ? 'Dr' : 'Cr';
 
-        await ledgerAccountAPI.update(item.ledger_id, {
+        await ledgerAccountAPI.patch(item.ledger_id, {
           opening_balance: openingBalance,
           opening_balance_type: balanceType
         });
@@ -686,7 +711,7 @@ XYZ Suppliers,0,45000`;
       const openingBalance = debit > 0 ? debit : credit;
       const balanceType = debit > 0 ? 'Dr' : 'Cr';
 
-      await ledgerAccountAPI.update(manualEntry.ledger_id, {
+      await ledgerAccountAPI.patch(manualEntry.ledger_id, {
         opening_balance: openingBalance,
         opening_balance_type: balanceType
       });
@@ -708,7 +733,7 @@ XYZ Suppliers,0,45000`;
       const openingBalance = balance.debit_balance > 0 ? balance.debit_balance : balance.credit_balance;
       const balanceType = balance.debit_balance > 0 ? 'Dr' : 'Cr';
 
-      await ledgerAccountAPI.update(balance.id, {
+      await ledgerAccountAPI.patch(balance.id, {
         opening_balance: openingBalance,
         opening_balance_type: balanceType
       });
@@ -729,7 +754,7 @@ XYZ Suppliers,0,45000`;
     }
 
     try {
-      await ledgerAccountAPI.update(balanceId, {
+      await ledgerAccountAPI.patch(balanceId, {
         opening_balance: 0,
         opening_balance_type: 'Dr'
       });
@@ -944,8 +969,8 @@ XYZ Suppliers,0,45000`;
               onChange={(e) => setSelectedGroup(e.target.value)}
             >
               <option value="all">All Groups</option>
-              {ledgerGroups.map(group => (
-                <option key={group} value={group}>{group}</option>
+              {accountGroups.map(group => (
+                <option key={group.id} value={group.name}>{getIndentedGroupName(group)}</option>
               ))}
             </select>
           </div>
@@ -1138,9 +1163,9 @@ XYZ Suppliers,0,45000`;
                   onChange={(e) => setManualEntry({ ...manualEntry, ledger_id: e.target.value })}
                 >
                   <option value="">-- Select Ledger --</option>
-                  {ledgers.map(ledger => (
+                  {getLedgersSortedByGroup().map(ledger => (
                     <option key={ledger.id} value={ledger.id}>
-                      {ledger.name} ({ledger.account_group_name || 'Uncategorized'})
+                      {ledger.group_name || 'Uncategorized'} → {ledger.name}
                     </option>
                   ))}
                 </select>

@@ -163,6 +163,32 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
 
             elif message_type == 'SALES_VOUCHERS_ERROR':
                 await self.handle_sales_vouchers_error(data)
+
+            # === Company Info (Feature 1) ===
+            elif message_type == 'COMPANY_INFO_RESPONSE':
+                await self.handle_company_info_response(data)
+            elif message_type == 'COMPANY_INFO_ERROR':
+                await self.handle_company_info_error(data)
+
+            # === Ledgers with Balances (Feature 2) ===
+            elif message_type == 'LEDGERS_WITH_BALANCES_RESPONSE':
+                await self.handle_ledgers_with_balances_response(data)
+            elif message_type == 'LEDGERS_WITH_BALANCES_ERROR':
+                await self.handle_ledgers_with_balances_error(data)
+
+            # === All Vouchers (Feature 3) ===
+            elif message_type == 'ALL_VOUCHERS_RESPONSE':
+                await self.handle_all_vouchers_response(data)
+            elif message_type == 'ALL_VOUCHERS_ERROR':
+                await self.handle_all_vouchers_error(data)
+
+            # === Real-Time Sync (Feature 4) ===
+            elif message_type == 'REALTIME_CHANGE':
+                await self.handle_realtime_change(data)
+            elif message_type == 'REALTIME_SYNC_STATUS':
+                await self.handle_realtime_sync_status(data)
+            elif message_type == 'NEXINVO_CHANGES_SYNCED':
+                await self.handle_nexinvo_changes_synced(data)
             else:
                 logger.warning(f"Unknown message type from Setu: {message_type}")
 
@@ -547,6 +573,194 @@ class SetuConsumer(AsyncJsonWebsocketConsumer):
             'type': 'GET_SALES_VOUCHERS',
             'data': event.get('data', {})
         })
+
+    # === Feature 1: Company Info handlers ===
+
+    async def handle_company_info_response(self, data):
+        """Handle company info response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        company_info = data.get('company_info', {})
+        logger.debug(f"[handle_company_info_response] Received company info for request {request_id}")
+        if request_id:
+            await self.cache_company_info_response(request_id, {'company_info': company_info})
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'company_info_response', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    async def handle_company_info_error(self, data):
+        """Handle company info fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+        logger.error(f"[handle_company_info_error] Error for request {request_id}: {error}")
+        if request_id:
+            await self.cache_company_info_response(request_id, {'error': error, 'company_info': {}})
+
+    @database_sync_to_async
+    def cache_company_info_response(self, request_id, data):
+        from django.core.cache import cache
+        cache_key = f"company_info_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=60)
+
+    async def get_company_info(self, event):
+        """Forward get company info request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_COMPANY_INFO',
+            'data': event.get('data', {})
+        })
+
+    async def company_info_response(self, event):
+        """Broadcast company info response to web clients."""
+        pass
+
+    # === Feature 2: Ledgers with Balances handlers ===
+
+    async def handle_ledgers_with_balances_response(self, data):
+        """Handle ledgers with balances response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        ledgers = data.get('ledgers', [])
+        logger.debug(f"[handle_ledgers_with_balances_response] Received {len(ledgers)} ledgers for request {request_id}")
+        if request_id:
+            await self.cache_ledgers_with_balances_response(request_id, {'ledgers': ledgers})
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'ledgers_with_balances_response', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    async def handle_ledgers_with_balances_error(self, data):
+        """Handle ledgers with balances fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+        logger.error(f"[handle_ledgers_with_balances_error] Error for request {request_id}: {error}")
+        if request_id:
+            await self.cache_ledgers_with_balances_response(request_id, {'error': error, 'ledgers': []})
+
+    @database_sync_to_async
+    def cache_ledgers_with_balances_response(self, request_id, data):
+        from django.core.cache import cache
+        cache_key = f"ledgers_balances_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=60)
+
+    async def get_ledgers_with_balances(self, event):
+        """Forward get ledgers with balances request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_LEDGERS_WITH_BALANCES',
+            'data': event.get('data', {})
+        })
+
+    async def ledgers_with_balances_response(self, event):
+        """Broadcast ledgers with balances response to web clients."""
+        pass
+
+    # === Feature 3: All Vouchers handlers ===
+
+    async def handle_all_vouchers_response(self, data):
+        """Handle all vouchers response from Tally."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        vouchers = data.get('vouchers', [])
+        logger.debug(f"[handle_all_vouchers_response] Received {len(vouchers)} vouchers for request {request_id}")
+        if request_id:
+            await self.cache_all_vouchers_response(request_id, {'vouchers': vouchers})
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'all_vouchers_response', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    async def handle_all_vouchers_error(self, data):
+        """Handle all vouchers fetch error."""
+        request_id = data.get('request_id', data.get('requestId', ''))
+        error = data.get('error', 'Unknown error')
+        logger.error(f"[handle_all_vouchers_error] Error for request {request_id}: {error}")
+        if request_id:
+            await self.cache_all_vouchers_response(request_id, {'error': error, 'vouchers': []})
+
+    @database_sync_to_async
+    def cache_all_vouchers_response(self, request_id, data):
+        from django.core.cache import cache
+        cache_key = f"all_vouchers_response_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=120)
+
+    async def get_all_vouchers(self, event):
+        """Forward get all vouchers request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_ALL_VOUCHERS',
+            'data': event.get('data', {})
+        })
+
+    async def all_vouchers_response(self, event):
+        """Broadcast all vouchers response to web clients."""
+        pass
+
+    # === Feature 4: Real-Time Sync handlers ===
+
+    async def handle_realtime_change(self, data):
+        """Handle real-time change notification from Setu connector."""
+        request_id = data.get('request_id', '')
+        changes = data.get('changes', {})
+        logger.info(f"[handle_realtime_change] Changes detected: {changes}")
+        if request_id:
+            await self.cache_realtime_change(request_id, data)
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'realtime_change', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    async def handle_realtime_sync_status(self, data):
+        """Handle real-time sync status update."""
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'realtime_sync_status', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    async def handle_nexinvo_changes_synced(self, data):
+        """Handle confirmation that NexInvo changes were synced to Tally."""
+        request_id = data.get('request_id', '')
+        logger.info(f"[handle_nexinvo_changes_synced] Changes synced for request {request_id}")
+        if request_id:
+            await self.cache_realtime_change(request_id, data)
+        await self.channel_layer.group_send(
+            f"web_org_{self.organization_id}",
+            {'type': 'nexinvo_changes_synced', 'data': data, 'connector_id': self.connector_id}
+        )
+
+    @database_sync_to_async
+    def cache_realtime_change(self, request_id, data):
+        from django.core.cache import cache
+        cache_key = f"realtime_change_{self.organization_id}_{request_id}"
+        cache.set(cache_key, data, timeout=120)
+
+    async def enable_realtime_sync(self, event):
+        """Forward enable real-time sync request to Setu connector."""
+        await self.send_json({
+            'type': 'ENABLE_REALTIME_SYNC',
+            'data': event.get('data', {})
+        })
+
+    async def disable_realtime_sync(self, event):
+        """Forward disable real-time sync request to Setu connector."""
+        await self.send_json({
+            'type': 'DISABLE_REALTIME_SYNC',
+            'data': event.get('data', {})
+        })
+
+    async def get_pending_changes(self, event):
+        """Forward get pending changes request to Setu connector."""
+        await self.send_json({
+            'type': 'GET_PENDING_CHANGES',
+            'data': event.get('data', {})
+        })
+
+    async def realtime_change(self, event):
+        """Broadcast realtime change to web clients."""
+        pass
+
+    async def realtime_sync_status(self, event):
+        """Broadcast realtime sync status to web clients."""
+        pass
+
+    async def nexinvo_changes_synced(self, event):
+        """Broadcast NexInvo changes synced confirmation to web clients."""
+        pass
 
     # Helper methods
 

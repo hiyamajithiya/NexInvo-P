@@ -1,13 +1,14 @@
 """
 Signal handlers for automated email notifications, accounting ledger creation,
-and auto-voucher generation for double-entry bookkeeping.
+auto-voucher generation, and balance recalculation for double-entry bookkeeping.
 """
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 from .models import (
     Organization, OrganizationMembership, Client, Supplier,
-    AccountGroup, LedgerAccount, Invoice, Purchase, Payment, ExpensePayment
+    AccountGroup, LedgerAccount, Invoice, Purchase, Payment, ExpensePayment,
+    Voucher, VoucherEntry
 )
 from .email_utils import (
     send_welcome_email_to_user,
@@ -232,15 +233,15 @@ def setup_chart_of_accounts_on_organization_creation(sender, instance, created, 
 @receiver(post_save, sender=Invoice)
 def create_sales_voucher_on_invoice_save(sender, instance, created, **kwargs):
     """
-    Auto-create a Sales Voucher when an invoice is finalized (not draft).
+    Auto-create a Sales Voucher when an invoice is saved with post_to_ledger=True.
     This ensures proper double-entry bookkeeping with GST postings.
 
     Triggered when:
-    - Invoice is created with status != 'draft'
-    - Invoice status changes from 'draft' to 'sent'/'paid'
+    - Invoice is created/updated with post_to_ledger=True
+    - Proforma invoices are always skipped
     """
-    # Skip draft and proforma invoices
-    if instance.status == 'draft' or instance.invoice_type == 'proforma':
+    # Skip proforma invoices and invoices where post_to_ledger is False
+    if instance.invoice_type == 'proforma' or not instance.post_to_ledger:
         return
 
     try:
@@ -305,3 +306,197 @@ def create_payment_voucher_on_expense_save(sender, instance, created, **kwargs):
             logger.info(f"Auto-created payment voucher {voucher.voucher_number} for expense")
     except Exception as e:
         logger.error(f"Error auto-creating payment voucher for expense: {str(e)}")
+
+
+# =============================================================================
+# BALANCE RECALCULATION SIGNALS - Keep ledger balances in sync on deletion
+# =============================================================================
+
+@receiver(post_delete, sender=VoucherEntry)
+def recalculate_ledger_balance_on_entry_delete(sender, instance, **kwargs):
+    """
+    Recalculate the affected ledger account's balance whenever a voucher entry
+    is deleted (directly or via cascade when a voucher is deleted).
+    """
+    try:
+        # instance.ledger_account still available because it uses PROTECT
+        # but after cascade it may already be gone - use pk to fetch
+        ledger = LedgerAccount.objects.filter(pk=instance.ledger_account_id).first()
+        if ledger:
+            ledger.update_balance()
+            logger.info(f"Recalculated balance for ledger '{ledger.name}' after entry deletion")
+    except Exception as e:
+        logger.error(f"Error recalculating ledger balance after entry deletion: {str(e)}")
+
+
+# =============================================================================
+# CASCADE DELETE VOUCHERS - Clean up accounting entries when source is deleted
+# =============================================================================
+
+@receiver(pre_delete, sender=Invoice)
+def delete_vouchers_on_invoice_delete(sender, instance, **kwargs):
+    """
+    Delete all associated vouchers when an invoice is deleted.
+    This triggers VoucherEntry cascade deletion -> balance recalculation.
+    """
+    try:
+        vouchers = Voucher.objects.filter(invoice=instance)
+        count = vouchers.count()
+        if count > 0:
+            vouchers.delete()
+            logger.info(f"Deleted {count} voucher(s) for invoice {instance.invoice_number}")
+    except Exception as e:
+        logger.error(f"Error deleting vouchers for invoice {instance.invoice_number}: {str(e)}")
+
+
+@receiver(pre_delete, sender=Purchase)
+def delete_vouchers_on_purchase_delete(sender, instance, **kwargs):
+    """
+    Delete all associated vouchers when a purchase is deleted.
+    """
+    try:
+        vouchers = Voucher.objects.filter(purchase=instance)
+        count = vouchers.count()
+        if count > 0:
+            vouchers.delete()
+            logger.info(f"Deleted {count} voucher(s) for purchase {instance.purchase_number}")
+    except Exception as e:
+        logger.error(f"Error deleting vouchers for purchase {instance.purchase_number}: {str(e)}")
+
+
+@receiver(pre_delete, sender=Payment)
+def delete_vouchers_on_payment_delete(sender, instance, **kwargs):
+    """
+    Delete all associated vouchers when a payment record is deleted.
+    """
+    try:
+        vouchers = Voucher.objects.filter(payment_record=instance)
+        count = vouchers.count()
+        if count > 0:
+            vouchers.delete()
+            logger.info(f"Deleted {count} voucher(s) for payment record")
+    except Exception as e:
+        logger.error(f"Error deleting vouchers for payment: {str(e)}")
+
+
+@receiver(pre_delete, sender=ExpensePayment)
+def delete_vouchers_on_expense_delete(sender, instance, **kwargs):
+    """
+    Delete all associated vouchers when an expense payment is deleted.
+    """
+    try:
+        vouchers = Voucher.objects.filter(expense_payment=instance)
+        count = vouchers.count()
+        if count > 0:
+            vouchers.delete()
+            logger.info(f"Deleted {count} voucher(s) for expense payment")
+    except Exception as e:
+        logger.error(f"Error deleting vouchers for expense payment: {str(e)}")
+
+
+# =============================================================================
+# TALLY REAL-TIME SYNC SIGNALS - Queue changes for NexInvo → Tally sync
+# =============================================================================
+
+@receiver(post_save, sender=Voucher)
+def queue_voucher_for_tally_sync(sender, instance, created, **kwargs):
+    """
+    Queue newly created/updated vouchers for sync to Tally.
+    Skip if the voucher was imported from Tally (to prevent sync loops).
+    """
+    # Skip if this voucher came from Tally import
+    if instance.synced_to_tally:
+        return
+
+    # Skip cancelled vouchers
+    if instance.status == 'cancelled':
+        return
+
+    try:
+        from .models import TallyMapping, TallyPendingSync
+
+        # Check if real-time sync is enabled for this organization
+        try:
+            mapping = TallyMapping.objects.get(
+                organization=instance.organization,
+                realtime_sync_enabled=True
+            )
+        except TallyMapping.DoesNotExist:
+            return
+
+        # Serialize voucher data for Tally
+        entries_data = []
+        for entry in instance.entries.all():
+            entries_data.append({
+                'ledger_name': entry.ledger_account.name,
+                'debit_amount': float(entry.debit_amount),
+                'credit_amount': float(entry.credit_amount),
+                'is_debit': float(entry.debit_amount) > 0,
+                'particulars': entry.particulars,
+            })
+
+        voucher_data = {
+            'voucher_type': instance.voucher_type,
+            'voucher_number': instance.voucher_number,
+            'voucher_date': str(instance.voucher_date),
+            'total_amount': float(instance.total_amount),
+            'narration': instance.narration,
+            'reference_number': instance.reference_number,
+            'entries': entries_data,
+        }
+
+        TallyPendingSync.objects.create(
+            organization=instance.organization,
+            record_type='voucher',
+            record_id=instance.id,
+            action='create' if created else 'update',
+            data=voucher_data
+        )
+        logger.info(f"Queued voucher {instance.voucher_number} for Tally sync")
+
+    except Exception as e:
+        logger.error(f"Error queuing voucher for Tally sync: {str(e)}")
+
+
+@receiver(post_save, sender=LedgerAccount)
+def queue_ledger_for_tally_sync(sender, instance, created, **kwargs):
+    """
+    Queue new ledger accounts for sync to Tally.
+    Only queue newly created ledgers (not balance updates).
+    """
+    if not created:
+        return
+
+    # Skip system accounts
+    if instance.is_system_account:
+        return
+
+    try:
+        from .models import TallyMapping, TallyPendingSync
+
+        try:
+            mapping = TallyMapping.objects.get(
+                organization=instance.organization,
+                realtime_sync_enabled=True
+            )
+        except TallyMapping.DoesNotExist:
+            return
+
+        ledger_data = {
+            'name': instance.name,
+            'group_name': instance.group.name if instance.group else 'Suspense Account',
+            'opening_balance': float(instance.opening_balance),
+            'opening_balance_type': instance.opening_balance_type,
+        }
+
+        TallyPendingSync.objects.create(
+            organization=instance.organization,
+            record_type='ledger',
+            record_id=instance.id,
+            action='create',
+            data=ledger_data
+        )
+        logger.info(f"Queued ledger {instance.name} for Tally sync")
+
+    except Exception as e:
+        logger.error(f"Error queuing ledger for Tally sync: {str(e)}")

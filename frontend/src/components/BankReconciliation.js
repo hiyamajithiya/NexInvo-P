@@ -90,14 +90,15 @@ function BankReconciliation() {
         ledger: bankId,
         from_date: startDate,
         to_date: endDate,
-        ordering: 'voucher_date'
+        ordering: 'voucher_date',
+        page_size: 500
       });
 
       const vouchers = res.data.results || res.data || [];
       const entries = [];
 
       vouchers.forEach(voucher => {
-        const bankEntries = (voucher.entries || []).filter(e => e.ledger === parseInt(bankId));
+        const bankEntries = (voucher.entries || []).filter(e => e.ledger_account === parseInt(bankId));
         bankEntries.forEach(entry => {
           entries.push({
             id: `book-${voucher.id}-${entry.id}`,

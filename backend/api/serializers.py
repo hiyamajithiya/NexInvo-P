@@ -348,7 +348,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                   'round_off', 'total_amount',
                   'payment_term', 'payment_term_name', 'payment_term_description',
                   'payment_terms', 'notes', 'parent_proforma', 'is_emailed', 'emailed_at',
-                  'items', 'created_at', 'updated_at']
+                  'post_to_ledger', 'items', 'created_at', 'updated_at']
         read_only_fields = ['id', 'invoice_number', 'client_name', 'payment_term_name',
                            'payment_term_description', 'is_emailed', 'emailed_at',
                            'cgst_amount', 'sgst_amount', 'igst_amount', 'is_interstate',
@@ -1589,6 +1589,7 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'group_name', 'group_full_path', 'balance_display', 'account_type_display',
             'linked_client_name', 'linked_supplier_name',
+            'current_balance', 'current_balance_type',
             'is_system_account',
             'created_at', 'updated_at'
         ]
@@ -1597,7 +1598,14 @@ class LedgerAccountSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request, 'organization'):
             validated_data['organization'] = request.organization
-        return super().create(validated_data)
+        instance = super().create(validated_data)
+        instance.update_balance()
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        instance.update_balance()
+        return instance
 
     def validate_group(self, value):
         """Ensure group belongs to same organization"""
@@ -1620,17 +1628,18 @@ class LedgerAccountListSerializer(serializers.ModelSerializer):
 
 class VoucherEntrySerializer(serializers.ModelSerializer):
     """Serializer for Voucher Entry (debit/credit line)"""
+    ledger = serializers.IntegerField(source='ledger_account_id', read_only=True)
     ledger_name = serializers.CharField(source='ledger_account.name', read_only=True)
     ledger_balance = serializers.CharField(source='ledger_account.balance_display', read_only=True)
 
     class Meta:
         model = VoucherEntry
         fields = [
-            'id', 'ledger_account', 'ledger_name', 'ledger_balance',
+            'id', 'ledger_account', 'ledger', 'ledger_name', 'ledger_balance',
             'debit_amount', 'credit_amount',
             'bill_reference', 'bill_date', 'bill_type', 'particulars', 'sequence'
         ]
-        read_only_fields = ['id', 'ledger_name', 'ledger_balance']
+        read_only_fields = ['id', 'ledger', 'ledger_name', 'ledger_balance']
 
 
 class VoucherSerializer(serializers.ModelSerializer):
@@ -1760,7 +1769,8 @@ class VoucherSerializer(serializers.ModelSerializer):
 
 
 class VoucherListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for voucher lists"""
+    """Serializer for voucher lists - includes entries for report views"""
+    entries = VoucherEntrySerializer(many=True, read_only=True)
     voucher_type_display = serializers.CharField(source='get_voucher_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     party_ledger_name = serializers.CharField(source='party_ledger.name', read_only=True)
@@ -1771,7 +1781,9 @@ class VoucherListSerializer(serializers.ModelSerializer):
             'id', 'voucher_type', 'voucher_type_display',
             'voucher_number', 'voucher_date',
             'party_ledger_name', 'total_amount', 'narration',
-            'status', 'status_display', 'synced_to_tally'
+            'reference_number',
+            'status', 'status_display', 'synced_to_tally',
+            'entries'
         ]
 
 

@@ -308,6 +308,11 @@ class VoucherViewSet(viewsets.ModelViewSet):
         if party_ledger:
             queryset = queryset.filter(party_ledger_id=party_ledger)
 
+        # Filter by ledger (any entry involving this ledger account)
+        ledger = self.request.query_params.get('ledger', None)
+        if ledger:
+            queryset = queryset.filter(entries__ledger_account_id=ledger).distinct()
+
         # Search
         search = self.request.query_params.get('search', None)
         if search:
@@ -329,6 +334,24 @@ class VoucherViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return VoucherListSerializer
         return VoucherSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete voucher and recalculate affected ledger balances."""
+        voucher = self.get_object()
+        # Collect affected ledger IDs before deletion (entries will cascade-delete)
+        affected_ledger_ids = list(
+            voucher.entries.values_list('ledger_account_id', flat=True)
+        )
+        # Delete (triggers VoucherEntry cascade -> post_delete signals)
+        response = super().destroy(request, *args, **kwargs)
+        # Safety: recalculate in case signals missed any
+        for ledger_id in affected_ledger_ids:
+            try:
+                ledger = LedgerAccount.objects.get(pk=ledger_id)
+                ledger.update_balance()
+            except LedgerAccount.DoesNotExist:
+                pass
+        return response
 
     @action(detail=True, methods=['post'])
     def post_voucher(self, request, pk=None):
@@ -501,6 +524,22 @@ class BankReconciliationViewSet(viewsets.ModelViewSet):
             return Response(BankReconciliationSerializer(reconciliation).data)
         except BankReconciliationItem.DoesNotExist:
             return Response({'error': 'Item not found'}, status=404)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def recalculate_all_balances(request):
+    """Recalculate all ledger account balances from voucher entries."""
+    org = request.organization
+    ledgers = LedgerAccount.objects.filter(organization=org)
+    count = 0
+    for ledger in ledgers:
+        ledger.update_balance()
+        count += 1
+    return Response({
+        'message': f'Recalculated balances for {count} ledger accounts',
+        'count': count
+    })
 
 
 # Accounting Dashboard Stats

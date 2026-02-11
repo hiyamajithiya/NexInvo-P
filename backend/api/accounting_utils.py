@@ -109,13 +109,9 @@ def create_sales_voucher(invoice, post_immediately=True):
         logger.debug(f"Sales voucher already exists for invoice {invoice.invoice_number}")
         return None
 
-    # Skip proforma invoices and drafts
+    # Skip proforma invoices
     if invoice.invoice_type == 'proforma':
         logger.debug(f"Skipping proforma invoice {invoice.invoice_number}")
-        return None
-
-    if invoice.status == 'draft':
-        logger.debug(f"Skipping draft invoice {invoice.invoice_number}")
         return None
 
     org = invoice.organization
@@ -185,8 +181,25 @@ def create_sales_voucher(invoice, post_immediately=True):
                     sequence=sequence
                 ))
 
+            # Determine GST amounts
+            # If individual GST components are stored, use them
+            # Otherwise, derive from tax_amount (split 50/50 for CGST+SGST, or full for IGST)
+            cgst = Decimal(str(invoice.cgst_amount or 0))
+            sgst = Decimal(str(invoice.sgst_amount or 0))
+            igst = Decimal(str(invoice.igst_amount or 0))
+            total_tax = Decimal(str(invoice.tax_amount or 0))
+
+            if cgst == 0 and sgst == 0 and igst == 0 and total_tax > 0:
+                # GST components not stored separately - derive from tax_amount
+                is_interstate = getattr(invoice, 'is_interstate', False)
+                if is_interstate:
+                    igst = total_tax
+                else:
+                    # Local supply: split equally into CGST and SGST
+                    cgst = (total_tax / 2).quantize(Decimal('0.01'))
+                    sgst = total_tax - cgst  # Remainder to avoid rounding mismatch
+
             # Credit: Output CGST
-            cgst = invoice.cgst_amount or Decimal('0')
             if cgst > 0 and output_cgst:
                 sequence += 1
                 entries.append(VoucherEntry(
@@ -199,7 +212,6 @@ def create_sales_voucher(invoice, post_immediately=True):
                 ))
 
             # Credit: Output SGST
-            sgst = invoice.sgst_amount or Decimal('0')
             if sgst > 0 and output_sgst:
                 sequence += 1
                 entries.append(VoucherEntry(
@@ -212,7 +224,6 @@ def create_sales_voucher(invoice, post_immediately=True):
                 ))
 
             # Credit: Output IGST (for interstate)
-            igst = invoice.igst_amount or Decimal('0')
             if igst > 0 and output_igst:
                 sequence += 1
                 entries.append(VoucherEntry(

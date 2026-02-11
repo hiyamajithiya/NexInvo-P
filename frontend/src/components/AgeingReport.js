@@ -50,7 +50,8 @@ function AgeingReport() {
 
       const ledgersRes = await ledgerAccountAPI.getAll({
         account_type: accountType,
-        as_on_date: asOnDate
+        as_on_date: asOnDate,
+        page_size: 1000
       });
 
       const ledgers = ledgersRes.data.results || ledgersRes.data || [];

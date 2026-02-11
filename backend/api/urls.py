@@ -97,6 +97,23 @@ urlpatterns = [
     path('tally-sync/sales-vouchers/', views.tally_get_sales_vouchers, name='tally-get-sales-vouchers'),
     path('tally-sync/two-way-preview/', views.tally_two_way_sync_preview, name='tally-two-way-preview'),
     path('tally-sync/sync-to-nexinvo/', views.tally_sync_to_nexinvo, name='tally-sync-to-nexinvo'),
+    # Feature 1: Company Info Import
+    path('tally-sync/company-info/', views.tally_get_company_info, name='tally-get-company-info'),
+    path('tally-sync/import-company-info/', views.tally_import_company_info, name='tally-import-company-info'),
+    # Feature 2: Opening Balances Import
+    path('tally-sync/ledgers-with-balances/', views.tally_get_ledgers_with_balances, name='tally-get-ledgers-with-balances'),
+    path('tally-sync/preview-opening-balances/', views.tally_preview_opening_balances, name='tally-preview-opening-balances'),
+    path('tally-sync/import-opening-balances/', views.tally_import_opening_balances, name='tally-import-opening-balances'),
+    # Feature 3: All Vouchers Import
+    path('tally-sync/all-vouchers/', views.tally_get_all_vouchers, name='tally-get-all-vouchers'),
+    path('tally-sync/preview-import-vouchers/', views.tally_preview_import_vouchers, name='tally-preview-import-vouchers'),
+    path('tally-sync/import-vouchers/', views.tally_import_vouchers, name='tally-import-vouchers'),
+    # Feature 4: Real-Time Sync
+    path('tally-sync/realtime-config/', views.tally_realtime_sync_config, name='tally-realtime-sync-config'),
+    path('tally-sync/realtime-status/', views.tally_realtime_sync_status, name='tally-realtime-sync-status'),
+    path('tally-sync/realtime-log/', views.tally_realtime_sync_log, name='tally-realtime-sync-log'),
+    path('tally-sync/pending-changes/', views.tally_get_pending_changes, name='tally-get-pending-changes'),
+    path('tally-sync/mark-changes-synced/', views.tally_mark_changes_synced, name='tally-mark-changes-synced'),
     # Payment Settings & Payment Requests
     path('superadmin/payment-settings/', views.superadmin_payment_settings, name='superadmin-payment-settings'),
     path('payment-settings/', views.get_payment_settings_public, name='payment-settings-public'),
@@ -127,6 +144,7 @@ urlpatterns = [
 
     # Accounting Module additional endpoints
     path('accounting/dashboard/', views.accounting_dashboard_stats, name='accounting-dashboard'),
+    path('accounting/recalculate-balances/', views.recalculate_all_balances, name='accounting-recalculate-balances'),
 
     # Dashboard Summary APIs (for dashboard widgets)
     path('dashboard/ageing-summary/', dashboard_views.ageing_report_summary, name='dashboard-ageing-summary'),

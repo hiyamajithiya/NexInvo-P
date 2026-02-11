@@ -1,0 +1,546 @@
+/* ============================================================
+   TALLY-STYLE REPORT STYLESHEET
+   Clean, minimal, text-driven accounting reports
+   Mimics Tally Prime's visual presentation
+   ============================================================ */
+
+/* --- Report Container --- */
+.tally-report {
+  background: #fff;
+  font-family: 'Segoe UI', -apple-system, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+/* --- Report Header (Company + Title + Date) --- */
+.tally-report-header {
+  text-align: center;
+  padding: 16px 20px 12px;
+  border-bottom: 2px solid #333;
+  margin-bottom: 0;
+}
+
+.tally-company-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 2px;
+}
+
+.tally-report-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 2px;
+}
+
+.tally-report-period {
+  font-size: 12px;
+  color: #555;
+  margin: 0;
+}
+
+/* --- Filter Bar --- */
+.tally-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f7f7f7;
+  border-bottom: 1px solid #ddd;
+  flex-wrap: wrap;
+}
+
+.tally-filter-bar label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.tally-filter-bar input,
+.tally-filter-bar select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.tally-filter-bar .tally-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.tally-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  background: #f5f5f5;
+  color: #333;
+  cursor: pointer;
+}
+
+.tally-btn:hover {
+  background: #e8e8e8;
+}
+
+/* --- Standard Table --- */
+.tally-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.tally-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  color: #333;
+  border-bottom: 2px solid #333;
+  background: #fafafa;
+}
+
+.tally-table th.col-amount {
+  text-align: right;
+  width: 160px;
+}
+
+.tally-table th.col-date {
+  width: 100px;
+}
+
+.tally-table th.col-vch-type {
+  width: 90px;
+}
+
+.tally-table th.col-vch-no {
+  width: 110px;
+}
+
+.tally-table td {
+  padding: 5px 12px;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+}
+
+.tally-table td.col-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+}
+
+/* --- Group Row (Bold, like Tally primary groups) --- */
+.tally-group-row td {
+  font-weight: 700;
+  color: #111;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+/* --- Sub-Group Row --- */
+.tally-subgroup-row td {
+  font-weight: 600;
+  color: #333;
+}
+
+/* --- Ledger Row (Normal weight, indented) --- */
+.tally-ledger-row td {
+  font-weight: 400;
+  color: #444;
+}
+
+/* --- Indentation Levels --- */
+.tally-indent-0 { padding-left: 12px !important; }
+.tally-indent-1 { padding-left: 36px !important; }
+.tally-indent-2 { padding-left: 60px !important; }
+.tally-indent-3 { padding-left: 84px !important; }
+
+/* --- Total Rows --- */
+.tally-subtotal-row td {
+  font-weight: 600;
+  border-top: 1px solid #999;
+  border-bottom: 1px solid #999;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.tally-total-row td {
+  font-weight: 700;
+  border-top: 2px solid #333;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 13px;
+}
+
+.tally-grand-total td {
+  font-weight: 700;
+  border-top: 3px double #333;
+  border-bottom: 3px double #333;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #fafafa;
+}
+
+/* --- Special Rows --- */
+.tally-opening-row td {
+  font-weight: 500;
+  font-style: italic;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+}
+
+.tally-closing-row td {
+  font-weight: 700;
+  border-top: 2px solid #333;
+  padding-top: 8px;
+}
+
+/* --- T-Format Layout (for P&L and Balance Sheet) --- */
+.tally-t-format {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 400px;
+}
+
+.tally-t-left,
+.tally-t-right {
+  display: flex;
+  flex-direction: column;
+}
+
+.tally-t-left {
+  border-right: 2px solid #333;
+}
+
+.tally-t-body {
+  flex: 1;
+}
+
+.tally-t-totals {
+  margin-top: auto;
+}
+
+.tally-t-totals .tally-table {
+  border-top: 1px solid #999;
+}
+
+.tally-t-left .tally-table,
+.tally-t-right .tally-table {
+  table-layout: fixed;
+}
+
+.tally-t-side-header {
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #111;
+  border-bottom: 1px solid #999;
+  background: #f5f5f5;
+}
+
+.tally-t-footer {
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 14px;
+  border-top: 3px double #333;
+  display: flex;
+  justify-content: space-between;
+  background: #fafafa;
+}
+
+/* --- Balance Type Indicators --- */
+.tally-dr {
+  color: #1a1a1a;
+}
+
+.tally-cr {
+  color: #1a1a1a;
+}
+
+.tally-negative {
+  color: #c00;
+}
+
+/* --- Expand/Collapse Toggle --- */
+.tally-expand-btn {
+  display: inline-block;
+  width: 16px;
+  cursor: pointer;
+  color: #666;
+  font-size: 10px;
+  user-select: none;
+  text-align: center;
+  margin-right: 4px;
+}
+
+.tally-expand-btn:hover {
+  color: #111;
+}
+
+/* --- Loading & Empty States --- */
+.tally-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+  font-size: 14px;
+}
+
+.tally-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* --- Checkbox filter row --- */
+.tally-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+}
+
+/* --- Account Groups Tree (Tally Style) --- */
+.tally-tree-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+
+.tally-tree-item:hover {
+  background: #f7f7f7;
+}
+
+.tally-tree-item.selected {
+  background: #eef2ff;
+}
+
+.tally-tree-primary {
+  font-weight: 700;
+}
+
+.tally-tree-name {
+  flex: 1;
+  color: #1a1a1a;
+}
+
+.tally-tree-balance {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  color: #555;
+  min-width: 120px;
+  text-align: right;
+}
+
+.tally-tree-count {
+  font-size: 11px;
+  color: #999;
+  margin-left: 8px;
+}
+
+/* --- Report Subtitle (Account name under report title) --- */
+.tally-report-subtitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  margin: 4px 0 0;
+}
+
+/* --- Ledger/Transaction Table Variant --- */
+.tally-ledger-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* --- Day Book Date Separator --- */
+.tally-date-separator td {
+  font-weight: 700;
+  color: #333;
+  background: #f5f5f5;
+  padding: 7px 12px;
+  border-bottom: 1px solid #ccc;
+  border-top: 1px solid #ccc;
+  font-size: 12px;
+}
+
+/* --- Narration text --- */
+.tally-narration {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+}
+
+/* --- Empty State --- */
+.tally-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+  font-size: 14px;
+}
+
+.tally-empty-state p {
+  margin: 0;
+}
+
+/* --- Account Groups Tally Layout --- */
+.tally-groups-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  min-height: 500px;
+}
+
+.tally-groups-layout .tally-tree-panel {
+  border-right: 1px solid #ddd;
+}
+
+.tally-groups-layout .tally-detail-panel {
+  padding: 16px;
+  background: #fafafa;
+}
+
+.tally-detail-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 4px;
+}
+
+.tally-detail-path {
+  font-size: 12px;
+  color: #888;
+  margin: 0 0 16px;
+}
+
+.tally-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+
+.tally-detail-label {
+  color: #666;
+}
+
+.tally-detail-value {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.tally-detail-actions {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tally-detail-actions .tally-btn {
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.tally-detail-actions .tally-btn.danger {
+  color: #c00;
+  border-color: #daa;
+}
+
+.tally-tree-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.tally-tree-toolbar input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.tally-tree-toolbar .tally-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.tally-nature-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.tally-nature-badge.debit {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.tally-nature-badge.credit {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* --- Print Styles --- */
+@media print {
+  .tally-filter-bar,
+  .tally-btn,
+  .tally-actions,
+  .tally-tree-toolbar,
+  .tally-detail-actions,
+  .page-header {
+    display: none !important;
+  }
+
+  .tally-report {
+    font-size: 11px;
+  }
+
+  .tally-report-header {
+    padding: 8px;
+  }
+
+  .tally-table td,
+  .tally-table th {
+    padding: 3px 8px;
+  }
+
+  .tally-t-format {
+    page-break-inside: avoid;
+  }
+
+  .tally-grand-total td {
+    font-size: 12px;
+  }
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  .tally-t-format {
+    grid-template-columns: 1fr;
+  }
+
+  .tally-t-left {
+    border-right: none;
+    border-bottom: 2px solid #333;
+  }
+
+  .tally-table th.col-amount,
+  .tally-table td.col-amount {
+    width: 120px;
+  }
+}

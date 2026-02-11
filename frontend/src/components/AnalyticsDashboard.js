@@ -70,8 +70,8 @@ function AnalyticsDashboard() {
     try {
       // Get receipt and payment vouchers
       const [receiptsRes, paymentsRes] = await Promise.all([
-        voucherAPI.getAll({ voucher_type: 'receipt', from_date: fromDate, to_date: toDate }),
-        voucherAPI.getAll({ voucher_type: 'payment', from_date: fromDate, to_date: toDate })
+        voucherAPI.getAll({ voucher_type: 'receipt', from_date: fromDate, to_date: toDate, page_size: 500 }),
+        voucherAPI.getAll({ voucher_type: 'payment', from_date: fromDate, to_date: toDate, page_size: 500 })
       ]);
 
       const receipts = receiptsRes.data.results || receiptsRes.data || [];
@@ -111,7 +111,7 @@ function AnalyticsDashboard() {
 
   const loadIncomeVsExpense = async () => {
     try {
-      const ledgersRes = await ledgerAccountAPI.getAll({ from_date: fromDate, to_date: toDate });
+      const ledgersRes = await ledgerAccountAPI.getAll({ from_date: fromDate, to_date: toDate, page_size: 1000 });
       const ledgers = ledgersRes.data.results || ledgersRes.data || [];
 
       let totalIncome = 0, totalExpense = 0;
@@ -133,7 +133,7 @@ function AnalyticsDashboard() {
 
   const loadTopDebtorsCreditors = async () => {
     try {
-      const ledgersRes = await ledgerAccountAPI.getAll({ as_on_date: toDate });
+      const ledgersRes = await ledgerAccountAPI.getAll({ as_on_date: toDate, page_size: 1000 });
       const ledgers = ledgersRes.data.results || ledgersRes.data || [];
 
       const debtors = ledgers
@@ -162,7 +162,8 @@ function AnalyticsDashboard() {
       const receiptsRes = await voucherAPI.getAll({
         voucher_type: 'receipt',
         from_date: fromDate,
-        to_date: toDate
+        to_date: toDate,
+        page_size: 500
       });
       const receipts = receiptsRes.data.results || receiptsRes.data || [];
 
@@ -197,7 +198,8 @@ function AnalyticsDashboard() {
     try {
       const invoicesRes = await invoiceAPI.getAll({
         from_date: fromDate,
-        to_date: toDate
+        to_date: toDate,
+        page_size: 500
       });
       const invoices = invoicesRes.data.results || invoicesRes.data || [];
 

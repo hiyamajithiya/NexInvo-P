@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.core.cache import cache
-from django.db.models import Sum, Count, Q, F, Value, DecimalField, Max, Subquery, OuterRef
+from django.db.models import Sum, Count, Q, F, Value, DecimalField, Subquery, OuterRef
 from django.db.models.functions import Coalesce
 from datetime import date, timedelta
 from decimal import Decimal

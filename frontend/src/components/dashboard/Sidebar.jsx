@@ -71,7 +71,7 @@ function Sidebar({
         <div className="nav-item-group">
           <a
             href="#master"
-            className={`nav-item has-submenu ${masterMenuOpen ? 'open' : ''} ${['clients', 'services', 'products', 'account-groups', 'ledgers', 'opening-balance'].includes(activeMenu) ? 'active' : ''}`}
+            className={`nav-item has-submenu ${masterMenuOpen ? 'open' : ''} ${['clients', 'services', 'products', 'account-groups', 'ledgers', 'opening-balance', 'financial-year'].includes(activeMenu) ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); setMasterMenuOpen(!masterMenuOpen); }}
           >
             <span className="nav-icon">{'\uD83D\uDCDA'}</span>
@@ -108,6 +108,14 @@ function Sidebar({
                   <span className="nav-text">Product Master</span>
                 </a>
               )}
+              <a
+                href="#financial-year"
+                className={`nav-item submenu-item ${activeMenu === 'financial-year' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('financial-year'); }}
+              >
+                <span className="nav-icon">{'\uD83D\uDCC5'}</span>
+                <span className="nav-text">Financial Year</span>
+              </a>
               <a
                 href="#account-groups"
                 className={`nav-item submenu-item ${activeMenu === 'account-groups' ? 'active' : ''}`}
@@ -379,7 +387,7 @@ function Sidebar({
         <div className="nav-item-group">
           <a
             href="#tally-sync"
-            className={`nav-item has-submenu ${tallySyncMenuOpen ? 'open' : ''} ${['tally-sync', 'tally-sync-accounts', 'tally-sync-vouchers'].includes(activeMenu) ? 'active' : ''}`}
+            className={`nav-item has-submenu ${tallySyncMenuOpen ? 'open' : ''} ${['tally-sync', 'tally-sync-accounts', 'tally-sync-vouchers', 'tally-import-company', 'tally-import-balances', 'tally-import-vouchers', 'tally-realtime-sync'].includes(activeMenu) ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); setTallySyncMenuOpen(!tallySyncMenuOpen); }}
           >
             <span className="nav-icon">{'\uD83D\uDD17'}</span>
@@ -411,6 +419,38 @@ function Sidebar({
               >
                 <span className="nav-icon">{'\uD83D\uDCE4'}</span>
                 <span className="nav-text">Export Vouchers</span>
+              </a>
+              <a
+                href="#tally-import-company"
+                className={`nav-item submenu-item ${activeMenu === 'tally-import-company' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('tally-import-company'); }}
+              >
+                <span className="nav-icon">{'\uD83C\uDFE2'}</span>
+                <span className="nav-text">Import Company Info</span>
+              </a>
+              <a
+                href="#tally-import-balances"
+                className={`nav-item submenu-item ${activeMenu === 'tally-import-balances' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('tally-import-balances'); }}
+              >
+                <span className="nav-icon">{'\uD83D\uDCCA'}</span>
+                <span className="nav-text">Import Opening Balances</span>
+              </a>
+              <a
+                href="#tally-import-vouchers"
+                className={`nav-item submenu-item ${activeMenu === 'tally-import-vouchers' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('tally-import-vouchers'); }}
+              >
+                <span className="nav-icon">{'\uD83D\uDCE5'}</span>
+                <span className="nav-text">Import Vouchers</span>
+              </a>
+              <a
+                href="#tally-realtime-sync"
+                className={`nav-item submenu-item ${activeMenu === 'tally-realtime-sync' ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); handleMenuClick('tally-realtime-sync'); }}
+              >
+                <span className="nav-icon">{'\u26A1'}</span>
+                <span className="nav-text">Real-Time Sync</span>
               </a>
             </div>
           )}

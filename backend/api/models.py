@@ -387,6 +387,7 @@ class Invoice(models.Model):
     emailed_at = models.DateTimeField(null=True, blank=True)
     last_reminder_sent = models.DateTimeField(null=True, blank=True, help_text='Last payment reminder sent date')
     reminder_count = models.IntegerField(default=0, help_text='Number of reminders sent')
+    post_to_ledger = models.BooleanField(default=True, help_text='Auto-post accounting entry to ledger on save')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1977,8 +1978,79 @@ class TallyMapping(models.Model):
         verbose_name = "Tally Mapping"
         verbose_name_plural = "Tally Mappings"
 
+    # Real-Time Sync Settings (Feature 4)
+    realtime_sync_enabled = models.BooleanField(default=False)
+    realtime_sync_interval = models.IntegerField(default=60, help_text='Sync interval in seconds (30-300)')
+    realtime_sync_voucher_types = models.JSONField(default=list, blank=True, help_text='Voucher types to sync')
+    last_realtime_sync = models.DateTimeField(null=True, blank=True)
+    realtime_sync_state = models.JSONField(default=dict, blank=True, help_text='Last known Tally state for change detection')
+
     def __str__(self):
         return f"Tally Mapping for {self.organization.name}"
+
+
+class TallyRealtimeSyncLog(models.Model):
+    """Log entries for real-time sync activity."""
+    EVENT_TYPE_CHOICES = [
+        ('tally_to_nexinvo', 'Tally → NexInvo'),
+        ('nexinvo_to_tally', 'NexInvo → Tally'),
+        ('sync_started', 'Sync Started'),
+        ('sync_stopped', 'Sync Stopped'),
+        ('error', 'Error'),
+        ('conflict', 'Conflict'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='tally_realtime_sync_logs'
+    )
+    event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
+    description = models.CharField(max_length=500)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Tally Realtime Sync Log"
+
+    def __str__(self):
+        return f"{self.event_type}: {self.description}"
+
+
+class TallyPendingSync(models.Model):
+    """Queue for NexInvo → Tally sync (records pending push to Tally)."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('synced', 'Synced'),
+        ('failed', 'Failed'),
+    ]
+    ACTION_CHOICES = [
+        ('create', 'Create'),
+        ('update', 'Update'),
+        ('delete', 'Delete'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='tally_pending_syncs'
+    )
+    record_type = models.CharField(max_length=20)  # 'voucher' or 'ledger'
+    record_id = models.IntegerField()
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES, default='create')
+    data = models.JSONField(default=dict, help_text='Serialized record data for Tally')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Tally Pending Sync"
+
+    def __str__(self):
+        return f"{self.record_type}#{self.record_id} - {self.action} ({self.status})"
 
 
 class TallySyncHistory(models.Model):

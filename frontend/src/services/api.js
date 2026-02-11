@@ -322,6 +322,24 @@ export const setuAPI = {
   }),
   // Get sync operation status
   getSyncStatus: (syncId) => api.get(`/setu/sync-status/${syncId}/`),
+  // Feature 1: Company Info Import
+  getCompanyInfo: () => api.get('/tally-sync/company-info/'),
+  importCompanyInfo: (data) => api.post('/tally-sync/import-company-info/', data),
+  // Feature 2: Opening Balances Import
+  getLedgersWithBalances: () => api.get('/tally-sync/ledgers-with-balances/'),
+  previewOpeningBalances: (ledgers) => api.post('/tally-sync/preview-opening-balances/', { ledgers }),
+  importOpeningBalances: (balances) => api.post('/tally-sync/import-opening-balances/', { balances }),
+  // Feature 3: All Vouchers Import
+  getAllVouchers: (startDate, endDate) => api.get('/tally-sync/all-vouchers/', { params: { start_date: startDate, end_date: endDate } }),
+  previewImportVouchers: (vouchers, voucherTypes) => api.post('/tally-sync/preview-import-vouchers/', { vouchers, voucher_types: voucherTypes }),
+  importVouchers: (vouchers, autoCreateLedgers) => api.post('/tally-sync/import-vouchers/', { vouchers, auto_create_ledgers: autoCreateLedgers }),
+  // Feature 4: Real-Time Sync
+  getRealtimeSyncConfig: () => api.get('/tally-sync/realtime-config/'),
+  updateRealtimeSyncConfig: (data) => api.post('/tally-sync/realtime-config/', data),
+  getRealtimeSyncStatus: () => api.get('/tally-sync/realtime-status/'),
+  getRealtimeSyncLog: (page, pageSize) => api.get('/tally-sync/realtime-log/', { params: { page, page_size: pageSize } }),
+  getPendingChanges: () => api.get('/tally-sync/pending-changes/'),
+  markChangesSynced: (changeIds) => api.post('/tally-sync/mark-changes-synced/', { change_ids: changeIds }),
 };
 
 // Scheduled Invoice APIs
@@ -440,11 +458,13 @@ export const ledgerAccountAPI = {
   getById: (id) => api.get(`/ledger-accounts/${id}/`),
   create: (data) => api.post('/ledger-accounts/', data),
   update: (id, data) => api.put(`/ledger-accounts/${id}/`, data),
+  patch: (id, data) => api.patch(`/ledger-accounts/${id}/`, data),
   delete: (id) => api.delete(`/ledger-accounts/${id}/`),
   getByGroup: () => api.get('/ledger-accounts/by_group/'),
   getStatement: (id, params) => api.get(`/ledger-accounts/${id}/statement/`, { params }),
   getCashOrBank: () => api.get('/ledger-accounts/', { params: { cash_or_bank: true, minimal: true } }),
   getParties: (type) => api.get('/ledger-accounts/', { params: { party_type: type, minimal: true } }),
+  recalculateBalances: () => api.post('/accounting/recalculate-balances/'),
 };
 
 // Voucher APIs (all transaction types)

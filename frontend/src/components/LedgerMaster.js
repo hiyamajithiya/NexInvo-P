@@ -64,10 +64,23 @@ function LedgerMaster() {
   const loadGroups = async () => {
     try {
       const response = await accountGroupAPI.getAll();
-      setGroups(response.data.results || response.data || []);
+      const data = response.data.results || response.data || [];
+      data.sort((a, b) => {
+        const pathA = (a.full_path || a.name || '').toLowerCase();
+        const pathB = (b.full_path || b.name || '').toLowerCase();
+        return pathA.localeCompare(pathB);
+      });
+      setGroups(data);
     } catch (err) {
       // Error handled silently
     }
+  };
+
+  const getIndentedGroupName = (group) => {
+    const path = group.full_path || group.name;
+    const depth = (path.match(/>/g) || []).length;
+    const prefix = depth > 0 ? '\u00A0\u00A0\u00A0\u00A0'.repeat(depth) + '— ' : '';
+    return prefix + group.name;
   };
 
   const handleAddLedger = () => {
@@ -140,12 +153,21 @@ function LedgerMaster() {
 
     try {
       const dataToSave = {
-        ...currentLedger,
-        opening_balance: parseFloat(currentLedger.opening_balance) || 0
+        name: currentLedger.name,
+        group: currentLedger.group,
+        account_type: currentLedger.account_type,
+        opening_balance: parseFloat(currentLedger.opening_balance) || 0,
+        opening_balance_type: currentLedger.opening_balance_type || 'Dr',
+        is_bank_account: currentLedger.is_bank_account || false,
+        bank_name: currentLedger.bank_name || '',
+        account_number: currentLedger.account_number || '',
+        ifsc_code: currentLedger.ifsc_code || '',
+        branch: currentLedger.branch || '',
+        is_active: currentLedger.is_active !== false,
       };
 
       if (currentLedger.id) {
-        await ledgerAccountAPI.update(currentLedger.id, dataToSave);
+        await ledgerAccountAPI.patch(currentLedger.id, dataToSave);
         showSuccess('Ledger account updated successfully!');
       } else {
         await ledgerAccountAPI.create(dataToSave);
@@ -249,7 +271,7 @@ function LedgerMaster() {
         >
           <option value="">All Groups</option>
           {groups.map(group => (
-            <option key={group.id} value={group.id}>{group.full_path || group.name}</option>
+            <option key={group.id} value={group.id}>{getIndentedGroupName(group)}</option>
           ))}
         </select>
         <div className="view-toggle">
@@ -477,7 +499,7 @@ function LedgerMaster() {
                         <option value="">Select Group</option>
                         {groups.map(group => (
                           <option key={group.id} value={group.id}>
-                            {group.full_path || group.name}
+                            {getIndentedGroupName(group)}
                           </option>
                         ))}
                       </select>

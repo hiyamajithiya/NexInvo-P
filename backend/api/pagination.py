@@ -5,14 +5,14 @@ class StandardPagination(PageNumberPagination):
     """Default pagination for list endpoints."""
     page_size = 25
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 1000
 
 
 class LargePagination(PageNumberPagination):
     """For endpoints that return larger datasets (e.g., reports, exports)."""
     page_size = 50
     page_size_query_param = 'page_size'
-    max_page_size = 200
+    max_page_size = 1000
 
 
 class SmallPagination(PageNumberPagination):

@@ -50,10 +50,15 @@ const BankBook = lazy(() => import('./BankBook'));
 const BankReconciliation = lazy(() => import('./BankReconciliation'));
 const TallySyncAccounts = lazy(() => import('./TallySyncAccounts'));
 const TallySyncVouchers = lazy(() => import('./TallySyncVouchers'));
+const TallyImportCompanyInfo = lazy(() => import('./TallyImportCompanyInfo'));
+const TallyImportBalances = lazy(() => import('./TallyImportBalances'));
+const TallyImportVouchers = lazy(() => import('./TallyImportVouchers'));
+const TallyRealtimeSync = lazy(() => import('./TallyRealtimeSync'));
 const AgeingReport = lazy(() => import('./AgeingReport'));
 const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'));
 const PaymentReminders = lazy(() => import('./PaymentReminders'));
 const OpeningBalanceImport = lazy(() => import('./OpeningBalanceImport'));
+const FinancialYearPage = lazy(() => import('./FinancialYear'));
 
 // Component loading spinner
 const ComponentLoader = () => (
@@ -243,6 +248,8 @@ function Dashboard({ user, onLogout }) {
         return <PaymentReminders />;
       case 'opening-balance':
         return <OpeningBalanceImport />;
+      case 'financial-year':
+        return <FinancialYearPage />;
       case 'reports':
         return <Reports />;
       case 'settings':
@@ -261,6 +268,14 @@ function Dashboard({ user, onLogout }) {
         return <TallySyncAccounts />;
       case 'tally-sync-vouchers':
         return <TallySyncVouchers />;
+      case 'tally-import-company':
+        return <TallyImportCompanyInfo />;
+      case 'tally-import-balances':
+        return <TallyImportBalances />;
+      case 'tally-import-vouchers':
+        return <TallyImportVouchers />;
+      case 'tally-realtime-sync':
+        return <TallyRealtimeSync />;
       case 'submit-review':
         return <ReviewSubmitPage onNavigate={setActiveMenu} onReviewSubmitted={handleReviewSubmitted} />;
       case 'profile':
@@ -307,6 +322,7 @@ function Dashboard({ user, onLogout }) {
       case 'analytics-dashboard': return 'Analytics Dashboard';
       case 'payment-reminders': return 'Payment Reminders';
       case 'opening-balance': return 'Opening Balance Import';
+      case 'financial-year': return 'Financial Year';
       case 'reports': return 'Reports & Analytics';
       case 'settings': return 'System Settings';
       case 'organization': return 'Organization Settings';
@@ -316,6 +332,10 @@ function Dashboard({ user, onLogout }) {
       case 'tally-sync': return 'Setu - Tally Connector';
       case 'tally-sync-accounts': return 'Tally Sync - Accounts';
       case 'tally-sync-vouchers': return 'Tally Sync - Vouchers';
+      case 'tally-import-company': return 'Import Company Info from Tally';
+      case 'tally-import-balances': return 'Import Opening Balances from Tally';
+      case 'tally-import-vouchers': return 'Import Vouchers from Tally';
+      case 'tally-realtime-sync': return 'Real-Time Tally Sync';
       case 'submit-review': return 'Submit Review';
       case 'profile': return 'User Profile';
       default: return 'Dashboard Overview';

@@ -23,23 +23,25 @@ export const OrganizationProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       const response = await organizationAPI.getAll();
-      setOrganizations(response.data);
+      // Handle both paginated ({ results: [...] }) and non-paginated ([...]) responses
+      const orgs = response.data.results || response.data;
+      setOrganizations(orgs);
 
       // Set current organization from localStorage or use first one
       const storedOrgId = localStorage.getItem('current_org_id');
       if (storedOrgId) {
-        const org = response.data.find(o => String(o.id) === String(storedOrgId));
+        const org = orgs.find(o => String(o.id) === String(storedOrgId));
         if (org) {
           setCurrentOrganization(org);
-        } else if (response.data.length > 0) {
+        } else if (orgs.length > 0) {
           // If stored org not found, use first one
-          setCurrentOrganization(response.data[0]);
-          localStorage.setItem('current_org_id', response.data[0].id);
+          setCurrentOrganization(orgs[0]);
+          localStorage.setItem('current_org_id', orgs[0].id);
         }
-      } else if (response.data.length > 0) {
+      } else if (orgs.length > 0) {
         // No stored org, use first one
-        setCurrentOrganization(response.data[0]);
-        localStorage.setItem('current_org_id', response.data[0].id);
+        setCurrentOrganization(orgs[0]);
+        localStorage.setItem('current_org_id', orgs[0].id);
       }
 
       setLoading(false);

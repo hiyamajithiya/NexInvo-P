@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { voucherAPI, ledgerAccountAPI, financialYearAPI } from '../services/api';
+import { formatDate } from '../utils/dateFormat';
 import { formatCurrency } from '../utils/formatCurrency';
 import { statCardStyles } from '../styles/statCardStyles';
 import { useToast } from './Toast';
@@ -8,24 +9,23 @@ import './Pages.css';
 function CreditNote() {
   const { showSuccess, showError } = useToast();
   const [creditNotes, setCreditNotes] = useState([]);
-  const [partyLedgers, setPartyLedgers] = useState([]);
-  const [incomeLedgers, setIncomeLedgers] = useState([]);
-  const [financialYear, setFinancialYear] = useState(null);
+  const [ledgerAccounts, setLedgerAccounts] = useState([]);
+  const [currentFinancialYear, setCurrentFinancialYear] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [error, setError] = useState('');
 
-  const initialFormState = {
+  const [currentVoucher, setCurrentVoucher] = useState({
     voucher_date: new Date().toISOString().split('T')[0],
-    party_ledger: '',
-    income_ledger: '',
-    amount: '',
     narration: '',
-    reference_number: ''
-  };
-
-  const [currentNote, setCurrentNote] = useState(initialFormState);
-  const [editingId, setEditingId] = useState(null);
+    reference_number: '',
+    entries: [
+      { ledger: '', debit_amount: 0, credit_amount: 0, narration: '' },
+      { ledger: '', debit_amount: 0, credit_amount: 0, narration: '' }
+    ]
+  });
 
   useEffect(() => {
     loadData();
@@ -34,33 +34,15 @@ function CreditNote() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load credit note vouchers
-      const vouchersRes = await voucherAPI.getAll({ voucher_type: 'credit_note' });
+      const [vouchersRes, accountsRes, fyRes] = await Promise.all([
+        voucherAPI.getAll({ voucher_type: 'credit_note' }),
+        ledgerAccountAPI.getAll(),
+        financialYearAPI.getCurrent()
+      ]);
+
       setCreditNotes(vouchersRes.data.results || vouchersRes.data || []);
-
-      // Load party ledgers (customers/debtors)
-      const partiesRes = await ledgerAccountAPI.getParties();
-      setPartyLedgers(partiesRes.data.results || partiesRes.data || []);
-
-      // Load income/sales ledgers for credit reasons
-      const ledgersRes = await ledgerAccountAPI.getAll();
-      const allLedgers = ledgersRes.data.results || ledgersRes.data || [];
-      const incomeOrSales = allLedgers.filter(l =>
-        l.account_type === 'income' ||
-        l.group_name?.toLowerCase().includes('income') ||
-        l.group_name?.toLowerCase().includes('sales')
-      );
-      setIncomeLedgers(incomeOrSales);
-
-      // Load financial year
-      try {
-        const fyRes = await financialYearAPI.getCurrent();
-        if (fyRes.data && !fyRes.data.error) {
-          setFinancialYear(fyRes.data);
-        }
-      } catch (fyErr) {
-        // Financial year not configured
-      }
+      setLedgerAccounts(accountsRes.data.results || accountsRes.data || []);
+      setCurrentFinancialYear(fyRes.data);
     } catch (err) {
       showError('Failed to load credit notes');
     } finally {
@@ -68,100 +50,155 @@ function CreditNote() {
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setCurrentNote(prev => ({ ...prev, [name]: value }));
+  const handleAddVoucher = () => {
+    setCurrentVoucher({
+      voucher_date: new Date().toISOString().split('T')[0],
+      narration: '',
+      reference_number: '',
+      entries: [
+        { ledger: '', debit_amount: 0, credit_amount: 0, narration: '' },
+        { ledger: '', debit_amount: 0, credit_amount: 0, narration: '' }
+      ]
+    });
+    setShowForm(true);
+    setError('');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleVoucherChange = (field, value) => {
+    setCurrentVoucher(prev => ({ ...prev, [field]: value }));
+  };
 
-    if (!currentNote.party_ledger || !currentNote.income_ledger || !currentNote.amount) {
-      showError('Please fill in all required fields');
+  const handleEntryChange = (index, field, value) => {
+    setCurrentVoucher(prev => {
+      const newEntries = [...prev.entries];
+      newEntries[index] = { ...newEntries[index], [field]: value };
+
+      if (field === 'debit_amount' && parseFloat(value) > 0) {
+        newEntries[index].credit_amount = 0;
+      } else if (field === 'credit_amount' && parseFloat(value) > 0) {
+        newEntries[index].debit_amount = 0;
+      }
+
+      return { ...prev, entries: newEntries };
+    });
+  };
+
+  const addEntry = () => {
+    setCurrentVoucher(prev => ({
+      ...prev,
+      entries: [...prev.entries, { ledger: '', debit_amount: 0, credit_amount: 0, narration: '' }]
+    }));
+  };
+
+  const removeEntry = (index) => {
+    if (currentVoucher.entries.length <= 2) {
+      setError('Credit note must have at least 2 lines');
+      return;
+    }
+    setCurrentVoucher(prev => ({
+      ...prev,
+      entries: prev.entries.filter((_, i) => i !== index)
+    }));
+  };
+
+  const calculateTotals = () => {
+    const totalDebit = currentVoucher.entries.reduce((sum, e) => sum + (parseFloat(e.debit_amount) || 0), 0);
+    const totalCredit = currentVoucher.entries.reduce((sum, e) => sum + (parseFloat(e.credit_amount) || 0), 0);
+    const difference = Math.abs(totalDebit - totalCredit);
+    const isBalanced = difference < 0.01;
+    return { totalDebit, totalCredit, difference, isBalanced };
+  };
+
+  const handleSaveVoucher = async () => {
+    setLoading(true);
+    setError('');
+
+    const { totalDebit, totalCredit, isBalanced } = calculateTotals();
+
+    if (!isBalanced) {
+      setError(`Debit and Credit must be equal. Debit: ${totalDebit.toFixed(2)}, Credit: ${totalCredit.toFixed(2)}`);
+      setLoading(false);
       return;
     }
 
-    const amount = parseFloat(currentNote.amount);
-    if (isNaN(amount) || amount <= 0) {
-      showError('Please enter a valid amount');
+    if (totalDebit === 0) {
+      setError('Total amount cannot be zero');
+      setLoading(false);
       return;
     }
 
-    setSaving(true);
+    const invalidEntries = currentVoucher.entries.filter(e => !e.ledger || (parseFloat(e.debit_amount) === 0 && parseFloat(e.credit_amount) === 0));
+    if (invalidEntries.length > 0) {
+      setError('All entries must have a ledger and either debit or credit amount');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Create credit note voucher
-      // Credit Note: Debit the Sales/Income (reduce income), Credit the Party (reduce receivable)
       const voucherData = {
         voucher_type: 'credit_note',
-        voucher_date: currentNote.voucher_date,
-        narration: currentNote.narration,
-        reference_number: currentNote.reference_number,
-        entries: [
-          {
-            ledger: parseInt(currentNote.income_ledger),
-            debit_amount: amount,
-            credit_amount: 0
-          },
-          {
-            ledger: parseInt(currentNote.party_ledger),
-            debit_amount: 0,
-            credit_amount: amount
-          }
-        ]
+        voucher_date: currentVoucher.voucher_date,
+        narration: currentVoucher.narration || 'Credit Note',
+        reference_number: currentVoucher.reference_number,
+        entries: currentVoucher.entries.map(e => ({
+          ledger: e.ledger,
+          debit_amount: parseFloat(e.debit_amount) || 0,
+          credit_amount: parseFloat(e.credit_amount) || 0,
+          narration: e.narration
+        }))
       };
 
-      if (editingId) {
-        await voucherAPI.update(editingId, voucherData);
-        showSuccess('Credit Note updated successfully');
+      if (currentVoucher.id) {
+        await voucherAPI.update(currentVoucher.id, voucherData);
+        showSuccess('Credit note updated successfully!');
       } else {
         await voucherAPI.create(voucherData);
-        showSuccess('Credit Note created successfully');
+        showSuccess('Credit note created successfully!');
       }
 
       setShowForm(false);
-      setCurrentNote(initialFormState);
-      setEditingId(null);
       loadData();
     } catch (err) {
-      showError(err.response?.data?.error || 'Failed to save credit note');
+      const errorMsg = err.response?.data?.error || err.response?.data?.detail || 'Failed to save credit note';
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  const handleEdit = (note) => {
-    const entries = note.entries || [];
-    const debitEntry = entries.find(e => parseFloat(e.debit_amount) > 0);
-    const creditEntry = entries.find(e => parseFloat(e.credit_amount) > 0);
-
-    setCurrentNote({
-      voucher_date: note.voucher_date,
-      party_ledger: creditEntry?.ledger?.toString() || '',
-      income_ledger: debitEntry?.ledger?.toString() || '',
-      amount: debitEntry?.debit_amount || creditEntry?.credit_amount || '',
-      narration: note.narration || '',
-      reference_number: note.reference_number || ''
-    });
-    setEditingId(note.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this credit note?')) return;
-
-    try {
-      await voucherAPI.delete(id);
-      showSuccess('Credit Note deleted');
-      loadData();
-    } catch (err) {
-      showError('Failed to delete credit note');
-    }
-  };
-
-  const handleCancel = () => {
+  const handleCancelForm = () => {
     setShowForm(false);
-    setCurrentNote(initialFormState);
-    setEditingId(null);
+    setError('');
+  };
+
+  const handleDeleteVoucher = async (id) => {
+    if (window.confirm('Are you sure you want to delete this credit note?')) {
+      try {
+        await voucherAPI.delete(id);
+        showSuccess('Credit note deleted successfully!');
+        loadData();
+      } catch (err) {
+        showError(err.response?.data?.error || 'Failed to delete credit note');
+      }
+    }
+  };
+
+  const handleEditVoucher = (voucher) => {
+    setCurrentVoucher({
+      id: voucher.id,
+      voucher_date: voucher.voucher_date,
+      narration: voucher.narration || '',
+      reference_number: voucher.reference_number || '',
+      entries: (voucher.entries || []).map(e => ({
+        ledger: e.ledger_account || e.ledger || '',
+        debit_amount: parseFloat(e.debit_amount) || 0,
+        credit_amount: parseFloat(e.credit_amount) || 0,
+        narration: e.particulars || e.narration || ''
+      }))
+    });
+    setShowForm(true);
+    setError('');
   };
 
   const getPartyName = (entries) => {
@@ -174,12 +211,19 @@ function CreditNote() {
     return parseFloat(creditEntry?.credit_amount || 0);
   };
 
-  // Calculate stats
+  const filteredVouchers = creditNotes
+    .filter(voucher => {
+      const matchesSearch = voucher.voucher_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           voucher.narration?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesDate = !dateFilter || voucher.voucher_date === dateFilter;
+      return matchesSearch && matchesDate;
+    })
+    .sort((a, b) => new Date(b.voucher_date) - new Date(a.voucher_date));
+
+  const { totalDebit, totalCredit, difference, isBalanced } = calculateTotals();
+
   const stats = useMemo(() => {
-    const totalCreditAmount = creditNotes.reduce((sum, cn) => {
-      const amount = getAmount(cn.entries);
-      return sum + amount;
-    }, 0);
+    const totalCreditAmount = creditNotes.reduce((sum, cn) => sum + getAmount(cn.entries), 0);
     const thisMonthNotes = creditNotes.filter(cn => {
       const date = new Date(cn.voucher_date);
       const now = new Date();
@@ -188,20 +232,30 @@ function CreditNote() {
     return { totalCreditAmount, thisMonthNotes };
   }, [creditNotes]);
 
+  // Sort ledger accounts by group for better dropdown UX
+  const sortedLedgerAccounts = useMemo(() => {
+    return [...ledgerAccounts].sort((a, b) => {
+      const groupA = (a.group_full_path || a.group_name || '').toLowerCase();
+      const groupB = (b.group_full_path || b.group_name || '').toLowerCase();
+      if (groupA !== groupB) return groupA.localeCompare(groupB);
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
+    });
+  }, [ledgerAccounts]);
+
   return (
     <div className="page-content">
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-main-title">Credit Notes</h1>
           <p className="page-description">Sales returns and credit adjustments</p>
-          {financialYear && (
+          {currentFinancialYear && (
             <span className="badge badge-primary" style={{ marginTop: '8px' }}>
-              FY: {financialYear.name}
+              FY: {currentFinancialYear.name}
             </span>
           )}
         </div>
         <div className="page-header-right">
-          <button className="btn-primary" onClick={() => setShowForm(true)}>
+          <button className="btn-create" onClick={handleAddVoucher}>
             <span className="btn-icon">+</span>
             New Credit Note
           </button>
@@ -233,239 +287,312 @@ function CreditNote() {
         </div>
         <div style={{...statCardStyles.statCard, borderLeftColor: '#3b82f6'}}>
           <div style={statCardStyles.statHeader}>
-            <span style={statCardStyles.statIcon}>👥</span>
-            <span style={statCardStyles.statLabel}>Party Ledgers</span>
+            <span style={statCardStyles.statIcon}>📚</span>
+            <span style={statCardStyles.statLabel}>Total Ledgers</span>
           </div>
-          <p style={statCardStyles.statValue}>{partyLedgers.length}</p>
+          <p style={statCardStyles.statValue}>{ledgerAccounts.length}</p>
         </div>
       </div>
 
-      {/* Form Modal */}
+      {error && (
+        <div className="error-message">
+          {error}
+        </div>
+      )}
+
+      {/* Voucher Form */}
       {showForm && (
-        <div className="modal-overlay" onClick={handleCancel}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <h2>{editingId ? 'Edit Credit Note' : 'New Credit Note'}</h2>
-              <button className="modal-close" onClick={handleCancel}>&times;</button>
+        <div className="content-card" style={{ marginBottom: '24px' }}>
+          <div className="form-section">
+            <h3 className="form-section-title">
+              {currentVoucher.id ? 'Edit Credit Note' : 'New Credit Note'}
+            </h3>
+
+            {/* Header Fields */}
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Voucher Date *</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={currentVoucher.voucher_date}
+                  onChange={(e) => handleVoucherChange('voucher_date', e.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label>Reference Number</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={currentVoucher.reference_number}
+                  onChange={(e) => handleVoucherChange('reference_number', e.target.value)}
+                  placeholder="Original Invoice No."
+                />
+              </div>
+              <div className="form-field full-width">
+                <label>Narration</label>
+                <textarea
+                  className="form-input"
+                  rows="2"
+                  value={currentVoucher.narration}
+                  onChange={(e) => handleVoucherChange('narration', e.target.value)}
+                  placeholder="Reason for credit note (e.g., Sales return, price difference)..."
+                ></textarea>
+              </div>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label>Date <span className="required">*</span></label>
-                  <input
-                    type="date"
-                    name="voucher_date"
-                    value={currentNote.voucher_date}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Reference Number</label>
-                  <input
-                    type="text"
-                    name="reference_number"
-                    value={currentNote.reference_number}
-                    onChange={handleInputChange}
-                    placeholder="Original invoice no."
-                  />
-                </div>
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label>Party (Customer/Debtor) <span className="required">*</span></label>
-                  <select
-                    name="party_ledger"
-                    value={currentNote.party_ledger}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="">-- Select Party --</option>
-                    {partyLedgers.map(ledger => (
-                      <option key={ledger.id} value={ledger.id}>
-                        {ledger.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label>Reason (Account to Debit) <span className="required">*</span></label>
-                  <select
-                    name="income_ledger"
-                    value={currentNote.income_ledger}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="">-- Select Account --</option>
-                    {incomeLedgers.map(ledger => (
-                      <option key={ledger.id} value={ledger.id}>
-                        {ledger.name} ({ledger.group_name})
-                      </option>
-                    ))}
-                  </select>
-                  <small style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>
-                    For sales returns, select Sales Account. For price difference, select appropriate income account.
-                  </small>
-                </div>
-                <div className="form-group">
-                  <label>Amount <span className="required">*</span></label>
-                  <input
-                    type="number"
-                    name="amount"
-                    value={currentNote.amount}
-                    onChange={handleInputChange}
-                    step="0.01"
-                    min="0.01"
-                    required
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label>Narration</label>
-                  <textarea
-                    name="narration"
-                    value={currentNote.narration}
-                    onChange={handleInputChange}
-                    rows="2"
-                    placeholder="Reason for credit note..."
-                  />
-                </div>
-              </div>
 
-              {/* Double Entry Preview */}
-              {currentNote.party_ledger && currentNote.income_ledger && currentNote.amount && (
-                <div style={{
-                  marginTop: '20px',
-                  padding: '16px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: '#475569' }}>Accounting Entry Preview</h4>
-                  <table style={{ width: '100%', fontSize: '14px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ textAlign: 'left', padding: '8px' }}>Account</th>
-                        <th style={{ textAlign: 'right', padding: '8px' }}>Debit</th>
-                        <th style={{ textAlign: 'right', padding: '8px' }}>Credit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td style={{ padding: '8px' }}>
-                          {incomeLedgers.find(l => l.id === parseInt(currentNote.income_ledger))?.name || 'Income'}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '8px', color: '#059669' }}>
-                          {parseFloat(currentNote.amount || 0).toFixed(2)}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '8px' }}>-</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '8px' }}>
-                          {partyLedgers.find(l => l.id === parseInt(currentNote.party_ledger))?.name || 'Party'}
-                        </td>
-                        <td style={{ textAlign: 'right', padding: '8px' }}>-</td>
-                        <td style={{ textAlign: 'right', padding: '8px', color: '#dc2626' }}>
-                          {parseFloat(currentNote.amount || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="form-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn-secondary" onClick={handleCancel}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : (editingId ? 'Update' : 'Save')} Credit Note
+            {/* Entry Lines */}
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1e293b' }}>
+                  Entry Lines
+                </h4>
+                <button
+                  type="button"
+                  className="btn-secondary btn-small"
+                  onClick={addEntry}
+                >
+                  + Add Line
                 </button>
               </div>
-            </form>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f1f5f9' }}>
+                    <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', fontSize: '13px' }}>Account</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontWeight: '600', fontSize: '13px', width: '150px' }}>Debit</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontWeight: '600', fontSize: '13px', width: '150px' }}>Credit</th>
+                    <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', fontSize: '13px' }}>Narration</th>
+                    <th style={{ padding: '10px', width: '60px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentVoucher.entries.map((entry, index) => (
+                    <tr key={index} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '8px' }}>
+                        <select
+                          className="form-input"
+                          value={entry.ledger}
+                          onChange={(e) => handleEntryChange(index, 'ledger', e.target.value)}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <option value="">-- Select Account --</option>
+                          {sortedLedgerAccounts.map(account => (
+                            <option key={account.id} value={account.id}>
+                              {account.group_name ? `${account.group_name} → ${account.name}` : account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={entry.debit_amount || ''}
+                          onChange={(e) => handleEntryChange(index, 'debit_amount', e.target.value)}
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          style={{ marginBottom: 0, textAlign: 'right' }}
+                        />
+                      </td>
+                      <td style={{ padding: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={entry.credit_amount || ''}
+                          onChange={(e) => handleEntryChange(index, 'credit_amount', e.target.value)}
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          style={{ marginBottom: 0, textAlign: 'right' }}
+                        />
+                      </td>
+                      <td style={{ padding: '8px' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={entry.narration || ''}
+                          onChange={(e) => handleEntryChange(index, 'narration', e.target.value)}
+                          placeholder="Line narration"
+                          style={{ marginBottom: 0 }}
+                        />
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-icon-small"
+                          onClick={() => removeEntry(index)}
+                          title="Remove line"
+                          style={{ color: '#dc2626' }}
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: '600' }}>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>Total:</td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#059669' }}>
+                      {totalDebit.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#dc2626' }}>
+                      {totalCredit.toFixed(2)}
+                    </td>
+                    <td colSpan="2" style={{ padding: '12px' }}>
+                      {isBalanced ? (
+                        <span style={{ color: '#059669', fontSize: '13px' }}>
+                          ✓ Balanced
+                        </span>
+                      ) : (
+                        <span style={{ color: '#dc2626', fontSize: '13px' }}>
+                          ✗ Difference: {difference.toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="form-actions" style={{ marginTop: '24px' }}>
+              <button
+                className="btn-create"
+                onClick={handleSaveVoucher}
+                disabled={loading || !isBalanced}
+              >
+                <span className="btn-icon">💾</span>
+                {loading ? 'Saving...' : 'Save Credit Note'}
+              </button>
+              <button className="btn-secondary" onClick={handleCancelForm} disabled={loading}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* List */}
-      <div className="content-card">
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{ fontSize: '32px', marginBottom: '8px' }}>...</div>
-            <div>Loading credit notes...</div>
+      {!showForm && (
+        <>
+          {/* Filters */}
+          <div className="filters-section">
+            <div className="filter-group">
+              <input
+                type="text"
+                placeholder="Search credit notes..."
+                className="search-input"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="filter-group">
+              <input
+                type="date"
+                className="filter-select"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+              />
+            </div>
           </div>
-        ) : creditNotes.length === 0 ? (
-          <div className="empty-state-large">
-            <div className="empty-icon-large">📋</div>
-            <h3 className="empty-title">No Credit Notes</h3>
-            <p className="empty-description">Create your first credit note for sales returns or adjustments.</p>
-            <button className="btn-primary" onClick={() => setShowForm(true)}>
-              <span className="btn-icon">+</span>
-              New Credit Note
-            </button>
+
+          {/* Vouchers Table */}
+          <div className="content-card">
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '32px', marginBottom: '8px' }}>...</div>
+                <div>Loading credit notes...</div>
+              </div>
+            ) : filteredVouchers.length === 0 ? (
+              <div className="empty-state-large">
+                <div className="empty-icon-large">📋</div>
+                <h3 className="empty-title">No Credit Notes</h3>
+                <p className="empty-description">Create your first credit note for sales returns or adjustments</p>
+                <button className="btn-create" onClick={handleAddVoucher}>
+                  <span className="btn-icon">+</span>
+                  Create First Credit Note
+                </button>
+              </div>
+            ) : (
+              <div className="data-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Voucher No</th>
+                      <th>Date</th>
+                      <th>Narration</th>
+                      <th>Debit Total</th>
+                      <th>Credit Total</th>
+                      <th>Reference</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredVouchers.map((voucher) => {
+                      const debitTotal = voucher.entries?.reduce((sum, e) => sum + parseFloat(e.debit_amount || 0), 0) || 0;
+                      const creditTotal = voucher.entries?.reduce((sum, e) => sum + parseFloat(e.credit_amount || 0), 0) || 0;
+                      return (
+                        <tr key={voucher.id}>
+                          <td>
+                            <span style={{
+                              backgroundColor: '#0891b2',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              marginRight: '4px'
+                            }}>CN</span>
+                            <strong>{voucher.voucher_number}</strong>
+                          </td>
+                          <td>{formatDate(voucher.voucher_date)}</td>
+                          <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {voucher.narration || '-'}
+                          </td>
+                          <td style={{ color: '#059669', fontWeight: '500' }}>
+                            {debitTotal.toFixed(2)}
+                          </td>
+                          <td style={{ color: '#dc2626', fontWeight: '500' }}>
+                            {creditTotal.toFixed(2)}
+                          </td>
+                          <td>{voucher.reference_number || '-'}</td>
+                          <td>
+                            <span className={`status-badge ${voucher.status === 'posted' ? 'status-paid' : 'status-draft'}`}>
+                              {voucher.status?.toUpperCase()}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => handleEditVoucher(voucher)}
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                              {voucher.status !== 'posted' && (
+                                <button
+                                  className="btn-icon-small"
+                                  onClick={() => handleDeleteVoucher(voucher.id)}
+                                  title="Delete"
+                                  style={{ color: '#dc2626' }}
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="data-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Voucher No</th>
-                  <th>Party</th>
-                  <th>Reference</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
-                  <th>Narration</th>
-                  <th style={{ width: '100px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditNotes.map(note => (
-                  <tr key={note.id}>
-                    <td>{new Date(note.voucher_date).toLocaleDateString('en-IN')}</td>
-                    <td>
-                      <span style={{
-                        backgroundColor: '#0891b2',
-                        color: 'white',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        marginRight: '4px'
-                      }}>
-                        CN
-                      </span>
-                      {note.voucher_number}
-                    </td>
-                    <td>{getPartyName(note.entries)}</td>
-                    <td>{note.reference_number || '-'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: '600', color: '#0891b2' }}>
-                      {getAmount(note.entries).toFixed(2)}
-                    </td>
-                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {note.narration || '-'}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          className="btn-icon-small"
-                          onClick={() => handleEdit(note)}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn-icon-small btn-danger"
-                          onClick={() => handleDelete(note.id)}
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

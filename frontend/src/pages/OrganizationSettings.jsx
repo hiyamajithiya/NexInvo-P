@@ -314,7 +314,7 @@ const OrganizationSettings = () => {
               </Alert>
               <TextField
                 label="Plan"
-                value={currentOrganization.plan.toUpperCase()}
+                value={(currentOrganization.plan || 'free').toUpperCase()}
                 fullWidth
                 margin="normal"
                 disabled

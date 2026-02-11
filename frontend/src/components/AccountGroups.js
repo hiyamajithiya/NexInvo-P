@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { accountGroupAPI } from '../services/api';
 import { useToast } from './Toast';
+import './TallyReport.css';
 import './Accounting.css';
 
 function AccountGroups() {
@@ -10,7 +11,6 @@ function AccountGroups() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('tree');
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [error, setError] = useState('');
@@ -35,8 +35,18 @@ function AccountGroups() {
       setGroups(listResponse.data.results || listResponse.data || []);
       setTreeData(treeResponse.data || []);
 
-      const rootIds = new Set((treeResponse.data || []).map(g => g.id));
-      setExpandedGroups(rootIds);
+      // Expand all root nodes by default
+      const allIds = new Set();
+      const collectIds = (nodes) => {
+        nodes.forEach(node => {
+          allIds.add(node.id);
+          if (node.children && node.children.length > 0) {
+            collectIds(node.children);
+          }
+        });
+      };
+      collectIds(treeResponse.data || []);
+      setExpandedGroups(allIds);
     } catch (err) {
       showError('Failed to load account groups');
     } finally {
@@ -153,25 +163,41 @@ function AccountGroups() {
     setExpandedGroups(new Set());
   };
 
-  // Calculate stats
-  const stats = {
-    total: groups.length,
-    debit: groups.filter(g => g.nature === 'debit').length,
-    credit: groups.filter(g => g.nature === 'credit').length,
-    primary: groups.filter(g => g.is_primary).length
+  const getHierarchicalGroups = (excludeId = null) => {
+    const filtered = excludeId ? groups.filter(g => g.id !== excludeId) : groups;
+    return [...filtered].sort((a, b) => {
+      const pathA = (a.full_path || a.name || '').toLowerCase();
+      const pathB = (b.full_path || b.name || '').toLowerCase();
+      return pathA.localeCompare(pathB);
+    });
   };
 
-  const filteredGroups = groups.filter(group =>
-    group.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    group.full_path?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getIndentedName = (group) => {
+    const path = group.full_path || group.name;
+    const depth = (path.match(/>/g) || []).length;
+    const prefix = depth > 0 ? '\u00A0\u00A0\u00A0\u00A0'.repeat(depth) + '— ' : '';
+    return prefix + group.name;
+  };
 
   const getParentOptions = () => {
-    if (currentGroup.id) {
-      return groups.filter(g => g.id !== currentGroup.id);
-    }
-    return groups;
+    return getHierarchicalGroups(currentGroup.id || null);
   };
+
+  // Filter tree nodes based on search
+  const filterTree = (nodes, term) => {
+    if (!term) return nodes;
+    const lower = term.toLowerCase();
+    return nodes.reduce((acc, node) => {
+      const match = node.name?.toLowerCase().includes(lower);
+      const filteredChildren = node.children ? filterTree(node.children, term) : [];
+      if (match || filteredChildren.length > 0) {
+        acc.push({ ...node, children: filteredChildren.length > 0 ? filteredChildren : node.children });
+      }
+      return acc;
+    }, []);
+  };
+
+  const displayTree = filterTree(treeData, searchTerm);
 
   const renderTreeNode = (node, level = 0) => {
     const hasChildren = node.children && node.children.length > 0;
@@ -181,247 +207,139 @@ function AccountGroups() {
     return (
       <React.Fragment key={node.id}>
         <div
-          className={`tree-item ${isSelected ? 'selected' : ''} ${node.is_primary ? 'primary' : ''}`}
-          style={{ paddingLeft: `${20 + level * 24}px` }}
+          className={`tally-tree-item ${isSelected ? 'selected' : ''} ${node.is_primary ? 'tally-tree-primary' : ''}`}
+          style={{ paddingLeft: `${12 + level * 24}px` }}
           onClick={() => setSelectedGroup(node)}
         >
-          <div className="tree-item-left">
-            {hasChildren ? (
-              <button
-                className="expand-btn"
-                onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
-              >
-                {isExpanded ? '▼' : '▶'}
-              </button>
-            ) : (
-              <span className="expand-placeholder">•</span>
-            )}
-            <span className={`nature-dot ${node.nature}`}></span>
-            <span className="group-name">{node.name}</span>
-            {node.is_primary && <span className="primary-badge">Primary</span>}
-          </div>
-          <div className="tree-item-right">
-            <span className="ledger-count">{node.ledger_count || 0} ledgers</span>
-          </div>
+          {hasChildren ? (
+            <span
+              className="tally-expand-btn"
+              onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
+            >
+              {isExpanded ? '▼' : '▶'}
+            </span>
+          ) : (
+            <span className="tally-expand-btn" style={{ visibility: 'hidden' }}>▶</span>
+          )}
+          <span className="tally-tree-name" style={{ fontWeight: node.is_primary || level === 0 ? '700' : '400' }}>
+            {node.name}
+          </span>
+          <span className="tally-tree-count">
+            {node.ledger_count || 0} ledgers
+          </span>
+          <span className={`tally-nature-badge ${node.nature}`}>
+            {node.nature === 'debit' ? 'Dr' : 'Cr'}
+          </span>
         </div>
         {hasChildren && isExpanded && (
-          <div className="tree-children">
-            {node.children.map(child => renderTreeNode(child, level + 1))}
-          </div>
+          node.children.map(child => renderTreeNode(child, level + 1))
         )}
       </React.Fragment>
     );
   };
 
+  const stats = {
+    total: groups.length,
+    primary: groups.filter(g => g.is_primary).length,
+    custom: groups.filter(g => !g.is_primary).length
+  };
+
   return (
-    <div className="account-groups-container">
-      {/* Header */}
-      <div className="ag-page-header">
-        <div>
-          <h1 className="ag-page-title">Account Groups</h1>
-          <p className="ag-page-subtitle">Manage your Chart of Accounts hierarchy</p>
+    <div className="page-content">
+      <div className="tally-report">
+        <div className="tally-report-header">
+          <p className="tally-report-title">Chart of Accounts</p>
+          <p className="tally-report-period">
+            {stats.total} Groups ({stats.primary} Primary, {stats.custom} Custom)
+          </p>
         </div>
-        <button className="btn-primary" onClick={() => handleAddGroup()}>
-          <span>➕</span> Add Group
-        </button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="ag-stats-grid">
-        <div className="ag-stat-card total">
-          <div className="ag-stat-label">Total Groups</div>
-          <div className="ag-stat-value">{stats.total}</div>
-        </div>
-        <div className="ag-stat-card debit">
-          <div className="ag-stat-label">Debit Nature</div>
-          <div className="ag-stat-value">{stats.debit}</div>
-        </div>
-        <div className="ag-stat-card credit">
-          <div className="ag-stat-label">Credit Nature</div>
-          <div className="ag-stat-value">{stats.credit}</div>
-        </div>
-        <div className="ag-stat-card primary">
-          <div className="ag-stat-label">Primary Groups</div>
-          <div className="ag-stat-value">{stats.primary}</div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="ag-main-content">
-        {/* Tree/List Panel */}
-        <div className="tree-panel">
-          <div className="panel-header">
-            <div className="panel-title">
-              <span>📂</span> Group Hierarchy
-            </div>
-            <div className="view-controls">
-              <button
-                className={`btn-view ${viewMode === 'tree' ? 'active' : ''}`}
-                onClick={() => setViewMode('tree')}
-              >
-                🌲 Tree
-              </button>
-              <button
-                className={`btn-view ${viewMode === 'list' ? 'active' : ''}`}
-                onClick={() => setViewMode('list')}
-              >
-                📋 List
-              </button>
-            </div>
+        <div className="tally-filter-bar">
+          <button className="tally-btn" onClick={() => handleAddGroup()}>+ Add Group</button>
+          <div className="tally-actions">
+            <button className="tally-btn" onClick={expandAll}>Expand All</button>
+            <button className="tally-btn" onClick={collapseAll}>Collapse All</button>
           </div>
+        </div>
 
-          <div className="toolbar">
-            <div className="search-box">
-              <input
-                type="text"
-                placeholder="Search groups..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            {viewMode === 'tree' && (
-              <div className="toolbar-actions">
-                <button className="btn-small" onClick={expandAll}>Expand All</button>
-                <button className="btn-small" onClick={collapseAll}>Collapse All</button>
+        {loading && !treeData.length ? (
+          <div className="tally-loading">Loading account groups...</div>
+        ) : (
+          <div className="tally-groups-layout">
+            {/* Tree Panel */}
+            <div className="tally-tree-panel">
+              <div className="tally-tree-toolbar">
+                <input
+                  type="text"
+                  placeholder="Search groups..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            )}
-          </div>
 
-          {loading ? (
-            <div className="loading-state">
-              <div className="loading-spinner"></div>
-              <span>Loading groups...</span>
-            </div>
-          ) : viewMode === 'tree' ? (
-            <div className="tree-container">
-              {treeData.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">📂</div>
-                  <div className="empty-title">No Account Groups</div>
-                  <div className="empty-text">Get started by creating your first account group</div>
-                  <button className="btn-primary" onClick={() => handleAddGroup()}>
-                    <span>➕</span> Add Group
-                  </button>
+              {displayTree.length === 0 ? (
+                <div className="tally-empty-state">
+                  <p>{searchTerm ? 'No matching groups found' : 'No account groups. Click "+ Add Group" to create one.'}</p>
                 </div>
               ) : (
-                treeData.map(node => renderTreeNode(node))
+                <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
+                  {displayTree.map(node => renderTreeNode(node))}
+                </div>
               )}
             </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="list-table">
-                <thead>
-                  <tr>
-                    <th>Group Name</th>
-                    <th>Full Path</th>
-                    <th>Nature</th>
-                    <th>Sub-Groups</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGroups.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-                        No groups found
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredGroups.map(group => (
-                      <tr key={group.id}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span className={`nature-dot ${group.nature}`}></span>
-                            {group.name}
-                            {group.is_primary && <span className="primary-badge">Primary</span>}
-                          </div>
-                        </td>
-                        <td style={{ color: '#64748b', fontSize: '13px' }}>{group.full_path}</td>
-                        <td>
-                          <span className={`nature-badge ${group.nature}`}>
-                            {group.nature === 'debit' ? '↗ Debit' : '↙ Credit'}
-                          </span>
-                        </td>
-                        <td>{group.children_count || 0}</td>
-                        <td>
-                          <div className="table-actions">
-                            {!group.is_primary && (
-                              <>
-                                <button className="btn-icon" onClick={() => handleEditGroup(group)} title="Edit">
-                                  ✏️
-                                </button>
-                                <button className="btn-icon danger" onClick={() => handleDeleteGroup(group.id)} title="Delete">
-                                  🗑️
-                                </button>
-                              </>
-                            )}
-                            <button className="btn-icon" onClick={() => handleAddGroup(group)} title="Add Sub-Group">
-                              ➕
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
 
-        {/* Detail Panel */}
-        <div className="ag-detail-panel">
-          {selectedGroup ? (
-            <>
-              <div className="detail-header">
-                <h3 className="detail-title">{selectedGroup.name}</h3>
-                <div className="detail-path">{selectedGroup.full_path || selectedGroup.name}</div>
-              </div>
-              <div className="detail-body">
-                <div className="detail-row">
-                  <span className="detail-label">Nature</span>
-                  <span className={`nature-badge ${selectedGroup.nature}`}>
-                    {selectedGroup.nature === 'debit' ? '↗ Debit' : '↙ Credit'}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Ledger Accounts</span>
-                  <span className="detail-value">{selectedGroup.ledger_count || 0}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Sub-Groups</span>
-                  <span className="detail-value">{selectedGroup.children?.length || 0}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Type</span>
-                  <span className="detail-value">
-                    {selectedGroup.is_primary ? 'Primary (System)' : 'Custom'}
-                  </span>
-                </div>
-              </div>
-              <div className="detail-actions">
-                <button className="btn-action" onClick={() => handleAddGroup(selectedGroup)}>
-                  <span>➕</span> Add Sub-Group
-                </button>
-                {!selectedGroup.is_primary && (
-                  <>
-                    <button className="btn-action" onClick={() => handleEditGroup(selectedGroup)}>
-                      <span>✏️</span> Edit
+            {/* Detail Panel */}
+            <div className="tally-detail-panel">
+              {selectedGroup ? (
+                <>
+                  <h3 className="tally-detail-title">{selectedGroup.name}</h3>
+                  <p className="tally-detail-path">{selectedGroup.full_path || selectedGroup.name}</p>
+
+                  <div className="tally-detail-row">
+                    <span className="tally-detail-label">Nature</span>
+                    <span className="tally-detail-value">
+                      {selectedGroup.nature === 'debit' ? 'Debit' : 'Credit'}
+                    </span>
+                  </div>
+                  <div className="tally-detail-row">
+                    <span className="tally-detail-label">Ledger Accounts</span>
+                    <span className="tally-detail-value">{selectedGroup.ledger_count || 0}</span>
+                  </div>
+                  <div className="tally-detail-row">
+                    <span className="tally-detail-label">Sub-Groups</span>
+                    <span className="tally-detail-value">{selectedGroup.children?.length || 0}</span>
+                  </div>
+                  <div className="tally-detail-row">
+                    <span className="tally-detail-label">Type</span>
+                    <span className="tally-detail-value">
+                      {selectedGroup.is_primary ? 'Primary (System)' : 'Custom'}
+                    </span>
+                  </div>
+
+                  <div className="tally-detail-actions">
+                    <button className="tally-btn" onClick={() => handleAddGroup(selectedGroup)}>
+                      + Add Sub-Group
                     </button>
-                    <button className="btn-action danger" onClick={() => handleDeleteGroup(selectedGroup.id)}>
-                      <span>🗑️</span> Delete
-                    </button>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="empty-detail">
-              <div className="empty-detail-icon">👆</div>
-              <div>Select a group to view details</div>
+                    {!selectedGroup.is_primary && (
+                      <>
+                        <button className="tally-btn" onClick={() => handleEditGroup(selectedGroup)}>
+                          Edit Group
+                        </button>
+                        <button className="tally-btn danger" onClick={() => handleDeleteGroup(selectedGroup.id)}>
+                          Delete Group
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="tally-empty-state" style={{ paddingTop: '80px' }}>
+                  <p>Select a group to view details</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
@@ -432,7 +350,7 @@ function AccountGroups() {
               <h2 className="modal-title">
                 {currentGroup.id ? 'Edit Account Group' : 'New Account Group'}
               </h2>
-              <button className="btn-close" onClick={handleCancelForm}>✕</button>
+              <button className="btn-close" onClick={handleCancelForm}>X</button>
             </div>
 
             <div className="modal-body">
@@ -460,7 +378,7 @@ function AccountGroups() {
                   <option value="">None (Root Level)</option>
                   {getParentOptions().map(group => (
                     <option key={group.id} value={group.id}>
-                      {group.full_path || group.name}
+                      {getIndentedName(group)}
                     </option>
                   ))}
                 </select>
@@ -473,7 +391,6 @@ function AccountGroups() {
                     className={`nature-option debit ${currentGroup.nature === 'debit' ? 'selected' : ''}`}
                     onClick={() => handleGroupChange('nature', 'debit')}
                   >
-                    <div className="nature-option-icon">↗️</div>
                     <div className="nature-option-label">Debit</div>
                     <div className="nature-option-hint">Assets, Expenses</div>
                   </div>
@@ -481,7 +398,6 @@ function AccountGroups() {
                     className={`nature-option credit ${currentGroup.nature === 'credit' ? 'selected' : ''}`}
                     onClick={() => handleGroupChange('nature', 'credit')}
                   >
-                    <div className="nature-option-icon">↙️</div>
                     <div className="nature-option-label">Credit</div>
                     <div className="nature-option-hint">Liabilities, Income</div>
                   </div>
